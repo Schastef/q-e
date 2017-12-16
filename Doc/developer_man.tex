@@ -199,6 +199,29 @@ keys on your work machine if you haven't already, using command
 breaks, etc.).
 \end{enumerate}
 
+\subsection {\qe{} repository on gitlab.com} 
+\qe{} development adopts  \texttt{git} version control system. If you don't  know anything  
+about  \texttt{git} you  can have a look at  this \href{https://git-scm.com/book/en/v2}{ebook}.  
+
+The main public repository of \qe{} is  hosted on GitLab at \url{https://gitlab.com/QEF/q-e} and 
+a mirror is also available on GitHub at \url{https://github.com/QEF/q-e}. 
+
+To create a your local repository it is sufficient to use the command 
+
+\begin{verbatim}
+  git clone https://gitlab.com/QEF/q-e.git 
+\end{verbatim}
+
+The repository consists currently of the only (\texttt{master}) branch containing 
+the official development  version. Stable versions are indicated by tags which can be listed with 
+the command \texttt{git tag -l}. For production, if possible, one should use a stable 
+version. To revert the \qe{} directory to the version labeled with the tag \texttt{<tag>} 
+it is sufficient to type  the command \texttt{git checkout <tag>}.       
+
+Very small changes meant mainly for maintenance may be pushed directly to the main repository but 
+any  significant modiification should be merged into  the main repository using 
+{\em merge requests}. 
+  
 \subsection{\qe\ on \qeforge}
 
 Currently \qe\ uses the following development tools:
