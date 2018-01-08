@@ -30,7 +30,6 @@ environment.o \
 fcp_variables.o \
 fd_gradient.o \
 fft_base.o \
-fft_custom.o \
 fft_rho.o \
 fsockets.o \
 funct.o \
@@ -86,6 +85,7 @@ setqf.o \
 splinelib.o \
 timestep.o\
 tsvdw.o\
+emend_upf.o \
 upf.o \
 upf_to_internal.o \
 uspp.o \

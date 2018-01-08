@@ -249,7 +249,6 @@ subroutine qgradient (xq, nrxx, a, ngm, g, nl, alat, ga)
   USE control_flags,  ONLY : gamma_only
   USE fft_base,       ONLY : dfftp
   USE fft_interfaces, ONLY : fwfft, invfft
-  USE gvect,          ONLY : nlm
   
   implicit none
   integer :: nrxx, ngm, nl (ngm)
@@ -266,17 +265,17 @@ subroutine qgradient (xq, nrxx, a, ngm, g, nl, alat, ga)
   ! bring a(r) to G-space, a(G) ...
   aux (:) = a(:)
 
-  CALL fwfft ('Dense', aux, dfftp)
+  CALL fwfft ('Rho', aux, dfftp)
   ! multiply by i(q+G) to get (\grad_ipol a)(q+G) ...
   do ipol = 1, 3
      gaux (:) = (0.d0, 0.d0)
      do n = 1, ngm
         gaux(nl(n)) = CMPLX(0.d0, xq (ipol) + g (ipol, n),kind=DP) * aux (nl(n))
-        if (gamma_only) gaux( nlm(n) ) = conjg( gaux( nl(n) ) )
+        if (gamma_only) gaux( dfftp%nlm(n) ) = conjg( gaux( nl(n) ) )
      enddo
      ! bring back to R-space, (\grad_ipol a)(r) ...
 
-     CALL invfft ('Dense', gaux, dfftp)
+     CALL invfft ('Rho', gaux, dfftp)
      ! ...and add the factor 2\pi/a  missing in the definition of q+G
      do n = 1, nrxx
         ga (ipol, n) = gaux (n) * tpiba
@@ -300,7 +299,6 @@ subroutine qgrad_dot (xq, nrxx, a, ngm, g, nl, alat, da)
   USE control_flags,  ONLY : gamma_only
   USE fft_base,       ONLY : dfftp
   USE fft_interfaces, ONLY: fwfft, invfft
-  USE gvect,          ONLY : nlm
   
   implicit none
   integer ::  nrxx, ngm, nl (ngm)
@@ -320,7 +318,7 @@ subroutine qgrad_dot (xq, nrxx, a, ngm, g, nl, alat, da)
         aux (n) = a (ipol, n)
      enddo
      ! bring a(ipol,r) to G-space, a(G) ...
-     CALL fwfft ('Dense', aux, dfftp)
+     CALL fwfft ('Rho', aux, dfftp)
      ! multiply by i(q+G) to get (\grad_ipol a)(q+G) ...
      do n = 1, ngm
         da (nl(n)) = da (nl(n)) + &
@@ -331,14 +329,14 @@ subroutine qgrad_dot (xq, nrxx, a, ngm, g, nl, alat, da)
      !
      do n = 1, ngm
         !
-        da( nlm(n) ) = conjg( da( nl(n) ) )
+        da( dfftp%nlm(n) ) = conjg( da( nl(n) ) )
         !
      end do
      !
   end if
 
   !  bring back to R-space, (\grad_ipol a)(r) ...
-  CALL invfft ('Dense', da, dfftp)
+  CALL invfft ('Rho', da, dfftp)
   ! ...add the factor 2\pi/a  missing in the definition of q+G and sum
   da (:) = da (:) * tpiba
   deallocate (aux)

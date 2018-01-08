@@ -28,10 +28,11 @@
       use smallbox_grid_dim,    only: smallbox_grid_init,smallbox_grid_info
       USE fft_types,            ONLY: fft_type_init
       use ions_base,            only: nat
-      USE recvec_subs,          ONLY: ggen
-      USE gvect,                ONLY: mill_g, eigts1,eigts2,eigts3, gg, &
-                                      ecutrho, gcutm, gvect_init
-      use gvecs,                only: gcutms, gvecs_init
+      USE recvec_subs,          ONLY: ggen, ggens
+      USE gvect,                ONLY: mill_g, eigts1,eigts2,eigts3, g, gg, &
+                                      ecutrho, gcutm, gvect_init, mill, &
+                                      ig_l2g, gstart, ngm, ngm_g
+      use gvecs,                only: gcutms, gvecs_init, ngms
       use gvecw,                only: gkcut, gvecw_init, g2kin_init
       USE smallbox_subs,        ONLY: ggenb
       USE fft_base,             ONLY: dfftp, dffts, dfftb, fft_base_info
@@ -89,8 +90,8 @@
 
       ! ... Initialize FFT real-space grids and small box grid
       nyfft_ = ntask_groups
-      dffts%have_task_groups = (ntask_groups >1)
-      dfftp%have_task_groups = .FALSE.
+      dffts%has_task_groups = (ntask_groups >1)
+      dfftp%has_task_groups = .FALSE.
       lpara = ( nproc_bgrp > 1 )
       !
       IF ( ref_cell ) THEN
@@ -112,6 +113,9 @@
         CALL fft_type_init( dfftp, smap, "rho", gamma_only, lpara, intra_bgrp_comm, at, bg,  gcutm, nyfft=nyfft_ )
         !
       END IF
+      ! define the clock labels ( this enables the corresponding fft too ! )
+      dffts%rho_clock_label = 'ffts' ; dffts%wave_clock_label = 'fftw'
+      dfftp%rho_clock_label = 'fft' 
       !
       !
       CALL smallbox_grid_init( dfftp, dfftb )
@@ -141,15 +145,9 @@
       !        for a left-handed triplet, ainv is minus the inverse of a)
       !
       CALL fft_base_info( ionode, stdout )
-      !!CALL fft_extra_info()
-      ngw_ = dffts%nwl( dffts%mype + 1 )
-      ngs_ = dffts%ngl( dffts%mype + 1 )
-      ngm_ = dfftp%ngl( dfftp%mype + 1 )
-      IF( gamma_only ) THEN
-         ngw_ = (ngw_ + 1)/2
-         ngs_ = (ngs_ + 1)/2
-         ngm_ = (ngm_ + 1)/2
-      END IF
+      ngw_ = dffts%ngw
+      ngs_ = dffts%ngm
+      ngm_ = dfftp%ngm
 
       !
       ! ... Initialize reciprocal space local and global dimensions
@@ -173,18 +171,24 @@
         WRITE( stdout,'(3X,"Reference Cell alat  =",F14.8,1X,"A.U.")' ) ref_alat
         !
         IF( smallmem ) THEN
-           CALL ggen( gamma_only, ref_at, ref_bg, intra_bgrp_comm, no_global_sort = .TRUE. )
+           CALL ggen( dfftp, gamma_only, ref_at, ref_bg, gcutm, ngm_g, ngm, &
+                g, gg, mill, ig_l2g, gstart, no_global_sort = .TRUE. )
         ELSE
-           CALL ggen( gamma_only, ref_at, ref_bg )
+           CALL ggen( dfftp, gamma_only, ref_at, ref_bg, gcutm, ngm_g, ngm, &
+                g, gg, mill, ig_l2g, gstart )
         END IF
+        CALL ggens( dffts, gamma_only, ref_at, g, gg, mill, gcutms, ngms )
         !
       ELSE
         !
         IF( smallmem ) THEN
-           CALL ggen( gamma_only, at, bg, intra_bgrp_comm, no_global_sort = .TRUE. )
+           CALL ggen( dfftp, gamma_only, at, bg, gcutm, ngm_g, ngm, &
+                g, gg, mill, ig_l2g, gstart, no_global_sort = .TRUE. )
         ELSE
-           CALL ggen( gamma_only, at, bg )
+           CALL ggen( dfftp, gamma_only, at, bg, gcutm, ngm_g, ngm, &
+                g, gg, mill, ig_l2g, gstart )
         END IF
+        CALL ggens( dffts, gamma_only, at, g, gg, mill, gcutms, ngms )
         !
       END IF
 

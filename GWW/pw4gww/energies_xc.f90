@@ -25,8 +25,8 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
   !       e_h
   USE kinds,    ONLY : DP
   USE uspp,     ONLY : vkb, nkb
-  USE gvecs,  ONLY : nls, doublegrid
-  USE gvect,                ONLY : ngm, gstart, nl, nlm, g, gg, gcutm
+  USE gvecs,  ONLY : doublegrid
+  USE gvect,                ONLY : ngm, gstart, g, gg, gcutm
   USE cell_base,            ONLY :  alat, omega
   USE lsda_mod,             ONLY : nspin
   USE ldaU,     ONLY : lda_plus_u
@@ -120,7 +120,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
 
        do is=1,nspin
           vrs(:,is)=vr(:,is)
-          if(doublegrid) call interpolate(vrs(1,is),vrs(1,is),-1)
+          if(doublegrid) call fft_interpolate_real(dfftp, vrs(1,is),dffts,vrs(1,is)) ! interpolate from dense to smooth
        enddo
        !
        DO ibnd = 1, m
@@ -129,7 +129,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
           !
           psic(1:dffts%nnr) = ( 0.D0, 0.D0 )
           !
-          psic(nls(igk_k(1:n,1))) = psi(1:n,ibnd)
+          psic(dffts%nl(igk_k(1:n,1))) = psi(1:n,ibnd)
           !
           CALL invfft ('Wave', psic, dffts)
 
@@ -150,7 +150,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
           !
           e_xc(ibnd)=0.d0
           do ig=1,n
-             e_xc(ibnd)=e_xc(ibnd)+real(conjg(psi(ig,ibnd))*psic(nls(igk_k(ig,1))))
+             e_xc(ibnd)=e_xc(ibnd)+real(conjg(psi(ig,ibnd))*psic(dffts%nl(igk_k(ig,1))))
           enddo
           call mp_sum(e_xc(ibnd),world_comm)
           write(stdout,*) 'energies_xc :', ibnd, e_xc(ibnd)*rytoev
@@ -162,7 +162,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
        call  v_h(rho%of_g , ehart, charge, vr )
        do is=1,nspin
           vrs(:,is)=vr(:,is)
-          if(doublegrid) call interpolate(vrs(1,is),vrs(1,is),-1)
+          if(doublegrid) call fft_interpolate_real(dfftp, vrs(1,is), dffts, vrs(1,is)) ! interpolate from dense to smooth
        enddo
 
 
@@ -170,7 +170,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
 
           CALL start_clock( 'firstfft' )
           psic(1:dffts%nnr) = ( 0.D0, 0.D0 )
-          psic(nls(igk_k(1:n,1))) = psi(1:n,ibnd)
+          psic(dffts%nl(igk_k(1:n,1))) = psi(1:n,ibnd)
 
           CALL invfft ('Wave', psic, dffts)
 
@@ -184,7 +184,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
           CALL fwfft ('Wave', psic, dffts)
           e_h(ibnd)=0.d0
           do ig=1,n
-             e_h(ibnd)=e_h(ibnd)+real(conjg(psi(ig,ibnd))*psic(nls(igk_k(ig,1))))
+             e_h(ibnd)=e_h(ibnd)+real(conjg(psi(ig,ibnd))*psic(dffts%nl(igk_k(ig,1))))
           enddo
           call mp_sum(e_h(ibnd),world_comm)
           write(stdout,*) 'energies_h :', ibnd, e_h(ibnd)*rytoev
@@ -408,7 +408,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
 !read from disk wfc on coarse grid
          CALL davcio( psi_rs,dffts%nnr,iunwfcreal,ibnd+(ispin-1)*nbnd,-1)
          if(doublegrid) then
-           call interpolate(psi_r,psi_rs,1)
+           call fft_interpolate_real(dffts, psi_rs, dfftp, psi_r) ! interpolate from smooth to dense
          else
            psi_r(:)=psi_rs(:)
          endif
@@ -458,7 +458,7 @@ SUBROUTINE energies_xc( lda, n, m, psi, e_xc, e_h,ispin )
 !read from disk wfc on coarse grid
            CALL davcio( psi_rs,dffts%nnr,iunwfcreal,ibnd+(ispin-1)*nbnd,-1)
            if(doublegrid) then
-              call interpolate(psi_r,psi_rs,1)
+              call fft_interpolate_real(dffts, psi_rs, dfftp, psi_r) ! interpolate from smooth to dense
            else
               psi_r(:)=psi_rs(:)
            endif

@@ -6,63 +6,6 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 
-!  ----------------------------------------------
-!  AB INITIO COSTANT PRESSURE MOLECULAR DYNAMICS
-!  ----------------------------------------------
-
-
-
-
-!=----------------------------------------------------------------------=!
-    FUNCTION dft_total_charge_x( c, ngw, fi, n )
-!=----------------------------------------------------------------------=!
-       !
-       !  This subroutine compute the Total Charge in reciprocal space
-       !
-
-       USE kinds,              ONLY: DP
-       USE gvect, ONLY: gstart
-
-       IMPLICIT NONE
-
-       INTEGER,     INTENT(IN) :: ngw, n
-       COMPLEX(DP), INTENT(IN) :: c(:,:)
-       REAL (DP),   INTENT(IN) :: fi(:)
-       !
-       REAL(DP) :: dft_total_charge_x
-       !
-       INTEGER     :: ib, igs
-       REAL(DP)    :: rsum
-       COMPLEX(DP) :: wdot
-       COMPLEX(DP) :: zdotc
-       EXTERNAL zdotc
-
-        rsum = 0.0d0
-
-        IF( gstart == 2 ) THEN
-
-          DO ib = 1, n
-            wdot = zdotc( ( ngw - 1 ), c(2,ib), 1, c(2,ib), 1 )
-            wdot = wdot + DBLE( c(1,ib) )**2 / 2.0d0
-            rsum = rsum + fi(ib) * DBLE( wdot )
-          END DO
-
-        ELSE
-
-          DO ib = 1, n
-            wdot = zdotc( ngw, c(1,ib), 1, c(1,ib), 1 )
-            rsum = rsum + fi(ib) * DBLE( wdot )
-          END DO
-
-        END IF
-
-        dft_total_charge_x = rsum
-
-        RETURN
-      END FUNCTION dft_total_charge_x
-
-
-
 !-----------------------------------------------------------------------
    SUBROUTINE rhoofr_cp &
       ( nfi, c_bgrp, irb, eigrb, bec_bgrp, dbec, rhovan, rhor, drhor, rhog, drhog, rhos, enl, denl, ekin, dekin, tstress, ndwwf )
@@ -100,10 +43,8 @@
       USE kinds,              ONLY: DP
       USE control_flags,      ONLY: iprint, iverbosity, thdyn, tpre, trhor, ndr
       USE ions_base,          ONLY: nat
-      USE gvect,              ONLY: ngm,  gstart, ig_l2g
-      USE gvecs,              ONLY: ngms, nls, nlsm
+      USE gvect,              ONLY: gstart, ig_l2g
       USE smallbox_gvec,      ONLY: ngb
-      USE gvecw,              ONLY: ngw
       USE uspp,               ONLY: nkb
       USE uspp_param,         ONLY: nh, nhm
       USE cell_base,          ONLY: omega
@@ -131,6 +72,7 @@
 #endif      
       USE io_files,           ONLY: tmp_dir, prefix
       USE fft_rho
+      USE fft_helper_subroutines, ONLY: c2psi_gamma
       !
       IMPLICIT NONE
       INTEGER nfi
@@ -253,7 +195,7 @@
                  TRIM(tmp_dir), TRIM(prefix), ndr
             CALL read_rhog ( dirname, root_bgrp, intra_bgrp_comm, &
                  ig_l2g, nspin, rhog )
-            CALL rho_g2r ( rhog, rhor )
+            CALL rho_g2r ( dfftp, rhog, rhor )
 #endif
             rhopr = rhor
             first = .FALSE.
@@ -261,7 +203,7 @@
             rhor = rhopr
          END IF
 
-         CALL rho_r2g( rhor, rhog )
+         CALL rho_r2g( dfftp, rhor, rhog )
 
       ELSE
          !
@@ -289,11 +231,7 @@
             !
             i = iwf
             !
-            psis = 0.D0
-            DO ig=1,ngw
-               psis(nlsm(ig))=CONJG(c_bgrp(ig,i))
-               psis(nls(ig))=c_bgrp(ig,i)
-            END DO
+            CALL c2psi_gamma( dffts, psis, c_bgrp(:,i) )
             !
             CALL invfft('Wave',psis, dffts )
             !
@@ -313,11 +251,11 @@
          !
          !     smooth charge in g-space is put into rhog(ig)
          !
-         CALL smooth_rho_r2g( rhos, rhog )
+         CALL rho_r2g( dffts, rhos, rhog )
          !
-         rhog(ngms+1:,:) = 0.0d0
+         rhog(dffts%ngm+1:,:) = 0.0d0
          !
-         CALL rho_g2r( rhog, rhor )
+         CALL rho_g2r( dfftp, rhog, rhor )
          !
          IF ( dft_is_meta() ) THEN
             CALL kedtauofr_meta( c_bgrp ) ! METAGGA
@@ -421,7 +359,7 @@
          !
          IMPLICIT NONE
          !
-         INTEGER :: from, i, eig_index, eig_offset, ii, right_nnr, tg_nr3
+         INTEGER :: from, i, eig_index, eig_offset, ii, tg_nr3
          !
 #if defined(__INTEL_COMPILER)
 #if __INTEL_COMPILER  >= 1300
@@ -438,57 +376,15 @@
          !
          tmp_rhos = 0_DP
 
-         CALL tg_get_nnr( dffts, right_nnr )
-
          do i = 1, nbsp_bgrp, 2 * fftx_ntgrp(dffts)
-
-            !
-            !  Initialize wave-functions in Fourier space (to be FFTed)
-            !  The size of psis is nnr: which is equal to the total number
-            !  of local fourier coefficients.
-            !
 
 #if defined(__MPI)
             !
-            !  Loop for all local g-vectors (ngw)
-            !  ci_bgrp: stores the Fourier expansion coefficients
-            !     the i-th column of c_bgrp corresponds to the i-th state (in
-            !     this band group)
-            !  nlsm and nls matrices: hold conversion indices form 3D to
-            !     1-D vectors. Columns along the z-direction are stored contigiously
-            !
-            !  The outer loop goes through i : i + 2*NOGRP to cover
-            !  2*NOGRP eigenstates at each iteration
-            !
-            eig_offset = 0
-
-            do eig_index = 1, 2 * fftx_ntgrp(dffts), 2   
-               !
-               !  here we pack 2*nogrp electronic states in the psis array
-               !  note that if nogrp == nproc_bgrp each proc perform a full 3D
-               !  fft and the scatter phase is local (without communication)
-               !
-               IF ( ( i + eig_index - 1 ) <= nbsp_bgrp ) THEN
-                  !
-                  !  The  eig_index loop is executed only ONCE when NOGRP=1.
-                  !
-                  CALL c2psi( psis( eig_offset * right_nnr + 1 ), right_nnr, &
-                       c_bgrp( 1, i+eig_index-1 ), c_bgrp( 1, i+eig_index ), ngw, 2 )
-                  !
-               ENDIF
-               !
-               eig_offset = eig_offset + 1
-               !
-            end do
-
-            !
-            !  2*NOGRP bands are transformed at the same time
-            !
+            CALL c2psi_gamma_tg(dffts, psis, c_bgrp, i, nbsp_bgrp )
 
             CALL invfft ('tgWave', psis, dffts )
 #else
-
-            CALL c2psi( psis, dffts%nnr, c_bgrp( 1, i ), c_bgrp( 1, i+1 ), ngw, 2 )
+            CALL c2psi_gamma( dffts, psis, c_bgrp(:,i), c_bgrp(:,i+1) )
 
             CALL invfft('Wave', psis, dffts )
 
@@ -574,15 +470,16 @@
       !     in: charge density on G-space    out: gradient in R-space
       !
       USE kinds,              ONLY: DP
-      use gvect,              ONLY: g, ngm, nl, nlm
+      use gvect,              ONLY: g
       use cell_base,          ONLY: tpiba
       USE fft_interfaces,     ONLY: invfft
       USE fft_base,           ONLY: dfftp
+      USE fft_helper_subroutines, ONLY: fftx_oned2threed
 !
       implicit none
 ! input
       integer, intent(in) :: nspin
-      complex(DP) :: rhog( ngm, nspin )
+      complex(DP) :: rhog( dfftp%ngm, nspin )
 ! output
       real(DP) ::    gradr( dfftp%nnr, 3, nspin )
 ! local
@@ -592,47 +489,39 @@
 #endif
 #endif
       complex(DP), allocatable :: v(:)
+      complex(DP), allocatable :: drho(:,:)
       complex(DP) :: ci
       integer     :: iss, ig, ir
 !
 !
       allocate( v( dfftp%nnr ) ) 
+      allocate( drho( dfftp%ngm, 3 ) ) 
       !
       ci = ( 0.0d0, 1.0d0 )
       do iss = 1, nspin
+
 !$omp parallel default(shared), private(ig)
 !$omp do
-         do ig = 1, dfftp%nnr
-            v( ig ) = ( 0.0d0, 0.0d0 )
-         end do
-!$omp do
-         do ig=1,ngm
-            v(nl (ig))=      ci*tpiba*g(1,ig)*rhog(ig,iss)
-            v(nlm(ig))=CONJG(ci*tpiba*g(1,ig)*rhog(ig,iss))
+         do ig=1,dfftp%ngm
+            drho(ig,1) = ci*tpiba*g(1,ig)*rhog(ig,iss)
+            drho(ig,2) = ci*tpiba*g(2,ig)*rhog(ig,iss)
+            drho(ig,3) = ci*tpiba*g(3,ig)*rhog(ig,iss)
          end do
 !$omp end parallel
+         CALL fftx_oned2threed( dfftp, v, drho(:,1) )
          !
-         call invfft( 'Dense', v, dfftp )
+         call invfft( 'Rho', v, dfftp )
          !
 !$omp parallel default(shared), private(ig,ir)
 !$omp do
          do ir=1,dfftp%nnr
             gradr(ir,1,iss)=DBLE(v(ir))
          end do
-!$omp do
-         do ig=1,dfftp%nnr
-            v(ig)=(0.0d0,0.0d0)
-         end do
-!$omp do
-         do ig=1,ngm
-            v(nl(ig))= tpiba*(      ci*g(2,ig)*rhog(ig,iss)-           &
-     &                                 g(3,ig)*rhog(ig,iss) )
-            v(nlm(ig))=tpiba*(CONJG(ci*g(2,ig)*rhog(ig,iss)+           &
-     &                                 g(3,ig)*rhog(ig,iss)))
-         end do
 !$omp end parallel
+
+         CALL fftx_oned2threed( dfftp, v, drho(:,2), drho(:,3) )
          !
-         call invfft( 'Dense', v, dfftp )
+         call invfft( 'Rho', v, dfftp )
          !
 !$omp parallel do default(shared)
          do ir=1,dfftp%nnr
@@ -641,6 +530,7 @@
          end do
       end do
       !
+      deallocate( drho )
       deallocate( v )
 !
       RETURN
@@ -702,13 +592,13 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
       USE uspp_param,               ONLY: nhm, nh, nvb
       USE electrons_base,           ONLY: nspin
       USE smallbox_gvec,            ONLY: ngb, npb, nmb
-      USE gvect,                    ONLY: ngm, nlm, nl
       USE cell_base,                ONLY: ainv
       USE qgb_mod,                  ONLY: qgb, dqgb
       USE fft_interfaces,           ONLY: fwfft, invfft
       USE fft_base,                 ONLY: dfftb, dfftp
       USE mp_global,                ONLY: my_bgrp_id, nbgrp, inter_bgrp_comm
       USE mp,                       ONLY: mp_sum
+      USE fft_helper_subroutines,   ONLY: fftx_add_threed2oned_gamma
 
       IMPLICIT NONE
 ! input
@@ -716,10 +606,10 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
       REAL(DP),    INTENT(IN) ::  rhor(dfftp%nnr,nspin)
       REAL(DP),    INTENT(IN) ::  rhovan(nhm*(nhm+1)/2,nat,nspin)
       REAL(DP),    INTENT(IN) ::  drhovan(nhm*(nhm+1)/2,nat,nspin,3,3)
-      COMPLEX(DP), INTENT(IN) ::  eigrb(ngb,nat), rhog(ngm,nspin)
+      COMPLEX(DP), INTENT(IN) ::  eigrb(ngb,nat), rhog(dfftp%ngm,nspin)
 ! output
       REAL(DP),    INTENT(OUT) :: drhor(dfftp%nnr,nspin,3,3)
-      COMPLEX(DP), INTENT(OUT) :: drhog(ngm,nspin,3,3)
+      COMPLEX(DP), INTENT(OUT) :: drhog(dfftp%ngm,nspin,3,3)
 ! local
       INTEGER i, j, isup, isdw, nfft, ifft, iv, jv, ig, ijv, is, iss,   &
      &     isa, ia, ir, ijs
@@ -740,7 +630,7 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
       EXTERNAL :: omp_get_thread_num, omp_get_num_threads
 #endif
 !
-!$omp parallel default(none), private(i,j,iss,ir,ig,mytid,ntids,itid), shared(nspin,dfftp,drhor,drhog,rhor,rhog,ainv,ngm) 
+!$omp parallel default(none), private(i,j,iss,ir,ig,mytid,ntids,itid), shared(nspin,dfftp,drhor,drhog,rhor,rhog,ainv) 
 #if defined(_OPENMP)
       mytid = omp_get_thread_num()  ! take the thread ID
       ntids = omp_get_num_threads() ! take the number of threads
@@ -756,7 +646,7 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
                   DO ir=1,dfftp%nnr
                      drhor(ir,iss,i,j)=-rhor(ir,iss)*ainv(j,i)
                   END DO
-                  DO ig=1,ngm
+                  DO ig=1,dfftp%ngm
                      drhog(ig,iss,i,j)=-rhog(ig,iss)*ainv(j,i)
                   END DO
                END IF
@@ -890,11 +780,8 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
                   drhor(ir,iss,i,j) = drhor(ir,iss,i,j) + DBLE(v(ir))
                END DO
 !
-               CALL fwfft( 'Dense', v, dfftp )
-!
-               DO ig=1,ngm
-                  drhog(ig,iss,i,j) = drhog(ig,iss,i,j) + v(nl(ig))
-               END DO
+               CALL fwfft( 'Rho', v, dfftp )
+               CALL fftx_add_threed2oned_gamma( dfftp, v, drhog(:,iss,i,j) )
 !
             ENDDO
          ENDDO
@@ -967,19 +854,10 @@ SUBROUTINE drhov(irb,eigrb,rhovan,drhovan,rhog,rhor,drhog,drhor)
                   drhor(ir,isup,i,j) = drhor(ir,isup,i,j) + DBLE(v(ir))
                   drhor(ir,isdw,i,j) = drhor(ir,isdw,i,j) +AIMAG(v(ir))
                ENDDO
-
 !
-               CALL fwfft('Dense', v, dfftp )
+               CALL fwfft('Rho', v, dfftp )
+               CALL fftx_add_threed2oned_gamma( dfftp, v, drhog(:,isup,i,j), drhog(:,isdw,i,j) )
 
-               DO ig=1,ngm
-                  fp=v(nl(ig))+v(nlm(ig))
-                  fm=v(nl(ig))-v(nlm(ig))
-                  drhog(ig,isup,i,j) = drhog(ig,isup,i,j) +             &
-     &                 0.5d0*CMPLX( DBLE(fp),AIMAG(fm),kind=DP)
-                  drhog(ig,isdw,i,j) = drhog(ig,isdw,i,j) +             &
-     &                 0.5d0*CMPLX(AIMAG(fp),-DBLE(fm),kind=DP)
-               END DO
-!
             END DO
          END DO
       ENDIF
@@ -1008,13 +886,13 @@ SUBROUTINE rhov(irb,eigrb,rhovan,rhog,rhor)
       USE uspp,                     ONLY: deeq
       USE electrons_base,           ONLY: nspin
       USE smallbox_gvec,                    ONLY: npb, nmb, ngb
-      USE gvect,                    ONLY: ngm, nl, nlm
       USE cell_base,                ONLY: omega
       USE small_box,                ONLY: omegab
       USE control_flags,            ONLY: iprint, iverbosity, tpre
       USE qgb_mod,                  ONLY: qgb
       USE fft_interfaces,           ONLY: fwfft, invfft
       USE fft_base,                 ONLY: dfftb, dfftp, dfftb
+      USE fft_helper_subroutines,   ONLY: fftx_add_threed2oned_gamma
 !
       IMPLICIT NONE
       !
@@ -1023,7 +901,7 @@ SUBROUTINE rhov(irb,eigrb,rhovan,rhog,rhor)
       COMPLEX(DP), INTENT(in):: eigrb(ngb,nat)
       ! 
       REAL(DP),     INTENT(inout):: rhor(dfftp%nnr,nspin)
-      COMPLEX(DP),  INTENT(inout):: rhog(ngm,nspin)
+      COMPLEX(DP),  INTENT(inout):: rhog(dfftp%ngm,nspin)
 !
       INTEGER     :: isup, isdw, nfft, ifft, iv, jv, ig, ijv, is, iss, isa, ia, ir, i, j
       REAL(DP)    :: sumrho
@@ -1201,7 +1079,7 @@ SUBROUTINE rhov(irb,eigrb,rhovan,rhog,rhor)
      &           ' rhov: int  n_v(r)  dr = ',omega*ca/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
          ENDIF
 !
-         CALL fwfft('Dense',v, dfftp )
+         CALL fwfft('Rho',v, dfftp )
 !
          IF( iverbosity > 1 ) THEN
             WRITE( stdout,*) ' rhov: smooth ',omega*rhog(1,iss)
@@ -1211,11 +1089,8 @@ SUBROUTINE rhov(irb,eigrb,rhovan,rhog,rhor)
          !
          !  rhog(g) = total (smooth + US) charge density in G-space
          !
-         DO ig = 1, ngm
-            rhog(ig,iss)=rhog(ig,iss)+v(nl(ig))
-         END DO
+         CALL fftx_add_threed2oned_gamma( dfftp, v, rhog(:,iss) )
 
-!
          IF( iverbosity > 1 ) WRITE( stdout,'(a,2f12.8)')                          &
      &        ' rhov: n_v(g=0) = ',omega*DBLE(rhog(1,iss))
 !
@@ -1297,7 +1172,7 @@ SUBROUTINE rhov(irb,eigrb,rhovan,rhog,rhor)
             WRITE( stdout,'(a,2f12.8)') 'rhov:in n_v  ',omega*ca/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
          ENDIF
 !
-         CALL fwfft('Dense',v, dfftp )
+         CALL fwfft('Rho',v, dfftp )
 !
          IF( iverbosity > 1 ) THEN
             WRITE( stdout,*) 'rhov: smooth up',omega*rhog(1,isup)
@@ -1310,13 +1185,7 @@ SUBROUTINE rhov(irb,eigrb,rhovan,rhog,rhor)
      &           omega*(rhog(1,isdw)+AIMAG(v(1)))
          ENDIF
 !
-         DO ig=1,ngm
-            fp=  v(nl(ig)) + v(nlm(ig))
-            fm=  v(nl(ig)) - v(nlm(ig))
-            rhog(ig,isup)=rhog(ig,isup) + 0.5d0*CMPLX(DBLE(fp),AIMAG(fm),kind=DP)
-            rhog(ig,isdw)=rhog(ig,isdw) + 0.5d0*CMPLX(AIMAG(fp),-DBLE(fm),kind=DP)
-         END DO
-
+         CALL fftx_add_threed2oned_gamma( dfftp, v, rhog(:,isup), rhog(:,isdw) )
 !
          IF( iverbosity > 1 ) THEN
             WRITE( stdout,'(a,2f12.8,/,a,2f12.8)')                 &
