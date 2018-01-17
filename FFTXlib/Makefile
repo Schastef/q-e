@@ -2,9 +2,6 @@
 
 include ../make.inc
 
-# location of needed modules
-#MODFLAGS= $(MOD_FLAG)../iotk/src $(MOD_FLAG).
-
 FFTX = \
 scatter_mod.o  \
 fft_ggen.o  \
@@ -19,6 +16,7 @@ fft_scalar.FFTW3.o  \
 fft_scalar.SX6.o  \
 fft_parallel.o  \
 fft_interfaces.o  \
+fft_interpolate.o \
 stick_base.o  \
 fft_smallbox.o  \
 fft_smallbox_type.o  \
