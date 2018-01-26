@@ -1,3 +1,5 @@
+![q-e-logo](logo.jpg)
+
 # Quantum ESPRESSO
 
 > This is the distribution of the Quantum ESPRESSO suite of codes (ESPRESSO:
