@@ -1221,8 +1221,10 @@ MODULE pw_restart_new
       TYPE ( symmetry_flags_type),OPTIONAL   :: flags_obj
       INTEGER                                :: isym 
       ! 
-      noinv = flags_obj%noinv
-      no_t_rev = flags_obj%no_t_rev
+      IF ( PRESENT(flags_obj) ) THEN 
+         noinv = flags_obj%noinv
+         no_t_rev = flags_obj%no_t_rev
+      ENDIF
       !
       nrot = symms_obj%nrot 
       nsym = symms_obj%nsym
