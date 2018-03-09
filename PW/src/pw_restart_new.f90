@@ -1281,9 +1281,9 @@ MODULE pw_restart_new
             edir = 3 
          END IF
          IF ( efield_obj%potential_max_position_ispresent ) THEN 
-            edir = efield_obj%electric_field_direction
+            emaxpos = efield_obj%potential_max_position
          ELSE 
-            emaxpos = 3 
+            emaxpos = 5d-1
          END IF 
          IF ( efield_obj%potential_decrease_width_ispresent ) THEN 
             eopreg = efield_obj%potential_decrease_width
