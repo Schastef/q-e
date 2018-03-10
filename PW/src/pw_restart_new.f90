@@ -751,7 +751,11 @@ MODULE pw_restart_new
       !
       IF (PRESENT (prev_input)) THEN
          nodePointer => item( getElementsByTagname(root, "input"),0)
-         CALL qes_read (nodePointer, prev_input, ierr ) 
+         IF ( ASSOCIATED(nodePointer) ) THEN
+            CALL qes_read (nodePointer, prev_input, ierr ) 
+         ELSE 
+            ierr = 5
+         END IF
          IF (ierr /= 0 ) THEN
              CALL infomsg ('pw_readschema_file',& 
                             'failed retrieving input info from xml file, check it !!!')
