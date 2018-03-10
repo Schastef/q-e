@@ -759,7 +759,7 @@ MODULE pw_restart_new
          IF (ierr /= 0 ) THEN
              CALL infomsg ('pw_readschema_file',& 
                             'failed retrieving input info from xml file, check it !!!')
-             CALL qes_reset_input(prev_input) 
+             IF ( TRIM(prev_input%tagname) == 'input' )  CALL qes_reset_input(prev_input) 
              ierr = 0 
          END IF
       END IF
