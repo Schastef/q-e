@@ -88,10 +88,10 @@ SUBROUTINE read_upf(upf, grid, ierr, unit,  filename, xml_only) !
        IF ( ierr ==  81 ) THEN 
           WRITE(temp_upf_file, '("tmp_",I0,".UPF")') my_image_id  
           IF ( ionode ) THEN
-            CALL make_emended_upf_copy( TRIM(filename), TRIM(pseudo_dir)//trim(temp_upf_file))  
+            CALL make_emended_upf_copy( TRIM(filename), TRIM(tmp_dir)//trim(temp_upf_file))  
           END IF   
           CALL mp_barrier ( intra_image_comm) 
-          doc => parseFile(TRIM(pseudo_dir)//trim(temp_upf_file), EX = ex , IOSTAT = ferr)
+          doc => parseFile(TRIM(tmp_dir)//trim(temp_upf_file), EX = ex )
           ierr = getExceptionCode( ex ) 
           CALL mp_sum(ferr,intra_image_comm) 
           IF ( ferr /= 0 ) THEN 
@@ -107,7 +107,7 @@ SUBROUTINE read_upf(upf, grid, ierr, unit,  filename, xml_only) !
              CALL infomsg('read_upf:', msg )    
           END IF
           ! 
-          IF (ionode) ferr = f_remove(TRIM(pseudo_dir)//trim(temp_upf_file) )
+          IF (ionode) ferr = f_remove(TRIM(tmp_dir)//trim(temp_upf_file) )
           temp_upf_file=""
        END IF 
        IF ( ierr == 0 ) THEN 
