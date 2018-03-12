@@ -91,7 +91,7 @@ SUBROUTINE read_upf(upf, grid, ierr, unit,  filename, xml_only) !
             CALL make_emended_upf_copy( TRIM(filename), TRIM(tmp_dir)//trim(temp_upf_file))  
           END IF   
           CALL mp_barrier ( intra_image_comm) 
-          doc => parseFile(TRIM(tmp_dir)//trim(temp_upf_file), EX = ex )
+          doc => parseFile(TRIM(tmp_dir)//trim(temp_upf_file), EX = ex, IOSTAT = ferr )
           ierr = getExceptionCode( ex ) 
           CALL mp_sum(ferr,intra_image_comm) 
           IF ( ferr /= 0 ) THEN 
