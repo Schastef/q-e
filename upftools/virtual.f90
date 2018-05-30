@@ -352,7 +352,6 @@ SUBROUTINE compute_virtual(x_,upf_in1, upf_in2, upf_out,filein)
                IF (.NOT. upf_out%q_with_l) THEN 
                   aux2(1,1:upf_in(2)%mesh ) = upf_in(2)%qfunc(1:upf_in(2)%mesh,j*(j-1)/2+i )
                   CALL dosplineint( upf_in(2)%r(1:upf_in(2)%mesh), aux2, upf_out%r(1:upf_out%mesh), aux1 )
-                  !qfunc(1:upf_mesh,i,j,2) = aux1(1,1:upf_mesh)
                   WRITE (*,*) " done" 
                   upf_out%qfunc(1:upf_out%mesh, ijv) = (1.d0-x)*aux1(1,1:upf_out%mesh)
                ELSE 
@@ -403,7 +402,6 @@ SUBROUTINE compute_virtual(x_,upf_in1, upf_in2, upf_out,filein)
             WRITE (*,*) " interpolate chi"
             aux2(1,1:upf_in(2)%mesh ) = upf_in(2)%chi(1:upf_in(2)%mesh , i)
             CALL dosplineint( upf_in(2)%r(1:upf_in(2)%mesh ), aux2, upf_out%r(1:upf_out%mesh), aux1 )
-            !chi(1:upf_mesh,i,2) = aux1(1,1:upf_mesh)
             WRITE (*,*) " done"
             upf_out%chi(1:upf_out%mesh,i) = x * upf_in(1)%chi(1:upf_out%mesh,i) + & 
                                           (1.d0 -x ) * aux1(1,1:upf_out%mesh) 
@@ -417,7 +415,6 @@ SUBROUTINE compute_virtual(x_,upf_in1, upf_in2, upf_out,filein)
       ENDDO
    ELSE
       WRITE (*,*) "Number of wavefunctions not the same for the two pseudopotentials"
-      !upf_out%chi=upf_in(1)%chi  
       upf_out%nwfc=0
    ENDIF
    !upf_chi(1:upf_mesh,1:upf_ntwfc) = chi(1:upf_mesh,1:upf_ntwfc,1)
@@ -429,7 +426,6 @@ SUBROUTINE compute_virtual(x_,upf_in1, upf_in2, upf_out,filein)
       WRITE (*,*) " interpolate rho_at"
       aux2(1,1:upf_in(2)%mesh ) = upf_in(2)%rho_at(1:upf_in(2)%mesh )
       CALL dosplineint( upf_in(2)%r(1:upf_in(2)%mesh), aux2, upf_out%r(1:upf_out%mesh), aux1 )
-      !rho_at(1:upf_mesh,2) = aux1(1,1:upf_mesh)
       WRITE (*,*) " done"
       upf_out%rho_at(1:upf_out%mesh) = x   * upf_in(1)%rho_at(1:upf_out%mesh) + &
                                     (1.d0 - x) * aux1(1,1:upf_out%mesh) 
