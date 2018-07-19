@@ -227,7 +227,10 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
 ! subroutine g_psi(npwx,npw,nvec,psi,eig)   computes G*psi -> psi
 !------------------------------------------------------------------------
 ! CG diagonalization uses these external routines on a single band
-   external h_1psi, s_1psi
+  external h_1psi, s_1psi
+#if defined(__CUDA)
+  external h_1psi_gpu, s_1psi_gpu
+#endif
 !  subroutine h_1psi(npwx,npw,psi,hpsi,spsi)  computes H*psi and S*psi
 !  subroutine s_1psi(npwx,npw,psi,spsi)  computes S*psi (if needed)
 ! In addition to the above ithe initial wfc rotation uses h_psi, and s_psi
@@ -438,7 +441,7 @@ CONTAINS
     !
     ! ... here the local variables
     !
-    INTEGER :: ipol, j ! loop index for CUF kernels must reside here
+    INTEGER :: ipol, j, ig ! loop index for CUF kernels must reside here
     REAL(dp) :: eps=0.000001d0
     !  --- Define a small number ---
     !
@@ -484,16 +487,28 @@ CONTAINS
        ! ... h_diag is the precondition matrix
        !
        !write (*,*) ' inside CG solver branch '
-       h_diag = 1.D0
-       !
-       CALL using_g2kin(0)
-       CALL using_h_diag(2);
-       FORALL( ig = 1 : npwx )
+       IF ( .not. use_gpu ) THEN
+          h_diag = 1.D0
           !
-          h_diag(ig,:) = 1.D0 + g2kin(ig) + SQRT( 1.D0 + ( g2kin(ig) - 1.D0 )**2 )
+          CALL using_g2kin(0)
+          CALL using_h_diag(2)
+          FORALL( ig = 1 : npwx )
+             !
+             h_diag(ig,:) = 1.D0 + g2kin(ig) + SQRT( 1.D0 + ( g2kin(ig) - 1.D0 )**2 )
+             !
+          END FORALL
           !
-       END FORALL
-       !
+       ELSE ! on GPU
+          CALL using_g2kin_d(0)
+          CALL using_h_diag_d(2)
+          !$cuf kernel do(2)
+          DO ipol = 1, npol 
+             DO ig = 1, npwx 
+                h_diag_d(ig,ipol) = 1.D0 + g2kin_d(ig) + + SQRT( 1.D0 + ( g2kin_d(ig) - 1.D0 )**2 )
+             END DO
+          END DO
+       END IF
+
        ntry = 0
        !
        CG_loop : DO
@@ -502,17 +517,30 @@ CONTAINS
           !
           IF ( .NOT. lrot ) THEN
              !
+#if defined(__CUDA)
+             CALL using_evc_d(1); CALL using_et_d(1);
+             CALL rotate_wfc_k_gpu ( npwx, npw, nbnd, gstart, nbnd, evc_d, npol, okvan, evc_d, et_d(1,ik) )
+#else
              CALL using_evc(1); CALL using_et(1);
              CALL rotate_wfc ( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
+#endif
              !
              avg_iter = avg_iter + 1.D0
              !
           END IF
           !
+#if defined(__CUDA)
+          CALL using_evc_d(1); CALL using_et_d(1);
+          CALL ccgdiagg_gpu( h_1psi_gpu, s_1psi_gpu, h_diag_d, &
+                         npwx, npw, nbnd, npol, evc_d, et_d(1,ik), btype(1,ik), &
+                         ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
+
+#else
           CALL using_evc(1); CALL using_et(1);
           CALL ccgdiagg( h_1psi, s_1psi, h_diag, &
                          npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), &
                          ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
+#endif
           !
           avg_iter = avg_iter + cg_iter
           !

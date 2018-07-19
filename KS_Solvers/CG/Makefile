@@ -14,6 +14,8 @@ cg_param.o \
 rotate_wfc_gamma.o \
 rotate_wfc_k.o 
 
+-include make.gpu
+
 all : libcg.a
 
 

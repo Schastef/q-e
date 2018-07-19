@@ -12,7 +12,9 @@ PWLIBS += \
   add_vuspsi_gpu.o \
   qvan2_gpu.o \
   addusdens_gpu.o \
-  sum_band_gpu.o
+  sum_band_gpu.o \
+  h_1psi_gpu.o \
+  s_1psi_gpu.o 
 
 pwcom_gpu.o : pwcom.o
 a2fmod.o : pwcom_gpu.o
