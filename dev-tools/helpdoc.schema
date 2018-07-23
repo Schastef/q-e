@@ -189,12 +189,12 @@ element dimension {
     ref varTags
 }
 
-element dimensionMany {
+element multidimension {
     ident 
     attribute type   { word }
-    attribute indexes { cword }
-    attribute start  { cword }
-    attribute end    { cword} 
+    attribute indexes { clist }
+    attribute start  { clist }
+    attribute end    { clist} 
 
     ref varTags
 } 
@@ -209,14 +209,14 @@ element dimensiongroup {
     }
 }
 
-element dimensionManygroup {
+element multidimensiongroup {
     attribute type { word }
-    attribute indexes  { cword }
-    attribute start    { cword }
-    attribute end      { cword } 
+    attribute indexes  { clist }
+    attribute start    { clist }
+    attribute end      { clist } 
 
     interleave {
-       + { ref dimensionMany }
+       + { ref multidimension }
        ref varTags
     }
 }  

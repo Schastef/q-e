@@ -1174,7 +1174,7 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
                 PRB 84, 115108 (2011).
             }
         }
-        dimensionMany  Hubbard_J  -start 1,1 -end 3,ntyp -indexes i,ityp -type REAL { 
+        multidimension  Hubbard_J  -start 1,1 -end 3,ntyp -indexes i,ityp -type REAL { 
             default { 0.D0 for all species }
             info {
                 Hubbard_J(i,ityp): J parameters (eV) for species ityp, 
@@ -1188,7 +1188,7 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
             }
         }
         
-        dimensionMany  starting_ns_eigenvalue  -indexes m,ispin,ityp -start 1,1,1 -end 2*lmax+1,nspin\ or\ npol,ntyp  -type REAL { 
+        multidimension  starting_ns_eigenvalue  -indexes m,ispin,ityp -start 1,1,1 -end 2*lmax+1,nspin\ or\ npol,ntyp  -type REAL { 
             default { -1.d0 that means NOT SET }
             info {
                 In the first iteration of an DFT+U run it overwrites
