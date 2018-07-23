@@ -126,7 +126,7 @@
   
   <xsl:template match="linecard" mode="toc">
     <p><a href="#{generate-id(.)}">Line-of-input:</a><xsl:text> </xsl:text>
-    <xsl:apply-templates select=".//var | .//dimension | .//list" mode="toc"/></p>
+	    <xsl:apply-templates select=".//var | .//dimension | .//dimensionMany | .//list" mode="toc"/></p>
   </xsl:template>
 
   <xsl:template match="namelist | card" mode="toc">
@@ -136,16 +136,17 @@
     </a></p>
     <xsl:if test=".//var != '' or
 		  .//dimension != '' or
+		  .//dimensionMany != '' or
 		  .//list != '' or
 		  .//col != '' or
 		  .//row != ''">
       <blockquote>
-	<xsl:apply-templates select=".//var | .//dimension | .//list | .//col | .//row" mode="toc"/>
+	      <xsl:apply-templates select=".//var | .//dimension | .//dimensionMany | .//list | .//col | .//row" mode="toc"/>
       </blockquote>
     </xsl:if>
   </xsl:template>
 
-  <xsl:template match="var | dimension" mode="toc">
+  <xsl:template match="var | dimension | dimensionMany" mode="toc">
     <xsl:if test="info != '' or 
 		  status != '' or 
 		  see    != '' or
@@ -826,14 +827,14 @@
 
   <!--    *** VAR | DIMENSION | LIST | FLAG ***  -->
 
-  <xsl:template match="var | list | dimension | flag" mode="card_description">
+  <xsl:template match="var | list | dimension | dimensionMany | flag" mode="card_description">
     <!--<xsl:if test="child::node() != ''">-->
     <xsl:if test="info != '' or options != '' or status != '' or see != ''">
       <xsl:apply-templates select="."/>
     </xsl:if>
   </xsl:template>
 
-  <xsl:template match="var | list | dimension | flag">
+  <xsl:template match="var | list | dimension | dimensionMany | flag">
     <xsl:if test="name(..) != 'vargroup' and name(..) != 'dimensiongroup'">
       <a name="{generate-id(.)}"></a>
       <a name="{substring-before(concat(@name,'('),'(')}"></a>  <!-- to take care of cases if varname is specified as
@@ -851,6 +852,11 @@
 		<xsl:value-of select="@name"/>(i), i=<xsl:value-of select="@start"/>,<xsl:value-of select="@end"/>
 	      </th>
 	    </xsl:when>
+	    <xsl:when test="name(.)='dimensionMany'">
+		    <th width="20%" style="white-space: nowrap; text-align: left; vertical-align: top; background: #ffff99; padding: 2 2 2 10; ">
+	            <xsl:value-of select="@name"/>(<xsl:value-of select="@indexes"/>), (<xsl:value-of select="@indexes"/>) = (<xsl:value-of select="@start"/>) ... (<xsl:value-of select="@end"/>)
+                    </th>
+            </xsl:when> 
 	    <xsl:when test="name(.)='flag'">
 	      <th width="20%" style="white-space: nowrap; text-align: left; vertical-align: top; background: #ffff99; padding: 2 2 2 10; ">
 		<i>Card's options:</i>

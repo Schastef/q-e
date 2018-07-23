@@ -188,6 +188,16 @@ element dimension {
 
     ref varTags
 }
+
+element dimensionMany {
+    ident 
+    attribute type   { word }
+    attribute indexes { cword }
+    attribute start  { cword }
+    attribute end    { cword} 
+
+    ref varTags
+} 
 element dimensiongroup {
     attribute type  { word }
     attribute start { word }
@@ -199,7 +209,17 @@ element dimensiongroup {
     }
 }
 
+element dimensionManygroup {
+    attribute type { word }
+    attribute indexes  { cword }
+    attribute start    { cword }
+    attribute end      { cword } 
 
+    interleave {
+       + { ref dimensionMany }
+       ref varTags
+    }
+}  
 element table {
     ident
     
