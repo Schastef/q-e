@@ -1,0 +1,5 @@
+# Makefile for CG
+
+CG += \
+ccgdiagg_gpu.o \
+rotate_wfc_k_gpu.o
