@@ -494,7 +494,7 @@ CONTAINS
             IF ( upf%nchi(nw) .GT. upf%lchi(nw) )  CALL xml_addAttribute(u, 'n',             upf%nchi(nw))
             IF ( upf%epseu(nw) .GT. 0.0_DP)        CALL xml_addAttribute(u, 'pseudo_energy', upf%epseu(nw))
             IF ( upf%rcut_chi(nw) .GT. 0.0_DP )    CALL xml_addAttribute(u, 'cutoff_radius', upf%rcut_chi(nw))
-            IF ( upf%rcutu_chi(nw) .GT. 0.0_DP )   CALL xml_addAttribute(u, 'ultrasoft_cutoff_radius', upf%rcutus_chi(nw))
+            IF ( upf%rcutus_chi(nw) .GT. 0.0_DP )   CALL xml_addAttribute(u, 'ultrasoft_cutoff_radius', upf%rcutus_chi(nw))
             CALL write_data(u, upf%chi(:,nw), tag = TRIM(tag_chi))
       ENDDO
       !

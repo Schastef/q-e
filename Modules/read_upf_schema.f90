@@ -508,7 +508,7 @@ SUBROUTINE read_upf_pswfc(u, upf)
          CALL extractDataAttribute( locNode, "jchi", upf%jchi(nw), IOSTAT = ierr) 
          CALL errore ('upf_read_schema', 'error reading jchi value', ierr) 
       END IF
-      IF ( hasAttribute (locNode, 'label') THEN 
+      IF ( hasAttribute (locNode, 'label')) THEN 
          CALL extractDataAttribute( locNode, 'label',  upf%els(nw) , IOSTAT = ierr )
          CALL errore ( 'upf_read_schema', 'error reading label value in ps_pswfc', ABS(ierr) )
       END IF 
@@ -516,7 +516,7 @@ SUBROUTINE read_upf_pswfc(u, upf)
       CALL errore ('upf_read_schema', 'error reading chi angular momentum l', ierr )
       CALL extractDataAttribute( locNode, 'occupation',  upf%oc(nw) , IOSTAT = ierr )
       CALL errore ('upf_read_schema', 'error reading chi occupation', ierr )
-      IF (hasAttribute( locNode, 'n') THEN 
+      IF (hasAttribute( locNode, 'n')) THEN 
          CALL extractDataAttribute( locNode, 'n',  upf%nchi(nw) , IOSTAT = ierr )
          CALL errore ( 'upf_read_schema', 'error reading n value in ps_pswfc', ABS(ierr) )
       END IF 
