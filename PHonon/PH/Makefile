@@ -85,7 +85,6 @@ init_representations.o \
 io_dyn_mat.o \
 io_dyn_mat_old.o \
 io_pattern.o \
-mix_pot.o \
 obsolete.o \
 openfilq.o \
 phcom.o \

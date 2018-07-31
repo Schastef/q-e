@@ -48,6 +48,7 @@ star_q.o \
 setqmod.o \
 qdipol_cryst.o \
 mode_group.o \
+mix_pot.o \
 lrcom.o
 
 TLDEPS=libfft mods

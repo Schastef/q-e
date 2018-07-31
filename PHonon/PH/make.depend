@@ -839,10 +839,6 @@ matdyn.o : ../../PW/src/tetra.o
 matdyn.o : ../../UtilXlib/mp.o
 matdyn.o : io_dyn_mat.o
 matdyn.o : rigid.o
-mix_pot.o : ../../Modules/io_files.o
-mix_pot.o : ../../Modules/kind.o
-mix_pot.o : ../../Modules/mp_bands.o
-mix_pot.o : ../../UtilXlib/mp.o
 obsolete.o : ../../LR_Modules/lrcom.o
 obsolete.o : ../../Modules/cell_base.o
 obsolete.o : ../../Modules/constants.o

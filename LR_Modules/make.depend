@@ -231,6 +231,10 @@ lr_sm1_psi.o : ../UtilXlib/mp.o
 lr_sm1_psi.o : lrcom.o
 lrcom.o : ../Modules/becmod.o
 lrcom.o : ../Modules/kind.o
+mix_pot.o : ../Modules/io_files.o
+mix_pot.o : ../Modules/kind.o
+mix_pot.o : ../Modules/mp_bands.o
+mix_pot.o : ../UtilXlib/mp.o
 mode_group.o : ../Modules/constants.o
 mode_group.o : ../Modules/kind.o
 newdq.o : ../FFTXlib/fft_interfaces.o
