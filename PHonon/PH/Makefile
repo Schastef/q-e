@@ -19,7 +19,6 @@ addnlcc_zstar_eu_us.o \
 addusddens.o \
 addusddense.o \
 addusdynmat.o \
-addusldos.o \
 allocate_part.o \
 allocate_pert.o \
 allocate_phq.o \
@@ -29,7 +28,6 @@ cch_psi_all.o \
 ccg_psi.o \
 check_if_partial_dyn.o \
 check_initial_status.o \
-check_q_points_sym.o \
 check_restart_recover.o \
 clean_pw_ph.o \
 clinear.o \
@@ -87,9 +85,7 @@ init_representations.o \
 io_dyn_mat.o \
 io_dyn_mat_old.o \
 io_pattern.o \
-localdos.o \
 mix_pot.o \
-mode_group.o \
 obsolete.o \
 openfilq.o \
 phcom.o \
@@ -128,13 +124,10 @@ set_int12_nc.o \
 set_irr.o \
 set_irr_nosym.o \
 set_irr_sym.o \
-set_small_group_of_q.o \
 setlocq.o \
-sgam_ph.o \
 solve_e.o \
 solve_e_fpol.o \
 solve_linter.o \
-star_q.o \
 stop_ph.o \
 summarize.o \
 sym_and_write_zue.o \

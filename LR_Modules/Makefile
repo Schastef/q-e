@@ -41,6 +41,13 @@ setup_alpha_pv.o \
 qdipol_cryst.o \
 adddvepsi_us.o \
 setqmod.o \
+localdos.o \
+addusldos.o \
+star_q.o \
+check_q_points_sym.o \
+set_small_group_of_q.o \
+sgam_ph.o \
+mode_group.o \
 lrcom.o
 
 TLDEPS=libfft mods
