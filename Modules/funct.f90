@@ -110,7 +110,7 @@ module funct
   !              "tb09"  = "sla+pw+tb09+tb09"  = TB09 Meta-GGA
   !              "pbe0"  = "pb0x+pw+pb0x+pbc"  = PBE0
   !              "b86bx" = "pb0x+pw+b86x+pbc"  = B86bPBE hybrid
-  !              "bhahlyp" = "pb0x+pw+b88x+pbc"  = Becke half-and-half LYP
+  !              "bhahlyp" = "pb0x+pw+b88x+blyp"  = Becke half-and-half LYP
   !              "hse"   = "sla+pw+hse+pbc"    = Heyd-Scuseria-Ernzerhof (HSE 06, see note below)
   !              "b3lyp" = "b3lp+b3lp+b3lp+b3lp"= B3LYP
   !              "b3lypv1r"    = "b3lp+b3lpv1r+b3lp+b3lp"= B3LYP-VWN1-RPA
@@ -510,7 +510,7 @@ CONTAINS
 
     else if ('BHAHLYP'.EQ. TRIM(dftout).OR.'BHANDHLYP'.EQ.TRIM(dftout)) then
     ! special case : B86BPBEX
-       dft_defined = set_dft_values(6,4,42,4,0,0)
+       dft_defined = set_dft_values(6,4,42,3,0,0)
 
    else if ('HSE' .EQ. TRIM( dftout) ) then
     ! special case : HSE
@@ -1091,7 +1091,7 @@ CONTAINS
      shortname = 'PBE0'
   else if (iexch==6.and.icorr==4.and.igcx==41.and.igcc==4) then
      shortname = 'B86BPBEX'
-  else if (iexch==6.and.icorr==4.and.igcx==42.and.igcc==4) then
+  else if (iexch==6.and.icorr==4.and.igcx==42.and.igcc==3) then
      shortname = 'BHANDHLYP'
   else if (iexch==1.and.icorr==4.and.igcx==4.and.igcc==4) then
      shortname = 'revPBE'
