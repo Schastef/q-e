@@ -69,9 +69,9 @@ SUBROUTINE print_clock_pw()
    
    IF (lxdm) THEN
       CALL print_clock('energy_xdm')
-      CALL print_clock('energy_xdm:set_environ')
-      CALL print_clock('energy_xdm:paw_make_ae_charge_xdm')
-      CALL print_clock('energy_xdm:promolecular_rho')
+      CALL print_clock('exdm:environ')
+      CALL print_clock('exdm:paw_charge')
+      CALL print_clock('exdm:rho')
    END IF
 
    !
