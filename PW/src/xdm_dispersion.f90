@@ -87,6 +87,8 @@ CONTAINS
     INTEGER :: i, j, ialloc, nn
     REAL(DP), ALLOCATABLE :: d1y(:), d2y(:)
 
+    CALL start_clock('init_xdm')
+
     ispaw = ALL(upf(1:ntyp)%tpawp)
 
     ! allocate c6, etc.
@@ -148,6 +150,8 @@ CONTAINS
        CALL simpson(nn,d1y,rgrid(i)%rab(1:nn),afree(i))
     END DO
     DEALLOCATE(d1y,d2y)
+
+    CALL stop_clock('init_xdm')
 
   END SUBROUTINE init_xdm
 
@@ -218,6 +222,8 @@ CONTAINS
     INTEGER :: idx, ispin, iexch, icorr, igcx, igcc
     INTEGER, EXTERNAL :: atomic_number
     REAL(DP) :: iix, iiy, iiz
+
+    CALL start_clock('energy_xdm')
 
     ! initialize
     IF (nspin > 2) CALL errore('energy_xdm','nspin > 2 not implemented',1)
@@ -612,6 +618,8 @@ CONTAINS
        WRITE (stdout,*)
     END IF
 
+    CALL stop_clock('energy_xdm')
+
   END FUNCTION energy_xdm
 
   FUNCTION force_xdm(nat) RESULT(fvdw)
@@ -647,6 +655,8 @@ CONTAINS
     INTEGER, ALLOCATABLE :: ienvaux(:), lvecaux(:,:)
     REAL(DP), ALLOCATABLE :: xenvaux(:,:)
     INTEGER, PARAMETER :: menv = 1000, lenv=100
+
+    CALL start_clock('energy_xdm:set_environ')
 
     ! allocate the initial environment
     nenv = 0
@@ -741,6 +751,8 @@ CONTAINS
     lvecaux(:,1:lsize) = lvec
     CALL move_alloc(lvecaux,lvec)
 
+    CALL stop_clock('energy_xdm:set_environ')
+
   END SUBROUTINE set_environ
 
   SUBROUTINE PAW_make_ae_charge_xdm(rho,rhoout)
@@ -774,6 +786,8 @@ CONTAINS
     REAL(DP)                :: inv_nr1, inv_nr2, inv_nr3, distsq, g0, g1, g2, r0, r1, rqq
     INTEGER                 :: nkk
     INTEGER, ALLOCATABLE    :: iatom(:)
+
+    CALL start_clock('energy_xdm:paw_make_ae_charge_xdm')
 
     ! Some initialization
     inv_nr1 = 1._DP / DBLE(  dfftp%nr1 )
@@ -908,6 +922,8 @@ CONTAINS
     ENDDO atoms
     DEALLOCATE(rho_lm)
 
+    CALL stop_clock('energy_xdm:paw_make_ae_charge_xdm')
+
   END SUBROUTINE PAW_make_ae_charge_xdm
 
   SUBROUTINE promolecular_rho(rhot,rhoc)
@@ -932,6 +948,8 @@ CONTAINS
     integer :: i, it, nn
     integer :: n, idx, ix, iy, iz, iy0, iz0
     real(DP) :: x(3), xx(3), r, r2, rrho
+
+    CALL start_clock('energy_xdm:promolecular_rho')
 
     rhot = 0._DP
     rhoc = 0._DP
@@ -972,6 +990,8 @@ CONTAINS
        END DO
        rhot(n) = MAX(rhot(n),1e-14_DP)
     END DO
+
+    CALL stop_clock('energy_xdm:promolecular_rho')
 
   END SUBROUTINE promolecular_rho
 
