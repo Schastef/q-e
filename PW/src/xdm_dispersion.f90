@@ -656,7 +656,7 @@ CONTAINS
     REAL(DP), ALLOCATABLE :: xenvaux(:,:)
     INTEGER, PARAMETER :: menv = 1000, lenv=100
 
-    CALL start_clock('energy_xdm:set_environ')
+    CALL start_clock('exdm:environ')
 
     ! allocate the initial environment
     nenv = 0
@@ -751,7 +751,7 @@ CONTAINS
     lvecaux(:,1:lsize) = lvec
     CALL move_alloc(lvecaux,lvec)
 
-    CALL stop_clock('energy_xdm:set_environ')
+    CALL stop_clock('exdm:environ')
 
   END SUBROUTINE set_environ
 
@@ -787,7 +787,7 @@ CONTAINS
     INTEGER                 :: nkk
     INTEGER, ALLOCATABLE    :: iatom(:)
 
-    CALL start_clock('energy_xdm:paw_make_ae_charge_xdm')
+    CALL start_clock('exdm:paw_charge')
 
     ! Some initialization
     inv_nr1 = 1._DP / DBLE(  dfftp%nr1 )
@@ -922,7 +922,7 @@ CONTAINS
     ENDDO atoms
     DEALLOCATE(rho_lm)
 
-    CALL stop_clock('energy_xdm:paw_make_ae_charge_xdm')
+    CALL stop_clock('exdm:paw_charge')
 
   END SUBROUTINE PAW_make_ae_charge_xdm
 
@@ -949,7 +949,7 @@ CONTAINS
     integer :: n, idx, ix, iy, iz, iy0, iz0
     real(DP) :: x(3), xx(3), r, r2, rrho
 
-    CALL start_clock('energy_xdm:promolecular_rho')
+    CALL start_clock('exdm:rho')
 
     rhot = 0._DP
     rhoc = 0._DP
@@ -991,7 +991,7 @@ CONTAINS
        rhot(n) = MAX(rhot(n),1e-14_DP)
     END DO
 
-    CALL stop_clock('energy_xdm:promolecular_rho')
+    CALL stop_clock('exdm:rho')
 
   END SUBROUTINE promolecular_rho
 
