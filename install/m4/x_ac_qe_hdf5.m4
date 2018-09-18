@@ -81,7 +81,7 @@ if test "$use_parallel" -ne 0; then
         version_third_ok=`echo $version_num | awk -F '.' '{print @S|@3 >=16}'`
 	if test $version_sec_ok -gt 0; then 
 		if test $version_third_ok -eq 0; then
-			 AC_MSG_WARN([*** HDF5 version must be newer equal to 1.8.16]); 
+			 AC_MSG_WARN([*** HDF5 library rejected; version must be >= 1.8.16]); 
 			 have_hdf5=0;
                 fi 
         else 
@@ -95,6 +95,7 @@ if test "$use_parallel" -ne 0; then
              hdf5_libs=`$with_hdf5_path/bin/h5pfc -show | awk -F'-L' '{@S|@1="";@S|@2="-L"@S|@2; print @S|@0}'`
          elif test -e $with_hdf5_path/bin/h5fc; then 
              hdf5_libs=`$with_hdf5_path/bin/h5fc -show | awk -F'-L' '{@S|@1="";@S|@2="-L"@S|@2; print @S|@0}'`
+             try_dflags="$try_dflags -D__HDF5_SERIAL"
          else
           hdf5_libs="-L$with_hdf5_path/lib -lhdf5_fortran -lhdf5 -lrt -lz -ldl -lm -Wl,-rpath -Wl,$with_hdf5_path/lib"
          fi 
