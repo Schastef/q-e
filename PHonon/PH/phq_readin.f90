@@ -21,7 +21,6 @@ SUBROUTINE phq_readin()
   USE mp,            ONLY : mp_bcast
   USE mp_world,      ONLY : world_comm
   USE ions_base,     ONLY : amass, atm
-  USE symm_base,      ONLY : nosym, time_reversal
   USE check_stop,    ONLY : max_seconds
   USE input_parameters, ONLY : nk1, nk2, nk3, k1, k2, k3
   USE start_k,       ONLY : reset_grid
@@ -652,7 +651,7 @@ SUBROUTINE phq_readin()
   ENDIF
 
   CALL read_file ( )
-  time_reversal = time_reversal .AND. .NOT. nosym 
+
   magnetic_sym=noncolin .AND. domag
   !
   ! init_start_grid returns .true. if a new k-point grid is set from values
