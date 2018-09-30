@@ -31,7 +31,7 @@ PROGRAM pw2critic
   USE ions_base, ONLY: nat, nsp, atm, ityp, tau
   USE lsda_mod, ONLY : nspin, isk
   USE klist, ONLY : nkstot, nks, ngk, igk_k, wk, xk
-  USE fft_base, ONLY: dffts
+  USE fft_base, ONLY: dffts, dfftp
   USE io_files, ONLY : prefix, tmp_dir, nwordwfc, iunwfc
   USE control_flags, ONLY : gamma_only, twfcollect
   USE environment, ONLY : environment_start, environment_end
@@ -43,8 +43,9 @@ PROGRAM pw2critic
   CHARACTER(LEN=256), EXTERNAL :: trimcheck
   INTEGER :: ios, i, j, ibnd, ik, is, lu1, n1, n2, n3, nk, npw
   CHARACTER(len=256) :: outdir, seedname
+  logical :: smoothgrid
 
-  NAMELIST /inputpp/ outdir, prefix, seedname
+  NAMELIST /inputpp/ outdir, prefix, seedname, smoothgrid
 
   ! initialise environment
 #if defined(__MPI)
@@ -62,23 +63,27 @@ PROGRAM pw2critic
      IF (trim(outdir) == ' ' ) outdir = './'
      prefix = ' '
      seedname = 'wannier'
+     smoothgrid = .false.
      READ (5, inputpp, iostat=ios)
      tmp_dir = trimcheck(outdir)
   endif
 
   ! broadcast to all processors
-  CALL mp_bcast(ios,ionode_id, world_comm)
+  CALL mp_bcast(ios, ionode_id, world_comm)
   IF (ios /= 0) CALL errore('pw2critic','reading inputpp namelist',abs(ios))
-  CALL mp_bcast(outdir,ionode_id, world_comm)
-  CALL mp_bcast(tmp_dir,ionode_id, world_comm)
-  CALL mp_bcast(prefix,ionode_id, world_comm)
-  CALL mp_bcast(seedname,ionode_id, world_comm)
+  CALL mp_bcast(outdir, ionode_id, world_comm)
+  CALL mp_bcast(tmp_dir, ionode_id, world_comm)
+  CALL mp_bcast(prefix, ionode_id, world_comm)
+  CALL mp_bcast(seedname, ionode_id, world_comm)
+  CALL mp_bcast(smoothgrid, ionode_id, world_comm)
 
   ! read the calculation info
   CALL read_file()
   if (.not.twfcollect) &
      CALL errore('pw2critic','pw2critic requires wf_collect=.true. in the nscf calculation', 1)
   CALL openfil_pp()
+  IF (nspin > 2) &
+     CALL errore('pw2critic','nspin > 2 not implemented',1)
   nk = nkstot / nspin
 
   ! open the pwc file
@@ -96,7 +101,11 @@ PROGRAM pw2critic
   ! global info for the wavefunction
   write (lu1) nk, nbnd, nspin, gamma_only
   write (lu1) nk1, nk2, nk3
-  write (lu1) dffts%nr1, dffts%nr2, dffts%nr3
+  if (smoothgrid) then
+     write (lu1) dffts%nr1, dffts%nr2, dffts%nr3
+  else
+     write (lu1) dfftp%nr1, dfftp%nr2, dfftp%nr3
+  end if
   write (lu1) npwx, ngms
 
   ! k-point information in nspin==2, these are doubled (nkstot = 2 *
@@ -115,9 +124,16 @@ PROGRAM pw2critic
   ! k-point mapping 
   write (lu1) ngk(1:nk)
   write (lu1) igk_k(1:npwx,1:nk)
-  write (lu1) dffts%nl
-  if (gamma_only) then
-     write (lu1) dffts%nlm
+  if (smoothgrid) then
+     write (lu1) dffts%nl
+     if (gamma_only) then
+        write (lu1) dffts%nlm
+     end if
+  else
+     write (lu1) dfftp%nl
+     if (gamma_only) then
+        write (lu1) dfftp%nlm
+     end if
   end if
 
   ! KS state coefficients. Note the loop over nkstot writes both
