@@ -1,4 +1,3 @@
-!
 ! Copyright (C) 2001-2009 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
@@ -18,25 +17,30 @@
 ! - Non-colinear case not supported.
 ! - Right now, pw2critic only works in serial mode (no mpirun xx)
 !   and the SCF calculation needs to be run with wf_collect=.true.
+!
+! Input: only one namelist (&inputpp) with variables:
+! - outdir - the output directory.
+! - prefix - the prefix for the SCF calculation.
+! - seedname - the prefix for the generated pwc file
+! - smoothgrid - if .true., write the smooth grid dimensions.
+!   (default:.false.)
 PROGRAM pw2critic
-  USE io_global, ONLY : stdout, ionode, ionode_id
-  USE mp_global, ONLY : mp_startup, npool, nproc_pool, nproc_pool_file
+  USE io_global, ONLY : ionode, ionode_id
+  USE mp_global, ONLY : mp_startup
   USE wavefunctions, ONLY: evc
   USE wvfct, ONLY: nbnd, npwx, et, wg
   USE gvecs, ONLY: ngms
-  USE gvect, ONLY: mill
   USE mp, ONLY : mp_bcast
   USE mp_world, ONLY : world_comm, nproc
-  USE cell_base, ONLY : at, bg, alat
+  USE cell_base, ONLY : at, alat
   USE ions_base, ONLY: nat, nsp, atm, ityp, tau
-  USE lsda_mod, ONLY : nspin, isk
-  USE klist, ONLY : nkstot, nks, ngk, igk_k, wk, xk
+  USE lsda_mod, ONLY : nspin
+  USE klist, ONLY : nkstot, ngk, igk_k, wk, xk
   USE fft_base, ONLY: dffts, dfftp
   USE io_files, ONLY : prefix, tmp_dir, nwordwfc, iunwfc
   USE control_flags, ONLY : gamma_only, twfcollect
   USE environment, ONLY : environment_start, environment_end
-  USE start_k, ONLY : nk1, nk2, nk3, k1, k2, k3
-  USE constants, ONLY : rytoev
+  USE start_k, ONLY : nk1, nk2, nk3
   IMPLICIT NONE
 
   INTEGER, EXTERNAL :: find_free_unit
