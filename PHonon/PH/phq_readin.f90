@@ -26,7 +26,7 @@ SUBROUTINE phq_readin()
   USE start_k,       ONLY : reset_grid
   USE klist,         ONLY : xk, nks, nkstot, lgauss, two_fermi_energies, ltetra
   USE control_flags, ONLY : gamma_only, tqr, restart, lkpoint_dir, io_level, &
-                            ts_vdw
+                            ts_vdw, ldftd3, lxdm
   USE funct,         ONLY : dft_is_meta, dft_is_hybrid
   USE uspp,          ONLY : okvan
   USE fixed_occ,     ONLY : tfixed_occ
@@ -687,8 +687,7 @@ SUBROUTINE phq_readin()
      WRITE(stdout,'(5x,a)')  "A. Floris et al., Phys. Rev. B 84, 161102(R) (2011)"
      WRITE(stdout,'(5x,a)')  "in publications or presentations arising from this work."
      ! 
-     IF (U_projection.NE."atomic" .AND. U_projection.NE."ortho-atomic") &
-          CALL errore("phq_readin", &
+     IF (U_projection.NE."atomic") CALL errore("phq_readin", &
           " The phonon code for this U_projection_type is not implemented",1)
      IF (lda_plus_u_kind.NE.0) CALL errore("phq_readin", &
           " The phonon code for this lda_plus_u_kind is not implemented",1)
@@ -701,6 +700,12 @@ SUBROUTINE phq_readin()
 
   IF (ts_vdw) CALL errore('phq_readin',&
      'The phonon code with TS-VdW is not yet available',1)
+  
+  IF (lxdm) CALL errore('phq_readin',&
+     'The phonon code with XDM is not yet available',1)
+  
+  IF (ldftd3) CALL errore('phq_readin',&
+     'The phonon code with Grimme''s DFT-D3 is not yet available',1)
 
   IF ( dft_is_meta() ) CALL errore('phq_readin',&
      'The phonon code with meta-GGA functionals is not yet available',1)
