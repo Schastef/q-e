@@ -110,7 +110,7 @@ MODULE pw_restart_new
       USE exx_base,             ONLY : x_gamma_extrapolation, nq1, nq2, nq3, &
                                        exxdiv_treatment, yukawa, ecutvcut
       USE exx,                  ONLY : ecutfock
-      USE london_module,        ONLY : scal6, lon_rcut, in_c6
+      USE london_module,        ONLY : scal6, lon_rcut, c6_i
       USE xdm_module,           ONLY : xdm_a1=>a1i, xdm_a2=>a2i
       USE tsvdw_module,         ONLY : vdw_isolated, vdw_econv_thr
       USE input_parameters,     ONLY : verbosity, calculation, ion_dynamics, starting_ns_eigenvalue, &
@@ -327,7 +327,7 @@ MODULE pw_restart_new
               get_screening_parameter(), exxdiv_treatment, &
               x_gamma_extrapolation, ecutvcut/e2, &
               dft_is_nonlocc(), TRIM(vdw_corr), TRIM ( get_nonlocc_name()), &
-              scal6, in_c6, lon_rcut, xdm_a1, xdm_a2, vdw_econv_thr, &
+              scal6, c6_i, lon_rcut, xdm_a1, xdm_a2, vdw_econv_thr, &
               vdw_isolated,&
               lda_plus_u, lda_plus_u_kind, 2*Hubbard_lmax+1, noncolin, nspin, &
               nsp, nat, atm, ityp, Hubbard_U, Hubbard_J0,  &
@@ -441,6 +441,7 @@ MODULE pw_restart_new
             temp(itemp) = etotgatefield/e2
             gatefield_corr => temp(itemp)  
          END IF
+
          CALL  qexsd_init_total_energy(output%total_energy, etot/e2, eband/e2, ehart/e2, vtxc/e2, &
                                        etxc/e2, ewld/e2, degauss_, demet_, efield_corr, potstat_corr,&
                                        gatefield_corr) 

@@ -885,8 +885,8 @@ CONTAINS
            empirical_vdw = .TRUE.
            london_s6_ispresent = .TRUE. 
            london_rcut_ispresent = .TRUE. 
-           xdm_a1_ispresent = .TRUE. 
-           xdm_a2_ispresent = .TRUE.
+           xdm_a1_ispresent = .FALSE. 
+           xdm_a2_ispresent = .FALSE.
            IF ( ANY(london_c6 .GT.  -eps16 )) THEN ! -eps16 to allow london_c6(i) = 0.0 
               london_c6_ispresent = .TRUE.
               ndim_london_c6 = 0 
@@ -908,8 +908,18 @@ CONTAINS
               london_c6_ispresent = .FALSE. 
               ALLOCATE ( london_c6_obj(1))
            END IF
+            ts_vdw_econv_thr_ispresent = .FALSE. 
+            ts_vdw_isolated_ispresent = .FALSE. 
+      CASE ( "GRIMME-D3", "grimme-d3", "Grimme-D3" , 'dft-d3', 'DFT-D3' )
+           empirical_vdw = .TRUE.
+           london_s6_ispresent =   .FALSE.
+           london_c6_ispresent = .FALSE.
+           ALLOCATE ( london_c6_obj(1)) 
+           london_rcut_ispresent = .FALSE.
+           xdm_a1_ispresent =      .FALSE.
+           xdm_a2_ispresent =      .FALSE.
            ts_vdw_econv_thr_ispresent = .FALSE. 
-           ts_vdw_isolated_ispresent = .FALSE. 
+           ts_vdw_isolated_ispresent  = .FALSE. 
       CASE ( 'TS', 'ts', 'ts-vdw', 'ts-vdW', 'tkatchenko-scheffler')
            empirical_vdw = .TRUE.
            london_s6_ispresent =   .FALSE.
@@ -920,6 +930,18 @@ CONTAINS
            xdm_a2_ispresent =      .FALSE.
            ts_vdw_econv_thr_ispresent = .TRUE. 
            ts_vdw_isolated_ispresent  = .TRUE. 
+      CASE ( 'XDM', 'xdm') 
+           empirical_vdw = .not. dft_is_vdW 
+           print *, 'ciao ciao ' , empirical_vdw 
+           xdm_a1_ispresent =      .TRUE.
+           xdm_a2_ispresent =      .TRUE.
+           ts_vdw_econv_thr_ispresent = .FALSE.
+           ts_vdw_isolated_ispresent = .FALSE.
+           london_s6_ispresent =   .FALSE.
+           london_c6_ispresent = .FALSE.
+           ALLOCATE (london_c6_obj(1))
+           london_rcut_ispresent = .FALSE.
+           london_c6_ispresent   = .FALSE.
       CASE default 
            empirical_vdw = .FALSE.
            ts_vdw_econv_thr_ispresent = .FALSE.
@@ -935,10 +957,11 @@ CONTAINS
 
       IF ( dft_is_vdW .OR. empirical_vdw ) THEN
           !
-          CALL qes_init_vdW(vdW, "vdW", TRIM(vdw_corr), root_is_output,  TRIM(nonlocal_term), london_s6_ispresent, london_s6, &
-                            ts_vdw_econv_thr_ispresent, ts_vdw_econv_thr, ts_vdw_isolated_ispresent, ts_vdw_isolated,& 
-                            london_rcut_ispresent, london_rcut, xdm_a1_ispresent, xdm_a1, xdm_a2_ispresent, xdm_a2, &
-                            london_c6_ispresent, ndim_london_c6, london_c6_obj )
+          CALL qes_init_vdW(vdW, "vdW", TRIM(vdw_corr), root_is_output .AND. (TRIM(nonlocal_term) .NE. "NONE") , &
+                            TRIM(nonlocal_term), london_s6_ispresent, london_s6, ts_vdw_econv_thr_ispresent,     &
+                            ts_vdw_econv_thr, ts_vdw_isolated_ispresent, ts_vdw_isolated, london_rcut_ispresent, &
+                            london_rcut, xdm_a1_ispresent, xdm_a1, xdm_a2_ispresent, xdm_a2, london_c6_ispresent,&
+                            ndim_london_c6, london_c6_obj )
           !
           IF (london_c6_ispresent )   THEN
              DO isp=1, ndim_london_c6
