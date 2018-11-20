@@ -10,7 +10,7 @@ MODULE a2F
   !!
   !! This module contains a routine saving variables needed for the
   !! electron-phonon calculation (new algorithm implemeted by MW) 
-  !!
+  !
   USE kinds,      ONLY : DP
   !
   LOGICAL :: la2F = .FALSE.
