@@ -17,7 +17,7 @@ MODULE pw_restart_new
   !
   USE KINDS,        ONLY: DP
   USE qes_types_module
-  USE qes_libs_module
+  USE qes_libs_module, ONLY: qes_write, qes_reset, qes_init 
   USE qexsd_module, ONLY: qexsd_init_schema, qexsd_openschema, qexsd_closeschema,      &
                           qexsd_init_convergence_info, qexsd_init_algorithmic_info,    & 
                           qexsd_init_atomic_species, qexsd_init_atomic_structure,      &
@@ -319,10 +319,36 @@ MODULE pw_restart_new
 ! ... DFT
 !-------------------------------------------------------------------------------
          !
+         IF (dft_is_hybrid) THEN 
+            ALLOCATE ( hybrid_obj) 
+            CALL qexsd_init_hybrid(hybrid_obj, 
          dft_name = get_dft_short()
          inlc = get_inlc()
          !
-         CALL qexsd_init_dft(output%dft, dft_name, .TRUE., dft_is_hybrid(), &
+         IF (llondon .OR. ldftd3 .OR. exdm .OR. ts_vdw ) THEN
+            ALLOCATE (dispersion_energy_term) 
+            IF (llondon)  dispersion_energy_term = elondon/e2 
+            IF (ldftd3)   dispersion_energy_term = edftd3/e2 
+            IF (lxdm)     dispersion_energy_term = exdm/e2 
+            IF (ts_vdw)   dispersion_energy_term = 2._DP* Etsvdw/e2 
+         END IF 
+         CALL qexsd_init_dft  (output%dft, dft_name, dft_is_hybrid(),&
+            ! variables for hybrid functionals 
+         nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), get_screening_parameter(), &
+         exxdiv_treatment, x_gamma_extrapolation, ecutvcut,        &
+            ! variables for vdW corrections 
+         dft_is_vdW = dft_is_nonlocc(), vdw_corr=TRIM(vdw_corr), DISPERSION_ENERGY_TERM = dispersion_energy_term,&
+         NONLOCAL_TERM = TRIM(get_nonlocc_name()), london_s6 scal6, london_c6 = c6_i, &
+         london_rcut = lon_rcut, xdm_a1 = xdm_a1, xdm_a2 = xdm_a2 ,ts_vdw_econv_thr, ts_vdw_isolated, non_local_term, &
+         dft_is_lda_plus_U, lda_plus_U_kind, llmax, noncolin, nspin, nsp, &
+         nat, species, ityp, Hubbard_U, Hubbard_J0, Hubbard_alpha,  &
+         Hubbard_beta, Hubbard_J, starting_ns, U_projection_type, is_hubbard, &
+         psd,  Hubbard_ns, Hubbard_ns_nc )
+
+         
+         
+         
+              (output%dft, dft_name, .TRUE., dft_is_hybrid(), &
               nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), &
               get_screening_parameter(), exxdiv_treatment, &
               x_gamma_extrapolation, ecutvcut/e2, &
@@ -384,6 +410,7 @@ MODULE pw_restart_new
          ELSE 
             CALL qexsd_init_occupations ( qexsd_occ_obj, input_parameters_occupations, nspin)
          END IF 
+         qexsd_occ_obj%tagname = 'occupations_kind' 
 
          IF (TRIM(input_parameters_occupations) == 'smearing' ) THEN
             IF (TRIM(qexsd_input_obj%tagname) == 'input') THEN 
@@ -397,15 +424,15 @@ MODULE pw_restart_new
                    et,wg,nkstot,xk,ngk_g,wk, STARTING_KPOINTS = qexsd_start_k_obj,                          &
                    OCCUPATION_KIND = qexsd_occ_obj, WF_COLLECTED = wf_collect , SMEARING = qexsd_smear_obj )
 
-            CALL qes_reset_smearing(qexsd_smear_obj)
+            CALL qes_reset (qexsd_smear_obj)
          ELSE     
             CALL  qexsd_init_band_structure(output%band_structure,lsda,noncolin,lspinorb, nbnd, nbnd, nelec,& 
                                 natomwfc, occupations_are_fixed, h_energy,two_fermi_energies, [ef_up,ef_dw],&
                                 et,wg,nkstot,xk,ngk_g,wk, STARTING_KPOINTS = qexsd_start_k_obj,             &
                                 OCCUPATION_KIND = qexsd_occ_obj, WF_COLLECTED = wf_collect )
          END IF 
-         CALL qes_reset_k_points_ibz(qexsd_start_k_obj)
-         CALL qes_reset_occupations(qexsd_occ_obj)
+         CALL qes_reset (qexsd_start_k_obj)
+         CALL qes_reset (qexsd_occ_obj)
          !
 !-------------------------------------------------------------------------------------------
 ! ... TOTAL ENERGY
@@ -503,12 +530,12 @@ MODULE pw_restart_new
          !
          temp = 0 
          IF (ASSOCIATED(gate_info_ptr)) THEN 
-            CALL qes_reset_gateInfo(gate_info_ptr)
+            CALL qes_reset (gate_info_ptr)
             NULLIFY(gate_info_ptr)
          ENDIF
          NULLIFY( bp_el_pol, bp_ion_pol)
          IF (ASSOCIATED (dipol_ptr) ) THEN
-            CALL qes_reset_dipoleOutput(dipol_ptr)
+            CALL qes_reset (dipol_ptr)
             NULLIFY(dipol_ptr)
          ENDIF
          NULLIFY ( bp_obj_ptr) 
@@ -517,8 +544,8 @@ MODULE pw_restart_new
 !-------------------------------------------------------------------------------
  10      CONTINUE
          !
-         CALL qes_write_output(qexsd_xf,output)
-         CALL qes_reset_output(output) 
+         CALL qes_write (qexsd_xf,output)
+         CALL qes_reset (output) 
          !
 !-------------------------------------------------------------------------------
 ! ... CLOSING
@@ -760,8 +787,7 @@ MODULE pw_restart_new
       !------------------------------------------------------------------------
       USE qes_types_module,     ONLY : input_type, output_type, general_info_type, parallel_info_type    
       !
-      USE qes_libs_module,      ONLY : qes_write_input, qes_write_output, qes_write_parallel_info, &
-                                       qes_write_general_info 
+      USE qes_libs_module,      ONLY : qes_write  
       USE FoX_dom,              ONLY : parseFile, item, getElementsByTagname, destroy, nodeList, Node
       USE qes_read_module,      ONLY : qes_read
       IMPLICIT NONE 
@@ -840,7 +866,7 @@ MODULE pw_restart_new
          IF (ierr /= 0 ) THEN
              CALL infomsg ('pw_readschema_file',& 
                             'failed retrieving input info from xml file, check it !!!')
-             IF ( TRIM(prev_input%tagname) == 'input' )  CALL qes_reset_input(prev_input) 
+             IF ( TRIM(prev_input%tagname) == 'input' )  CALL qes_reset (prev_input) 
              ierr = 0 
          END IF
       END IF

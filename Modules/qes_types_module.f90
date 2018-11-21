@@ -16,9 +16,6 @@ MODULE qes_types_module
   !
   IMPLICIT NONE
   !
-  PUBLIC 
-  PRIVATE   DP
-
   TYPE :: xml_format_type
     !
     CHARACTER(len=100) :: tagname
@@ -96,6 +93,7 @@ MODULE qes_types_module
     !
     CHARACTER(len=256) :: specie
     CHARACTER(len=256) :: label
+    LOGICAL :: label_ispresent = .FALSE.
     !
     REAL(DP) :: HubbardCommon
     !
@@ -523,9 +521,14 @@ MODULE qes_types_module
     LOGICAL  :: lwrite = .FALSE.
     LOGICAL  :: lread  = .FALSE.
     !
+    LOGICAL  :: vdw_corr_ispresent = .FALSE.
     CHARACTER(len=256) :: vdw_corr
     LOGICAL  :: non_local_term_ispresent = .FALSE.
     CHARACTER(len=256) :: non_local_term
+    LOGICAL  :: functional_ispresent = .FALSE.
+    CHARACTER(len=256) :: functional
+    LOGICAL  :: total_energy_term_ispresent = .FALSE.
+    REAL(DP) :: total_energy_term
     LOGICAL  :: london_s6_ispresent = .FALSE.
     REAL(DP) :: london_s6
     LOGICAL  :: ts_vdw_econv_thr_ispresent = .FALSE.
@@ -975,6 +978,8 @@ MODULE qes_types_module
     REAL(DP) :: potentiostat_contr
     LOGICAL  :: gatefield_contr_ispresent = .FALSE.
     REAL(DP) :: gatefield_contr
+    LOGICAL  :: vdW_term_ispresent = .FALSE.
+    REAL(DP) :: vdW_term
     !
   END TYPE total_energy_type
   !
