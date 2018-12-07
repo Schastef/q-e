@@ -319,9 +319,36 @@ MODULE pw_restart_new
 ! ... DFT
 !-------------------------------------------------------------------------------
          !
-         IF (dft_is_hybrid) THEN 
+         IF (dft_is_hybrid() ) THEN 
             ALLOCATE ( hybrid_obj) 
-            CALL qexsd_init_hybrid(hybrid_obj, 
+            CALL qexsd_init_hybrid(hybrid_obj, nq1 = nq1 , nq2 = nq2, nq3 =nq3, ecutfock = ecutfock/e2, &
+                                   exx_fraction = get_exx_fraction(), screening_parameter = get_screening_parameter(),&
+                                   exxdiv_treatment = exxdiv_treatment, x_gamma_extrapolation = x_gamma_extrapolation,&
+                                   ecutvcut = ecutvcut/e2 )
+         END IF 
+
+         empirical_vdw = (llondon .OR. ldft3 .OR. lxdm .OR. ts_vdw ) 
+         dft_is_vdw = dft_is_nonlocc() 
+         IF ( dft_is_vdw .OR. empirical_vdw ) THEN 
+            ALLOCATE (vdw_obj)
+            IF (llondon ) THEN 
+               vdw_term = elondon/e2
+            ELSE IF ( lxdm ) THEN
+               vdw_term = exdm/e2 
+            ELSE IF ( ldftd3) THEN 
+               vdw_term = edftd3/e2
+            ELSE IF ( ts_vdw ) THEN 
+               vdw_term = 2._DP * EtsvdW/e2 
+            END IF 
+            CALL qexsd_init_vdw(vdw_obj, get_nonlocc_name, vdw_corr, vdw_term, ts_vdw_econv_thr, ts_vdw_isolated,&  
+                                scal6, c6_i, lon_rcut, xdm_a1, xdm_a2 ) 
+         END IF 
+         IF ( lda_plus_u) THEN 
+            ALLOCATE (dftU_obj)  
+            CALL qexsd_init_dftU (dftU_obj, is_hubbard = is_hubbard, psd = psd , U = Hubbard_U,&
+                                  J0 = Hubbard_J0, alpha = Hubbard_alpha, beta = Hubbard_beta, J = Hubbard_J, &
+                                   starting_ns = starting_ns, Hub_ns = rho%ns, Hub_ns_nc = rho%ns_nc ) 
+         END IF 
          dft_name = get_dft_short()
          inlc = get_inlc()
          !

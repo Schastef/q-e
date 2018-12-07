@@ -656,11 +656,12 @@ CONTAINS
          !
       END SUBROUTINE qexsd_init_hybrid 
          !
-      SUBROUTINE qexsd_init_dftU (obj, is_hubbard, psd, U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc) 
+      SUBROUTINE qexsd_init_dftU (obj, is_hubbard, psd, U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc ) 
          IMPLICIT NONE 
          TYPE(dftU_type),INTENT(INOUT)  :: obj 
-         REAL(DP),OPTIONAL              :: U(:), J0(:), alpha(:), beta(:), J(:,:)
-         REAL(DP),OPTIONAL              :: Hub_ns(:,:,:,:), Hub_ns_nc(:,:,:,:) 
+         INTEGER, INTENT(IN)            :: H_lmax
+         REAL(DP),OPTIONAL,INTENT(IN)   :: U(:), J0(:), alpha(:), beta(:), J(:,:)
+         REAL(DP),OPTIONAL,INTENT(IN)   :: Hub_ns(:,:,:,:), Hub_ns_nc(:,:,:,:) 
          CHARACTER(len=*),INTENT(IN)    :: psd(:) 
          LOGICAL,INTENT(IN)             :: is_hubbard(:) 
          !
@@ -670,10 +671,8 @@ CONTAINS
          TYPE(starting_ns_type),ALLOCATABLE    :: starting_ns_(:) 
          TYPE(Hubbard_ns_type),ALLOCATABLE     :: Hubbard_ns_(:) 
          INTEGER                               :: nsp 
-         LOGICAL                               :: noncolin 
          !
-         nsp = SIZE(is_hubbard)
-         noncolin = PRESENT(Hub_ns_nc) 
+         nsp = SIZE(is_hubbard) 
          CALL set_labels ()
          IF (PRESENT(U))   CALL init_hubbard_commons(U, U_, label, "Hubbard_U") 
          IF (PRESENT(J0))  CALL init_hubbard_commons(J0, J0_, label, "Hubbard_J0" ) 
@@ -683,7 +682,7 @@ CONTAINS
          IF (PRESENT(starting_ns)) CALL init_starting_ns(starting_ns_ , label)
          IF (PRESENT(Hubbard_ns))  CALL init_Hubbard_ns(Hubbard_ns_ , label)  
          !
-         CALL qes_init (t_obj, "dftU", lda_plus_u_kind, U_, J0_, alpha_, beta_, J_, starting_ns_, Hubbard_ns_, &
+         CALL qes_init (obj, "dftU", lda_plus_u_kind, U_, J0_, alpha_, beta_, J_, starting_ns_, Hubbard_ns_, &
                            U_projection_type)
          ! 
          CALL reset_hubbard_commons(U_)
@@ -700,14 +699,14 @@ CONTAINS
             INTEGER,EXTERNAL              :: set_hubbard_l,set_hubbard_n
             INTEGER                       :: i, hubb_l, hubb_n 
             ! 
-            ALLOCATE(labels(nsp))
+            ALLOCATE(label(nsp))
             DO i = 1, nsp
                IF (is_hubbard(i)) THEN
                   hubb_l=set_hubbard_l(psd(i))
                   hubb_n=set_hubbard_n(psd(i))
-                  WRITE (labels(i),'(I0,A)') hubb_n,hubbard_shell(hubb_l+1) 
+                  WRITE (label(i),'(I0,A)') hubb_n,hubbard_shell(hubb_l+1) 
                ELSE
-                  labels(i)="no Hubbard"
+                  label(i)="no Hubbard"
                END IF
             END DO
          END SUBROUTINE set_labels 
@@ -764,10 +763,12 @@ CONTAINS
             IMPLICIT NONE
             TYPE(starting_ns_type), ALLOCATABLE   :: objs(:)
             CHARACTER(len=*)                      :: labs(nsp)
-            INTEGER                               :: i, ispin, ind  
+            INTEGER                               :: i, ispin, ind, llmax   
             !  
             IF ( .NOT. PRESENT(starting_ns)) RETURN
+            
             IF (noncolin) THEN 
+               llmax = SIZE(Hub_ns_nc,1) 
                ALLOCATE(objs(nsp))
                DO i = 1, nsp
                   IF (.NOT. ANY(starting_ns(1:2*llmax,1,i)>0.d0)) CYCLE
@@ -777,6 +778,7 @@ CONTAINS
                END DO 
                RETURN 
             ELSE
+               llmax = SIZE (Hub_ns, 1) 
                ALLOCATE(objs(min(nspin,nspinx)*nsp))
                ind = 0 
                DO ispin = 1, MIN(nspin, nspinx)
@@ -796,12 +798,11 @@ CONTAINS
             CHARACTER(LEN=*)                    :: labs(nsp) 
             !
             REAL(DP), ALLOCATABLE               :: Hubb_occ_aux(:,:) 
-            INTEGER                             :: i, is,ind, ldim, m1, m2 
+            INTEGER                             :: i, is,ind, ldim, m1, m2, llmax  
             ! 
-            IF (.NOT. ( (PRESENT (Hubbard_ns).AND. .NOT. noncolin)  .OR. &
-                        (PRESENT (Hubbard_ns_nc) .AND. noncolin)))   RETURN 
             ! 
-            IF (noncolin ) THEN 
+            IF (PRESENT(Hubbard_ns_nc )) THEN 
+               llmax = SIZE ( Hub_ns_nc, 1) 
                ALLOCATE (objs(nat))
                ldim = SIZE(Hubbard_ns_nc,1) 
                ALLOCATE (Hubb_occ_aux(2*ldim, 2*ldim)) 
@@ -820,6 +821,7 @@ CONTAINS
                END DO
                RETURN 
             ELSE 
+               llmax = SIZE ( Hub_ns,1) 
                ALLOCATE( objs(nspin*nat) )
                ind = 0 
                DO i = 1, nat
@@ -845,62 +847,40 @@ CONTAINS
          END SUBROUTINE reset_starting_ns 
          !
              
-         END SUBROUTINE block_init_dftU 
+         END SUBROUTINE qexsd_init_dftU 
          ! 
          !
-         SUBROUTINE block_init_vdw(obj)
+         SUBROUTINE qexsd_init_vdw(obj, non_local_term, vdw_corr, vdw_term, ts_thr, ts_isol,& 
+                                   london_s6, london_c6, london_rcut, xdm_a1, xdm_a2 )
             IMPLICIT NONE 
             TYPE(vdW_type)  :: obj 
+            CHARACTER(LEN=*),INTENT(IN)            :: non_local_term, vdw_corr 
+            REAL(DP),OPTIONAL,INTENT(IN)           :: vdw_term, london_c6(:), london_rcut,  xdm_a1, xdm_a2, ts_thr,&
+                                                      london_s6
+            LOGICAL,OPTIONAL,INTENT(IN)            :: ts_isol 
             !
-            LOGICAL         :: empirical_vdw = .FALSE. 
+            LOGICAL         :: empirical_vdw = .FALSE. , dft_is_vdw  = .FALSE. 
             TYPE(HubbardCommon_type),ALLOCATABLE :: london_c6_obj(:)  
-            CHARACTER(LEN = 80),POINTER  :: non_local_term_ => NULL(), functional_=>NULL(), vdw_corr_ => NULL() 
-            REAL(DP),POINTER             :: energy_term_ => NULL() 
-            SELECT CASE ( TRIM (vdw_corr )) 
-               CASE ( 'grimme-d2', 'Grimme-D2', 'DFT-D', 'dft-d') 
-                  empirical_vdw = .TRUE.
-                  IF ( PRESENT (london_c6)) CALL block_init_londonc6(london_c6, london_c6_obj) 
-               CASE ( "GRIMME-D3", "grimme-d3", "Grimme-D3" , 'dft-d3', 'DFT-D3', 'TS', 'ts', 'ts-vdw', &
-                       'ts-vdW', 'tkatchenko-scheffler',     'xdm', 'XDM')
-                  empirical_vdw = .TRUE.
-               CASE default 
-                  empirical_vdw = .FALSE. 
-            END SELECT 
+            INTEGER                              :: isp
+            ! 
+            empirical_vdw = PRESENT(vdw_corr) 
+            dft_is_vdw = PRESENT(non_local_term) 
             IF ( .NOT. (dft_is_vdW .OR. empirical_vdw)) RETURN
-            IF ( empirical_vdw ) THEN
-               ALLOCATE (vdw_corr_, energy_term_)
-               vdw_corr_ = TRIM(vdw_corr) 
-               energy_term_ = dispersion_energy_term 
-            ELSE IF (dft_is_vdw) THEN 
-               ALLOCATE (functional_) 
-               functional_ = TRIM(functional)
-               IF (TRIM(non_local_term) .NE. "NONE") THEN 
-                  ALLOCATE (non_local_term_) 
-                  non_local_term_ = TRIM(non_local_term) 
-               END IF 
-            END IF 
-            !
-            CALL qes_init (obj, "vdW", VDW_CORR = TRIM(vdw_corr_), NON_LOCAL_TERM = TRIM(non_local_term_),           &
-                            FUNCTIONAL = TRIM(functional_), TOTAL_ENERGY_TERM = energy_term_, LONDON_S6  = london_s6,& 
-                            TS_VDW_ECONV_THR = ts_vdw_econv_thr,  TS_VDW_ISOLATED  = ts_vdw_isolated,                &
-                            LONDON_RCUT = london_rcut, XDM_A1 = xdm_a1, XDM_A2  = xdm_a2, LONDON_C6 = london_c6_obj)
-
+            IF ( PRESENT (london_c6)) CALL init_londonc6(london_c6, london_c6_obj) 
+            CALL qes_init (obj, "vdW", VDW_CORR = vdw_corr, NON_LOCAL_TERM = non_local_term, FUNCTIONAL = functional,&
+                           TOTAL_ENERGY_TERM = vdw_term, LONDON_S6  = london_s6,& 
+                            TS_VDW_ECONV_THR = ts_thr,  TS_VDW_ISOLATED  = ts_isol, LONDON_RCUT = london_rcut, &
+                            XDM_A1 = xdm_a1, XDM_A2  = xdm_a2, LONDON_C6 = london_c6_obj)
           !
           IF (ALLOCATED(london_c6_obj))   THEN
-             DO isp=1, ndim_london_c6
+             DO isp=1, SIZE(london_c6_obj,1) 
                 CALL qes_reset(london_c6_obj(isp))
              END DO 
           END IF
           DEALLOCATE ( london_c6_obj)
-          IF (ASSOCIATED (vdw_corr_)) DEALLOCATE (vdw_corr_) 
-          IF (ASSOCIATED (energy_term_)) DEALLOCATE ( energy_term_) 
-          IF (ASSOCIATED ( functional_)) DEALLOCATE ( functional_) 
-          IF (ASSOCIATED ( non_local_term_)) DEALLOCATE (non_local_term_) 
-   END SUBROUTINE block_init_vdw  
- 
-   ! 
-         ! 
-         SUBROUTINE block_init_londonc6(c6data, c6objs)
+          CONTAINS
+          ! 
+          SUBROUTINE init_londonc6(c6data, c6objs)
             IMPLICIT NONE 
             REAL(DP),INTENT(IN)  :: c6data(:)
             TYPE(HubbardCommon_type),ALLOCATABLE,INTENT(INOUT) :: c6objs(:) 
@@ -913,14 +893,13 @@ CONTAINS
                DO isp = 1, nsp
                   IF ( c6data(isp) .GT. -eps16 ) THEN
                      ind  = ind + 1  
-                     CALL qes_init(c6objs(ind ), "london_c6", SPECIE = TRIM(species(isp)), HUBBARDCOMMON = c6data(isp))
+                     CALL init(c6objs(ind ), "london_c6", SPECIE = TRIM(species(isp)), HUBBARDCOMMON = c6data(isp))
                   END IF 
                END DO                        
             END IF 
-         END SUBROUTINE block_init_londonc6 
-         !
-    END SUBROUTINE qexsd_init_dft
-    !
+         END SUBROUTINE init_londonc6 
+         !   
+   END SUBROUTINE qexsd_init_vdw  
     !--------------------------------------------------------------------------------------------
     SUBROUTINE qexsd_init_outputPBC(obj,assume_isolated)
     !--------------------------------------------------------------------------------------------
