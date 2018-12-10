@@ -77,9 +77,10 @@ if test "$use_parallel" -ne 0; then
       fi
       if test "$have_hdf5" -eq 1; then
         version_num=`grep "HDF5 Version" $with_hdf5_path/lib/libhdf5.settings | awk -F ':' '{print @S|@2}'` 
-	version_sec_ok=`echo $version_num | awk -F '.' '{print @S|@2 >= 8}'` 
-        version_third_ok=`echo $version_num | awk -F '.' '{print @S|@3 >=16}'`
-	if test $version_sec_ok -gt 0; then 
+	#version_sec_ok=`echo $version_num | awk -F '.' '{print @S|@2 >= 8}'` 
+        #version_third_ok=`echo $version_num | awk -F '.' '{print @S|@3 >=16}'`
+        version_ok=`echo $version_num | awk -F '.' '{print ((@S|@2 >= 10) || ( (@S|@2 == 8) && (@S|@3 >= 16)))}'` 
+	if test $version_ok -gt 0; then 
 		if test $version_third_ok -eq 0; then
 			 AC_MSG_WARN([*** HDF5 library rejected; version must be >= 1.8.16]); 
 			 have_hdf5=0;
@@ -163,8 +164,9 @@ else
       fi
       if test "$have_hdf5" -eq 1; then
         version_num=`grep "HDF5 Version" $with_hdf5_path/lib/libhdf5.settings | awk -F ':' '{print @S|@2}'` 
-	version_sec_ok=`echo $version_num | awk -F '.' '{print @S|@2 >= 8}'` 
-        version_third_ok=`echo $version_num | awk -F '.' '{print @S|@3 >=16}'`
+	#version_sec_ok=`echo $version_num | awk -F '.' '{print @S|@2 >= 8}'` 
+        #version_third_ok=`echo $version_num | awk -F '.' '{print @S|@3 >=16}'`
+        version_ok=`echo $version_num | awk -F '.' '{print ((@S|@2 => 10) || ( (@S|@2 == 8) && (@S|@3 >= 16)))}'` 
 	if test $version_sec_ok -gt 0; then 
 		if test $version_third_ok -eq 0; then
 			 AC_MSG_WARN([*** HDF5 library rejected; version must be >= 1.8.16]); 

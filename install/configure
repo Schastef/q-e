@@ -9454,9 +9454,10 @@ fi
       fi
       if test "$have_hdf5" -eq 1; then
         version_num=`grep "HDF5 Version" $with_hdf5_path/lib/libhdf5.settings | awk -F ':' '{print $2}'`
-	version_sec_ok=`echo $version_num | awk -F '.' '{print $2 >= 8}'`
-        version_third_ok=`echo $version_num | awk -F '.' '{print $3 >=16}'`
-	if test $version_sec_ok -gt 0; then
+	#version_sec_ok=`echo $version_num | awk -F '.' '{print $2 >= 8}'`
+        #version_third_ok=`echo $version_num | awk -F '.' '{print $3 >=16}'`
+        version_ok=`echo $version_num | awk -F '.' '{print (($2 >= 10) || ( ($2 == 8) && ($3 >= 16)))}'`
+	if test $version_ok -gt 0; then
 		if test $version_third_ok -eq 0; then
 			 { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: *** HDF5 library rejected; version must be >= 1.8.16" >&5
 $as_echo "$as_me: WARNING: *** HDF5 library rejected; version must be >= 1.8.16" >&2;};
@@ -9641,8 +9642,9 @@ fi
       fi
       if test "$have_hdf5" -eq 1; then
         version_num=`grep "HDF5 Version" $with_hdf5_path/lib/libhdf5.settings | awk -F ':' '{print $2}'`
-	version_sec_ok=`echo $version_num | awk -F '.' '{print $2 >= 8}'`
-        version_third_ok=`echo $version_num | awk -F '.' '{print $3 >=16}'`
+	#version_sec_ok=`echo $version_num | awk -F '.' '{print $2 >= 8}'`
+        #version_third_ok=`echo $version_num | awk -F '.' '{print $3 >=16}'`
+        version_ok=`echo $version_num | awk -F '.' '{print (($2 => 10) || ( ($2 == 8) && ($3 >= 16)))}'`
 	if test $version_sec_ok -gt 0; then
 		if test $version_third_ok -eq 0; then
 			 { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: *** HDF5 library rejected; version must be >= 1.8.16" >&5
