@@ -108,19 +108,12 @@ SUBROUTINE add_bfield (v,rho)
      write (stdout,'(4x,a,F15.8)' ) " constraint energy (Ryd) = ", etcon
   ELSE IF (i_cons==3.or.i_cons==6) THEN
      m1 = 0.d0
-     IF (npol==1) THEN
+     DO ipol = 1, npol
         DO ir = 1,dfftp%nnr
-           m1(1) = m1(1) + rho(ir,1) - rho(ir,2)
+           m1(ipol) = m1(ipol) + rho(ir,ipol+1)
         END DO
-        m1(1) = m1(1) * omega / ( dfftp%nr1 * dfftp%nr2 * dfftp%nr3 )
-     ELSE
-        DO ipol = 1, 3
-           DO ir = 1,dfftp%nnr
-              m1(ipol) = m1(ipol) + rho(ir,ipol+1)
-           END DO
-           m1(ipol) = m1(ipol) * omega / ( dfftp%nr1 * dfftp%nr2 * dfftp%nr3 )
-        END DO
-     END IF
+        m1(ipol) = m1(ipol) * omega / ( dfftp%nr1 * dfftp%nr2 * dfftp%nr3 )
+     END DO
      CALL mp_sum( m1, intra_bgrp_comm )
 
      IF (i_cons==3) THEN
@@ -132,10 +125,12 @@ SUBROUTINE add_bfield (v,rho)
              v(ir,2) = v(ir,2)+bfield(1)
           END DO
        ELSE
-          fact = 2.D0*lambda
-          DO ipol=1,3
-             bfield(ipol)=-fact*(m1(ipol)-mcons(ipol,1))
-             DO ir =1,dfftp%nnr
+          fact = 2.D0 * lambda
+          DO ipol = 1, 3
+             !^na,nt: index stuff
+             !^na = ipol+npol/3  ;  nt = ABS( ipol*na+npol*(na-1) )
+             bfield(ipol) = -fact * (m1(ipol)-mcons(ipol,1))
+             DO ir = 1, dfftp%nnr
                 v(ir,ipol+1) = v(ir,ipol+1)-bfield(ipol)
              END DO
           END DO

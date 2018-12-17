@@ -526,11 +526,7 @@ SUBROUTINE esm_hartree_bc1(rhog, ehart, aux)
      ng_2d = imill_2d(n1,n2)
      n3 = mill(3,ng)+1
      IF (n3<1) n3 = n3 + dfftp%nr3
-     if (nspin == 2) then
-        rg3 = rhog(ng,1)+rhog(ng,2)
-     else
-        rg3 = rhog(ng,1)
-     endif
+     rg3 = rhog(ng,1)
      rhog3(n3,ng_2d)=rg3
      if ( gamma_only .and. n1==0 .and. n2==0 ) then
         n3 = -mill(3,ng)+1
@@ -738,11 +734,7 @@ SUBROUTINE esm_hartree_bc2 (rhog, ehart, aux)
      ng_2d = imill_2d(n1,n2)
      n3 = mill(3,ng)+1
      IF (n3<1) n3 = n3 + dfftp%nr3    
-     if (nspin == 2) then
-        rg3 = rhog(ng,1)+rhog(ng,2)
-     else
-        rg3 = rhog(ng,1)
-     endif
+     rg3 = rhog(ng,1)
      rhog3(n3,ng_2d)=rg3
      if ( gamma_only .and. n1==0 .and. n2==0 ) then
         n3 = -mill(3,ng)+1
@@ -963,11 +955,7 @@ SUBROUTINE esm_hartree_bc3 (rhog, ehart, aux)
      ng_2d = imill_2d(n1,n2)
      n3 = mill(3,ng)+1
      IF (n3<1) n3 = n3 + dfftp%nr3    
-     if (nspin == 2) then
-        rg3 = rhog(ng,1)+rhog(ng,2)
-     else
-        rg3 = rhog(ng,1)
-     endif
+     rg3 = rhog(ng,1)
      rhog3(n3,ng_2d)=rg3
      if ( gamma_only .and. n1==0 .and. n2==0 ) then
         n3 = -mill(3,ng)+1
@@ -1182,11 +1170,7 @@ SUBROUTINE esm_hartree_bc4 (rhog, ehart, aux)
      ng_2d = imill_2d(n1,n2)
      n3 = mill(3,ng)+1
      IF (n3<1) n3 = n3 + dfftp%nr3    
-     if (nspin == 2) then
-        rg3 = rhog(ng,1)+rhog(ng,2)
-     else
-        rg3 = rhog(ng,1)
-     endif
+     rg3 = rhog(ng,1)
      rhog3(n3,ng_2d)=rg3
      if ( gamma_only .and. n1==0 .and. n2==0 ) then
         n3 = -mill(3,ng)+1
@@ -1542,11 +1526,7 @@ END SUBROUTINE esm_hartree_bc4
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rhog3(igz,igp) = rg3
 
        ! expand function symmetrically to gz<0
@@ -1842,11 +1822,7 @@ END SUBROUTINE esm_hartree_bc4
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rhog3(igz,igp) = rg3
 
        ! expand function symmetrically to gz<0
@@ -2195,11 +2171,7 @@ END SUBROUTINE esm_hartree_bc4
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rhog3(igz,igp) = rg3
 
        ! expand function symmetrically to gz<0
@@ -4554,11 +4526,7 @@ END SUBROUTINE esm_local_bc4
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rhog3(igz,igp) = rg3
 
        if( gamma_only .and. iga==0 .and. igb==0 ) then
@@ -4816,11 +4784,7 @@ END SUBROUTINE esm_local_bc4
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rhog3(igz,igp) = rg3
 
        if( gamma_only .and. iga==0 .and. igb==0 ) then
@@ -5109,11 +5073,7 @@ END SUBROUTINE esm_local_bc4
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rhog3(igz,igp) = rg3
           
        if( gamma_only .and. iga==0 .and. igb==0 ) then
@@ -7036,11 +6996,7 @@ SUBROUTINE esm_printpot( rhog )
           igz = igz + dfftp%nr3
        end if
 
-       if( nspin == 2 ) then
-          rg3 = rhog(ig,1) + rhog(ig,2)
-       else
-          rg3 = rhog(ig,1)
-       endif
+       rg3 = rhog(ig,1)
        rho0g(igz) = rg3
 
        if( gamma_only .and. iga==0 .and. igb==0 ) then

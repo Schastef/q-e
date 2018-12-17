@@ -8,7 +8,7 @@
 !--------------------------------------------------------------------
 subroutine set_vrs (vrs, vltot, vr, kedtau, kedtaur,nrxx, nspin, doublegrid)
   !--------------------------------------------------------------------
-  ! set the total local potential vrs on the smooth mesh to be used in 
+  ! Set the total local potential vrs on the smooth mesh to be used in 
   ! h_psi, adding the (spin dependent) scf (H+xc) part and the sum of 
   ! all the local pseudopotential contributions.
   !

@@ -7,7 +7,7 @@
 !
 MODULE a2F
   !! author: Malgorzata Wierzbowska
-  !!
+  !!!
   !! This module contains a routine saving variables needed for the
   !! electron-phonon calculation (new algorithm implemeted by MW) 
   !!
