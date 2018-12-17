@@ -9,7 +9,7 @@
 !
 MODULE start_k
   !
-  ! ... Basic variables for k-point generations, as read from input
+  ! ... basic variables for k-point generations, as read from input
   !
   USE kinds,      ONLY : DP
   USE cell_base,  ONLY : bg

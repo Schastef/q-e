@@ -230,7 +230,9 @@ CONTAINS
            ! ... if the cell did not change too much
            !
            IF (.NOT. firststep) THEN
+               !
                CALL update_pot()
+               !
                CALL hinit1()
            END IF
         END IF

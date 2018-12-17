@@ -26,7 +26,7 @@ SUBROUTINE punch( what )
   USE io_files,             ONLY : xmlpun_schema, psfile, pseudo_dir
   USE wrappers,             ONLY : f_copy
   USE spin_orb,             ONLY : lforcet
-  USE scf,                  ONLY : rho
+  USE scf,                  ONLY : rho, rhoz_or_updw  !^
   USE lsda_mod,             ONLY : nspin
   USE ions_base,            ONLY : nsp
   USE funct,                ONLY : get_inlc

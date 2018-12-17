@@ -28,7 +28,7 @@ SUBROUTINE electrons()
                                    vtxc, etxc, etxcc, ewld, demet, epaw, &
                                    elondon, edftd3, ef_up, ef_dw
   USE scf,                  ONLY : rho, rho_core, rhog_core, v, vltot, vrs, &
-                                   kedtau, vnew
+                                   kedtau, vnew, rhoz_or_updw                    !^
   USE control_flags,        ONLY : tr2, niter, conv_elec, restart, lmd, &
                                    do_makov_payne
   USE io_files,             ONLY : iunmix, output_drho, &
@@ -122,9 +122,10 @@ SUBROUTINE electrons()
            IF (exst) READ (iunres, iostat=ios) exxbuff
            IF (ios /= 0) WRITE(stdout,'(5x,"Error in EXX restart!")')
            IF (use_ace) CALL aceinit ( )
-           !
+           !          
            CALL v_of_rho( rho, rho_core, rhog_core, &
                ehart, etxc, vtxc, eth, etotefield, charge, v)
+           !   
            IF (okpaw) CALL PAW_potential(rho%bec, ddd_PAW, epaw,etot_cmp_paw)
            CALL set_vrs( vrs, vltot, v%of_r, kedtau, v%kin_r, dfftp%nnr, &
                          nspin, doublegrid )
@@ -191,9 +192,10 @@ SUBROUTINE electrons()
         !
         ! Recalculate potential because XC functional has changed,
         ! start self-consistency loop on exchange
-        !
+        ! 
         CALL v_of_rho( rho, rho_core, rhog_core, &
              ehart, etxc, vtxc, eth, etotefield, charge, v)
+        !
         etot = etot + etxc + exxen
         !
         IF (okpaw) CALL PAW_potential(rho%bec, ddd_PAW, epaw,etot_cmp_paw)
@@ -277,7 +279,9 @@ SUBROUTINE electrons()
         ENDIF
         !
         IF ( dexx < tr2_final ) THEN
+           !     
            IF ( do_makov_payne ) CALL makov_payne( etot )
+           !  
            WRITE( stdout, 9101 )
            RETURN
         END IF
@@ -361,7 +365,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                                    create_scf_type, destroy_scf_type, &
                                    open_mix_file, close_mix_file, &
                                    rho, rho_core, rhog_core, v, vltot, vrs, &
-                                   kedtau, vnew
+                                   kedtau, vnew, rhoz_or_updw !^
   USE control_flags,        ONLY : mixing_beta, tr2, ethr, niter, nmix, &
                                    iprint, conv_elec, &
                                    restart, io_level, do_makov_payne,  &
@@ -615,7 +619,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
         ! ... eband  = \sum_v \epsilon_v    is calculated by sum_band
         ! ... deband = - \sum_v <\psi_v | V_h + V_xc |\psi_v>
         ! ... eband + deband = \sum_v <\psi_v | T + Vion |\psi_v>
-        !
+        !     
         deband = delta_e()
         !
         ! ... mix_rho mixes several quantities: rho in g-space, tauk (for
@@ -628,8 +632,10 @@ SUBROUTINE electrons_scf ( printout, exxen )
         ! ... contains a hidden parallelization level on the entire image
         !
         ! IF ( my_pool_id == root_pool ) 
+        !
         CALL mix_rho ( rho, rhoin, mixing_beta, dr2, tr2_min, iter, nmix, &
                        iunmix, conv_elec )
+        !
         CALL bcast_scf_type ( rhoin, root_pool, inter_pool_comm )
         CALL mp_bcast ( dr2, root_pool, inter_pool_comm )
         CALL mp_bcast ( conv_elec, root_pool, inter_pool_comm )
@@ -672,6 +678,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            !
            CALL v_of_rho( rhoin, rho_core, rhog_core, &
                           ehart, etxc, vtxc, eth, etotefield, charge, v)
+           !
            IF (okpaw) THEN
               CALL PAW_potential(rhoin%bec, ddd_paw, epaw,etot_cmp_paw)
               CALL PAW_symmetrize_ddd(ddd_paw)
@@ -697,8 +704,10 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ! ... 2) vnew contains V(out)-V(in) ( used to correct the forces ).
            !
            vnew%of_r(:,:) = v%of_r(:,:)
+           !
            CALL v_of_rho( rho,rho_core,rhog_core, &
                           ehart, etxc, vtxc, eth, etotefield, charge, v)
+           !
            vnew%of_r(:,:) = v%of_r(:,:) - vnew%of_r(:,:)
            !
            IF (okpaw) THEN
@@ -745,7 +754,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
         !
         IF ( (noncolin .AND. domag) .OR. i_cons==1 .OR. nspin==2) CALL report_mag()
         !
-     END IF
+     END IF  
      !
      WRITE( stdout, 9000 ) get_clock( 'PWSCF' )
      !
@@ -781,7 +790,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            END IF
         END IF
      END IF
-     !
+     !       
      etot = eband + ( etxc - etxcc ) + ewld + ehart + deband + demet + descf
      ! for hybrid calculations, add the current estimate of exchange energy
      ! (it will subtracted later if exx_is_active to be replaced with a better estimate)
@@ -811,7 +820,13 @@ SUBROUTINE electrons_scf ( printout, exxen )
      !
      ! calculate the xdm energy contribution with converged density
      if (lxdm .and. conv_elec) then
-        exdm = energy_xdm()
+        !^
+          IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'rhoz_updw' )    !^...PROVISIONAL...
+        !^
+        exdm = energy_xdm()  
+        !^
+          IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'updw_rhoz' )    !^...
+        !^
         etot = etot + exdm
         hwf_energy = hwf_energy + exdm
      end if
@@ -843,7 +858,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
      CALL print_energies ( printout )
      !
      IF ( conv_elec ) THEN
-        !
+        !         
         ! ... if system is charged add a Makov-Payne correction to the energy
         ! ... (not in case of hybrid functionals: it is added at the end)
         !
@@ -851,7 +866,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
         !
         ! ... print out ESM potentials if desired
         !
-        IF ( do_comp_esm ) CALL esm_printpot( rho%of_g )
+        IF ( do_comp_esm ) CALL esm_printpot( rho%of_g(:,1) ) 
         !
         WRITE( stdout, 9110 ) iter
         !
@@ -860,6 +875,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
         GO TO 10
         !
      END IF
+     
      !
      ! ... uncomment the following line if you wish to monitor the evolution
      ! ... of the force calculation during self-consistency
@@ -893,6 +909,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   END IF
   !
   IF ( output_drho /= ' ' ) CALL remove_atomic_rho()
+  !
   call destroy_scf_type ( rhoin )
   CALL stop_clock( 'electrons' )
   !
@@ -927,7 +944,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
           !
           DO ir = 1, dfftp%nnr
              !
-             mag = rho%of_r(ir,1) - rho%of_r(ir,2)
+             mag = rho%of_r(ir,2)
              !
              magtot = magtot + mag
              absmag = absmag + ABS( mag )
@@ -980,6 +997,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
        !
      END SUBROUTINE compute_magnetization
      !
+     !
      !-----------------------------------------------------------------------
      FUNCTION delta_e()
        !-----------------------------------------------------------------------
@@ -990,8 +1008,20 @@ SUBROUTINE electrons_scf ( printout, exxen )
        USE funct,  ONLY : dft_is_meta
        IMPLICIT NONE
        REAL(DP) :: delta_e, delta_e_hub
+       INTEGER  :: ir
        !
-       delta_e = - SUM( rho%of_r(:,:)*v%of_r(:,:) )
+       delta_e = 0._dp
+       IF ( nspin==2 ) THEN
+          !
+          DO ir = 1,dfftp%nnr
+            delta_e = delta_e - ( rho%of_r(ir,1) + rho%of_r(ir,2) ) * v%of_r(ir,1) &  ! up
+                              - ( rho%of_r(ir,1) - rho%of_r(ir,2) ) * v%of_r(ir,2)    ! down
+          ENDDO 
+          delta_e = 0.5_dp*delta_e
+          !
+       ELSE
+          delta_e = - SUM( rho%of_r(:,:)*v%of_r(:,:) )
+       ENDIF
        !
        IF ( dft_is_meta() ) &
           delta_e = delta_e - SUM( rho%kin_r(:,:)*v%kin_r(:,:) )
@@ -1031,8 +1061,24 @@ SUBROUTINE electrons_scf ( printout, exxen )
        USE funct,  ONLY : dft_is_meta
        IMPLICIT NONE
        REAL(DP) :: delta_escf, delta_escf_hub
+       REAL(DP) :: rho_dif(2)
+       INTEGER  :: ir
        !
-       delta_escf = - SUM( ( rhoin%of_r(:,:)-rho%of_r(:,:) )*v%of_r(:,:) )
+       delta_escf=0._dp
+       IF ( nspin==2 ) THEN
+          !
+          DO ir=1, dfftp%nnr
+             !
+             rho_dif = rhoin%of_r(ir,:) - rho%of_r(ir,:)
+             !
+             delta_escf = delta_escf - ( rho_dif(1) + rho_dif(2) ) * v%of_r(ir,1) &  ! up
+                                     - ( rho_dif(1) - rho_dif(2) ) * v%of_r(ir,2)    ! down
+          ENDDO
+          delta_escf = 0.5_dp*delta_escf
+          !
+       ELSE
+         delta_escf = - SUM( ( rhoin%of_r(:,:)-rho%of_r(:,:) )*v%of_r(:,:) )
+       ENDIF
        !
        IF ( dft_is_meta() ) &
           delta_escf = delta_escf - &
@@ -1062,7 +1108,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
      !
      !-----------------------------------------------------------------------
      FUNCTION calc_pol ( ) RESULT ( en_el )
-       !-----------------------------------------------------------------------
+       !---------------------------------------------------------------------
        !
        USE kinds,     ONLY : DP
        USE constants, ONLY : pi

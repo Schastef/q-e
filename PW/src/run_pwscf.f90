@@ -383,7 +383,9 @@ SUBROUTINE reset_starting_magnetization ( )
   !
   IF ( (noncolin .AND. domag) .OR. nspin==2) THEN
      ALLOCATE ( r_loc(nat), m_loc(nspin-1,nat) )
+     !
      CALL get_locals(r_loc,m_loc,rho%of_r)
+     !
   ELSE
      RETURN
   END IF

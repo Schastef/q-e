@@ -16,21 +16,20 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   ! ... Hartree potential is computed in reciprocal space.
   !
   USE kinds,            ONLY : DP
-  USE lsda_mod,         ONLY : nspin
   USE fft_base,         ONLY : dfftp
   USE gvect,            ONLY : ngm
   USE noncollin_module, ONLY : noncolin, nspin_lsda
   USE ions_base,        ONLY : nat, tau
   USE ldaU,             ONLY : lda_plus_U 
   USE funct,            ONLY : dft_is_meta, get_meta
-  USE scf,              ONLY : scf_type, rhoz_or_updw
+  USE scf,              ONLY : scf_type
   USE cell_base,        ONLY : alat
   USE control_flags,    ONLY : ts_vdw
   USE tsvdw_module,     ONLY : tsvdw_calculate, UtsvdW
   !
   IMPLICIT NONE
   !
-  TYPE(scf_type), INTENT(INOUT) :: rho  ! the valence charge
+  TYPE(scf_type), INTENT(IN) :: rho  ! the valence charge
   TYPE(scf_type), INTENT(INOUT) :: v ! the scf (Hxc) potential 
   !!!!!!!!!!!!!!!!! NB: NOTE that in F90 derived data type must be INOUT and 
   !!!!!!!!!!!!!!!!! not just OUT because otherwise their allocatable or pointer
@@ -52,28 +51,15 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !
   CALL start_clock( 'v_of_rho' )
   !
-  IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'rhoz_updw' )      !^  ->...PROVISIONAL...
-  !
   ! ... calculate exchange-correlation potential
   !
-  IF (dft_is_meta() .and. (get_meta() /= 4)) then
-     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v%of_r, v%kin_r )
-  ELSE
+  !
+  if (dft_is_meta() .and. (get_meta() /= 4)) then
+     call v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v%of_r, v%kin_r )
+  else
      CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, v%of_r )
-  ENDIF
+  endif
   !
-  ! ... add Tkatchenko-Scheffler potential (factor 2: Ha -> Ry)
-  !
-  IF (ts_vdw) THEN
-     CALL tsvdw_calculate(tau*alat,rho%of_r)
-     DO is = 1, nspin_lsda
-        DO ir=1,dfftp%nnr
-           v%of_r(ir,is)=v%of_r(ir,is)+2.0d0*UtsvdW(ir)
-        END DO
-     END DO
-  END IF
-  !
-  IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'updw_rhoz' )       !^...
   !
   ! ... add a magnetic field  (if any)
   !
@@ -85,19 +71,30 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !
   ! ... LDA+U: build up Hubbard potential 
   !
-  IF (lda_plus_u) then
-     IF (noncolin) then
-        CALL v_hubbard_nc(rho%ns_nc,v%ns_nc,eth)
-     ELSE
-        CALL v_hubbard(rho%ns,v%ns,eth)
-     ENDIF
-  ENDIF
+  if (lda_plus_u) then
+     if(noncolin) then
+        call v_hubbard_nc(rho%ns_nc,v%ns_nc,eth)
+     else
+        call v_hubbard(rho%ns,v%ns,eth)
+     endif
+  endif
   !
   ! ... add an electric field
   ! 
   DO is = 1, nspin_lsda
-     CALL add_efield(v%of_r(1,is), etotefield, rho%of_r(:,1), .false. )
+     CALL add_efield(v%of_r(1,is), etotefield, rho%of_r, .false. )
   END DO
+  !
+  ! ... add Tkatchenko-Scheffler potential (factor 2: Ha -> Ry)
+  ! 
+  IF (ts_vdw) THEN
+     CALL tsvdw_calculate(tau*alat,rho%of_r)
+     DO is = 1, nspin_lsda
+        DO ir=1,dfftp%nnr
+           v%of_r(ir,is)=v%of_r(ir,is)+2.0d0*UtsvdW(ir)
+        END DO
+     END DO
+  END IF
   !
   CALL stop_clock( 'v_of_rho' )
   !
@@ -334,6 +331,207 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !
 END SUBROUTINE v_xc_meta
 !
+! SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
+!   !----------------------------------------------------------------------------
+!   !
+!   ! ... Exchange-Correlation potential Vxc(r) from n(r)
+!   !
+!   USE kinds,            ONLY : DP
+!   USE constants,        ONLY : e2, eps8
+!   USE io_global,        ONLY : stdout
+!   USE fft_base,         ONLY : dfftp
+!   USE gvect,            ONLY : ngm
+!   USE lsda_mod,         ONLY : nspin
+!   USE cell_base,        ONLY : omega
+!   USE spin_orb,         ONLY : domag
+!   USE funct,            ONLY : xc, xc_spin, nlc, dft_is_nonlocc
+!   USE scf,              ONLY : scf_type
+!   USE mp_bands,         ONLY : intra_bgrp_comm
+!   USE mp,               ONLY : mp_sum
+! 
+!   !
+!   IMPLICIT NONE
+!   !
+!   TYPE (scf_type), INTENT(IN) :: rho
+!   REAL(DP), INTENT(IN) :: rho_core(dfftp%nnr)
+!     ! the core charge
+!   COMPLEX(DP), INTENT(IN) :: rhog_core(ngm)
+!     ! input: the core charge in reciprocal space
+!   REAL(DP), INTENT(OUT) :: v(dfftp%nnr,nspin), vtxc, etxc
+!     ! V_xc potential
+!     ! integral V_xc * rho
+!     ! E_xc energy
+!   !
+!   ! ... local variables
+!   !
+!   REAL(DP) :: rhox, arhox, zeta, amag, vs, ex, ec, vx(2), vc(2), rhoneg(2)
+!     ! the total charge in each point
+!     ! the absolute value of the charge
+!     ! the absolute value of the charge
+!     ! local exchange energy
+!     ! local correlation energy
+!     ! local exchange potential
+!     ! local correlation potential
+!   INTEGER :: ir, ipol
+!     ! counter on mesh points
+!     ! counter on nspin
+!   !
+!   REAL(DP), PARAMETER :: vanishing_charge = 1.D-10, &
+!                          vanishing_mag    = 1.D-20
+!   !
+!   !
+!   CALL start_clock( 'v_xc' )
+!   !
+!   etxc   = 0.D0
+!   vtxc   = 0.D0
+!   v(:,:) = 0.D0
+!   rhoneg = 0.D0
+!   !
+!   IF ( nspin == 1 .OR. ( nspin == 4 .AND. .NOT. domag ) ) THEN
+!      !
+!      ! ... spin-unpolarized case
+!      !
+! !$omp parallel do private( rhox, arhox, ex, ec, vx, vc ), &
+! !$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)
+!      DO ir = 1, dfftp%nnr
+!         !
+!         rhox = rho%of_r(ir,1) + rho_core(ir)
+!         !
+!         arhox = ABS( rhox )
+!         !
+!         IF ( arhox > vanishing_charge ) THEN
+!            !
+!            CALL xc( arhox, ex, ec, vx(1), vc(1) )
+!            !
+!            v(ir,1) = e2*( vx(1) + vc(1) )
+!            !
+!            etxc = etxc + e2*( ex + ec ) * rhox
+!            !
+!            vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
+!            !
+!         ENDIF
+!         !
+!         IF ( rho%of_r(ir,1) < 0.D0 ) rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+!         !
+!      END DO
+! !$omp end parallel do
+!      !
+!   ELSE IF ( nspin == 2 ) THEN
+!      !
+!      ! ... spin-polarized case
+!      !
+! !$omp parallel do private( rhox, arhox, zeta, ex, ec, vx, vc ), &
+! !$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)
+!      DO ir = 1, dfftp%nnr
+!         !
+!         rhox = rho%of_r(ir,1) + rho%of_r(ir,2) + rho_core(ir)
+!         !
+!         arhox = ABS( rhox )
+!         !
+!         IF ( arhox > vanishing_charge ) THEN
+!            !
+!            zeta = ( rho%of_r(ir,1) - rho%of_r(ir,2) ) / arhox
+!            !
+!            IF ( ABS( zeta ) > 1.D0 ) zeta = SIGN( 1.D0, zeta )
+!            !
+!            IF ( rho%of_r(ir,1) < 0.D0 ) rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+!            IF ( rho%of_r(ir,2) < 0.D0 ) rhoneg(2) = rhoneg(2) - rho%of_r(ir,2)
+!            !
+!            CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
+!            !
+!            v(ir,:) = e2*( vx(:) + vc(:) )
+!            !
+!            etxc = etxc + e2*( ex + ec ) * rhox
+!            !
+!            vtxc = vtxc + ( v(ir,1)*rho%of_r(ir,1) + v(ir,2)*rho%of_r(ir,2) )
+!            !
+!         END IF
+!         !
+!      END DO
+! !$omp end parallel do
+!      !
+!   ELSE IF ( nspin == 4 ) THEN
+!      !
+!      ! ... noncolinear case
+!      !
+!      DO ir = 1,dfftp%nnr
+!         !
+!         amag = SQRT( rho%of_r(ir,2)**2 + rho%of_r(ir,3)**2 + rho%of_r(ir,4)**2 )
+!         !
+!         rhox = rho%of_r(ir,1) + rho_core(ir)
+!         !
+!         IF ( rho%of_r(ir,1) < 0.D0 )  rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+!         !
+!         arhox = ABS( rhox )
+!         !
+!         IF ( arhox > vanishing_charge ) THEN
+!            !
+!            zeta = amag / arhox
+!            !
+!            IF ( ABS( zeta ) > 1.D0 ) THEN
+!               !
+!               rhoneg(2) = rhoneg(2) + 1.D0 / omega
+!               !
+!               zeta = SIGN( 1.D0, zeta )
+!               !
+!            END IF
+!            !
+!            CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
+!            !
+!            vs = 0.5D0*( vx(1) + vc(1) - vx(2) - vc(2) )
+!            !
+!            v(ir,1) = e2*( 0.5D0*( vx(1) + vc(1) + vx(2) + vc(2 ) ) )
+!            !
+!            IF ( amag > vanishing_mag ) THEN
+!               !
+!               DO ipol = 2, 4
+!                  !
+!                  v(ir,ipol) = e2 * vs * rho%of_r(ir,ipol) / amag
+!                  !
+!                  vtxc = vtxc + v(ir,ipol) * rho%of_r(ir,ipol)
+!                  !
+!               END DO
+!               !
+!            END IF
+!            !
+!            etxc = etxc + e2*( ex + ec ) * rhox
+!            vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
+!            !
+!         END IF
+!         !
+!      END DO
+!      !
+!   END IF
+!   !
+!   CALL mp_sum(  rhoneg , intra_bgrp_comm )
+!   !
+!   rhoneg(:) = rhoneg(:) * omega / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+!   !
+!   IF ( rhoneg(1) > eps8 .OR. rhoneg(2) > eps8 ) &
+!      WRITE( stdout,'(/,5X,"negative rho (up, down): ",2ES10.3)') rhoneg
+!   !
+!   ! ... energy terms, local-density contribution
+!   !
+!   vtxc = omega * vtxc / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+!   etxc = omega * etxc / ( dfftp%nr1*dfftp%nr2*dfftp%nr3 )
+!   !
+!   ! ... add gradient corrections (if any)
+!   !
+!   CALL gradcorr( rho%of_r, rho%of_g, rho_core, rhog_core, etxc, vtxc, v )
+!   !
+!   ! ... add non local corrections (if any)
+!   !
+!   IF ( dft_is_nonlocc() ) CALL nlc( rho%of_r, rho_core, nspin, etxc, vtxc, v )
+!   !
+!   CALL mp_sum(  vtxc , intra_bgrp_comm )
+!   CALL mp_sum(  etxc , intra_bgrp_comm )
+!   !
+!   CALL stop_clock( 'v_xc' )
+!   !
+!   RETURN
+!   !
+! END SUBROUTINE v_xc
+
 SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !----------------------------------------------------------------------------
   !
@@ -378,6 +576,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   INTEGER :: ir, ipol
     ! counter on mesh points
     ! counter on nspin
+  INTEGER, DIMENSION(3) :: noif
+  REAL(DP), DIMENSION(3) :: noif_r
+    ! index factors used to avoid nspin cases
   !
   REAL(DP), PARAMETER :: vanishing_charge = 1.D-10, &
                          vanishing_mag    = 1.D-20
@@ -390,121 +591,64 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   v(:,:) = 0.D0
   rhoneg = 0.D0
   !
-  IF ( nspin == 1 .OR. ( nspin == 4 .AND. .NOT. domag ) ) THEN
+  noif(1) = MIN( nspin, 2 )    !^ 1 if nspin=1, 2 otherwise 
+  noif(2) = MOD( nspin/2, 2 )  !^ 1  "   "  =2, 0    "
+  noif(3) = nspin/4            !^ 1  "   "  =4, 0    "
+  noif_r  = REAL( noif, dp )
+  !
+!$omp parallel do private( rhox, arhox, zeta, ex, ec, vs, vx, vc ), &
+!$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)     
+  DO ir = 1, dfftp%nnr
      !
-     ! ... spin-unpolarized case
+     rhox = rho%of_r(ir,1) + rho_core(ir)
      !
-!$omp parallel do private( rhox, arhox, ex, ec, vx, vc ), &
-!$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)
-     DO ir = 1, dfftp%nnr
+     arhox = ABS( rhox )
+     !
+     DO ipol = 1, noif(2)+1
+        IF ( rho%of_r(ir,ipol) < 0.D0 )  rhoneg(ipol) = rhoneg(ipol) - rho%of_r(ir,ipol)
+     ENDDO
+     !
+     IF ( arhox > vanishing_charge ) THEN
         !
-        rhox = rho%of_r(ir,1) + rho_core(ir)
+        ! equal to rho_up-rho_dw for collinear case, unused if nspin=0
+        amag = SUM( rho%of_r(ir,2:nspin)**(nspin/2) )**(2/nspin)
         !
-        arhox = ABS( rhox )
+        zeta = amag / arhox
         !
-        IF ( arhox > vanishing_charge ) THEN
+        IF ( ABS( zeta ) > 1.D0 .and. MOD( nspin, 2 )==0 ) THEN
            !
+           rhoneg(2) = rhoneg(2) + noif_r(3) / omega
+           !
+           zeta = SIGN( 1.D0, zeta )
+           !
+        END IF
+        !
+        IF ( MOD(nspin,2)==0 ) THEN                             !^ join xc() and xc_spin() ?? 
+           CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
+        ELSE
            CALL xc( arhox, ex, ec, vx(1), vc(1) )
-           !
-           v(ir,1) = e2*( vx(1) + vc(1) )
-           !
-           etxc = etxc + e2*( ex + ec ) * rhox
-           !
-           vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
-           !
         ENDIF
         !
-        IF ( rho%of_r(ir,1) < 0.D0 ) rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
+           vs = 0.5D0*( vx(1) + vc(1) - vx( noif(1) ) - vc( noif(1) ) )
         !
-     END DO
-!$omp end parallel do
-     !
-  ELSE IF ( nspin == 2 ) THEN
-     !
-     ! ... spin-polarized case
-     !
-!$omp parallel do private( rhox, arhox, zeta, ex, ec, vx, vc ), &
-!$omp             reduction(+:etxc,vtxc), reduction(-:rhoneg)
-     DO ir = 1, dfftp%nnr
+           v(ir,1) = e2*( 0.5D0*( vx( noif(1)-noif(3) ) + vc( noif(1)-noif(3) ) + vx( noif(1)) + vc(noif(1) ) ) )
         !
-        rhox = rho%of_r(ir,1) + rho%of_r(ir,2) + rho_core(ir)
-        !
-        arhox = ABS( rhox )
-        !
-        IF ( arhox > vanishing_charge ) THEN
+        IF ( amag > vanishing_mag ) THEN
            !
-           zeta = ( rho%of_r(ir,1) - rho%of_r(ir,2) ) / arhox
+           v(ir,2:nspin) = e2 * vs * (noif_r(2) + (1._dp-noif_r(2)) * rho%of_r(ir,2:nspin) / amag)
            !
-           IF ( ABS( zeta ) > 1.D0 ) zeta = SIGN( 1.D0, zeta )
-           !
-           IF ( rho%of_r(ir,1) < 0.D0 ) rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
-           IF ( rho%of_r(ir,2) < 0.D0 ) rhoneg(2) = rhoneg(2) - rho%of_r(ir,2)
-           !
-           CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
-           !
-           v(ir,:) = e2*( vx(:) + vc(:) )
-           !
-           etxc = etxc + e2*( ex + ec ) * rhox
-           !
-           vtxc = vtxc + ( v(ir,1)*rho%of_r(ir,1) + v(ir,2)*rho%of_r(ir,2) )
+           vtxc = vtxc + SUM( v(ir,2:nspin) * rho%of_r(ir,2:nspin) )
            !
         END IF
         !
-     END DO
-!$omp end parallel do
-     !
-  ELSE IF ( nspin == 4 ) THEN
-     !
-     ! ... noncolinear case
-     !
-     DO ir = 1,dfftp%nnr
+        etxc = etxc + e2*( ex + ec ) * rhox
+        vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
         !
-        amag = SQRT( rho%of_r(ir,2)**2 + rho%of_r(ir,3)**2 + rho%of_r(ir,4)**2 )
+     END IF
         !
-        rhox = rho%of_r(ir,1) + rho_core(ir)
-        !
-        IF ( rho%of_r(ir,1) < 0.D0 )  rhoneg(1) = rhoneg(1) - rho%of_r(ir,1)
-        !
-        arhox = ABS( rhox )
-        !
-        IF ( arhox > vanishing_charge ) THEN
-           !
-           zeta = amag / arhox
-           !
-           IF ( ABS( zeta ) > 1.D0 ) THEN
-              !
-              rhoneg(2) = rhoneg(2) + 1.D0 / omega
-              !
-              zeta = SIGN( 1.D0, zeta )
-              !
-           END IF
-           !
-           CALL xc_spin( arhox, zeta, ex, ec, vx(1), vx(2), vc(1), vc(2) )
-           !
-           vs = 0.5D0*( vx(1) + vc(1) - vx(2) - vc(2) )
-           !
-           v(ir,1) = e2*( 0.5D0*( vx(1) + vc(1) + vx(2) + vc(2 ) ) )
-           !
-           IF ( amag > vanishing_mag ) THEN
-              !
-              DO ipol = 2, 4
-                 !
-                 v(ir,ipol) = e2 * vs * rho%of_r(ir,ipol) / amag
-                 !
-                 vtxc = vtxc + v(ir,ipol) * rho%of_r(ir,ipol)
-                 !
-              END DO
-              !
-           END IF
-           !
-           etxc = etxc + e2*( ex + ec ) * rhox
-           vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
-           !
-        END IF
-        !
-     END DO
-     !
-  END IF
+  END DO
+!$omp end parallel do     
+  !
   !
   CALL mp_sum(  rhoneg , intra_bgrp_comm )
   !
@@ -577,6 +721,8 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      !
      charge = omega*REAL( rhog(1,1) )
      !
+     IF ( nspin == 2 ) charge = charge + omega*REAL( rhog(1,2) )
+     !
   END IF
   !
   CALL mp_sum(  charge , intra_bgrp_comm )
@@ -595,7 +741,7 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      aux1(:,:) = 0.D0
      !
      IF (do_cutoff_2D) THEN  !TS
-        CALL cutoff_hartree(rhog(:,1), aux1, ehart)
+        CALL cutoff_hartree(rhog, aux1, ehart)
      ELSE
 !$omp parallel do private( fac, rgtot_re, rgtot_im ), reduction(+:ehart)
         DO ig = gstart, ngm
@@ -604,6 +750,13 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
            !
            rgtot_re = REAL(  rhog(ig,1) )
            rgtot_im = AIMAG( rhog(ig,1) )
+           !
+           IF ( nspin == 2 ) THEN
+              !
+              rgtot_re = rgtot_re + REAL(  rhog(ig,2) )
+              rgtot_im = rgtot_im + AIMAG( rhog(ig,2) )
+              !
+           END IF
            !
            ehart = ehart + ( rgtot_re**2 + rgtot_im**2 ) * fac
            !
@@ -633,6 +786,7 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      if (do_comp_mt) then
         ALLOCATE( vaux( ngm ), rgtot(ngm) )
         rgtot(:) = rhog(:,1)
+        if (nspin==2) rgtot(:) = rgtot(:) + rhog(:,2)
         CALL wg_corr_h (omega, ngm, rgtot, vaux, eh_corr)
         aux1(1,1:ngm) = aux1(1,1:ngm) + REAL( vaux(1:ngm))
         aux1(2,1:ngm) = aux1(2,1:ngm) + AIMAG(vaux(1:ngm))

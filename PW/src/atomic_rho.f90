@@ -48,13 +48,14 @@ SUBROUTINE atomic_rho_g (rhocg, nspina)
   !
   REAL(DP) :: rhoneg, rhoima, rhoscale, gx
   REAL(DP), ALLOCATABLE :: rhocgnt (:), aux (:)
+  REAL(DP) :: angular(nspina)
   INTEGER :: ir, is, ig, igl, nt, ndm
   !
   ! allocate work space 
   !
   ndm = MAXVAL ( msh(1:ntyp) )
   ALLOCATE (aux(ndm))    
-  ALLOCATE (rhocgnt( ngl))    
+  ALLOCATE (rhocgnt( ngl))
   rhocg(:,:) = (0.0_dp,0.0_dp)
 
   DO nt = 1, ntyp
@@ -91,44 +92,26 @@ SUBROUTINE atomic_rho_g (rhocg, nspina)
         rhoscale = 1.0_dp
      ENDIF
      !
-     IF (nspina == 1) THEN
-        DO ig = 1, ngm
-           rhocg(ig,1) = rhocg(ig,1) + &
-                         strf(ig,nt) * rhoscale * rhocgnt(igtongl(ig)) / omega
+     rhocg(:,1) = rhocg(:,1) + &
+                strf(:,nt) * rhoscale * rhocgnt(igtongl(:)) / omega
+     !
+     IF ( nspina >= 2 ) THEN
+        !
+        angular(1) = 1._dp
+        IF ( nspina == 4 ) THEN
+           angular(1) = sin(angle1(nt))*cos(angle2(nt))
+           angular(2) = sin(angle1(nt))*sin(angle2(nt))
+           angular(3) = cos(angle1(nt))
+        ENDIF
+        !
+        DO is = 2, nspina
+           rhocg(:,is) =  rhocg(:,is) + &
+                            starting_magnetization(nt) * angular(is-1) * &
+                            strf(:,nt) * rhoscale * rhocgnt(igtongl(:)) / omega
         ENDDO
-     ELSE IF (nspina == 2) THEN
-        DO ig = 1, ngm
-           rhocg(ig,1) = rhocg(ig,1) + &
-                         0.5_dp * ( 1.0_dp + starting_magnetization(nt) ) * &
-                         strf(ig,nt) * rhoscale * rhocgnt(igtongl(ig)) / omega
-           rhocg(ig,2) = rhocg(ig,2) + &
-                         0.5d0 * ( 1.0_dp - starting_magnetization(nt) ) * &
-                         strf(ig,nt) * rhoscale * rhocgnt(igtongl(ig)) / omega
-        ENDDO
-     ELSE
-!
-!    Noncolinear case
-!
-        DO ig = 1,ngm
-           rhocg(ig,1) = rhocg(ig,1) + &
-                strf(ig,nt)*rhoscale*rhocgnt(igtongl(ig))/omega
-
-           ! Now, the rotated value for the magnetization
-
-           rhocg(ig,2) = rhocg(ig,2) + &
-                starting_magnetization(nt)* &
-                sin(angle1(nt))*cos(angle2(nt))* &
-                strf(ig,nt)*rhoscale*rhocgnt(igtongl(ig))/omega
-           rhocg(ig,3) = rhocg(ig,3) + &
-                starting_magnetization(nt)* &
-                sin(angle1(nt))*sin(angle2(nt))* &
-                strf(ig,nt)*rhoscale*rhocgnt(igtongl(ig))/omega
-           rhocg(ig,4) = rhocg(ig,4) + &
-                starting_magnetization(nt)* &
-                cos(angle1(nt))* &
-                strf(ig,nt)*rhoscale*rhocgnt(igtongl(ig))/omega
-        END DO
+        !
      ENDIF
+     !
   ENDDO
 
   DEALLOCATE (rhocgnt)
@@ -197,16 +180,16 @@ SUBROUTINE atomic_rho (rhoa, nspina)
         WRITE( stdout,'(5x,"Check: imaginary charge or magnetization=",&
           & f12.6," (component ",i1,") set to zero")') rhoima, is
      END IF
-     IF ( (is == 1) .OR. lsda ) THEN
+     IF ( (is == 1) ) THEN !^.OR. lsda ) THEN       !^mettere check up e dw per lsda?
         !
         IF ( (rhoneg < -1.0d-4) ) THEN
-           IF ( lsda ) THEN 
-              WRITE( stdout,'(5x,"Check: negative starting charge=", &
-                   &"(component",i1,"):",f12.6)') is, rhoneg
-           ELSE
+           !IF ( lsda ) THEN 
+           !   WRITE( stdout,'(5x,"Check: negative starting charge=", &
+           !        &"(component",i1,"):",f12.6)') is, rhoneg
+           !ELSE
               WRITE( stdout,'(5x,"Check: negative starting charge=", &
           &          f12.6)') rhoneg
-           END IF
+           !END IF
         END IF
      END IF
      !

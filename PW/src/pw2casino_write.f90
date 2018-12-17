@@ -19,7 +19,7 @@ SUBROUTINE write_casino_wfn(gather,blip,multiplicity,binwrite,single_precision_b
    USE gvect, ONLY: ngm, gstart, g, gg, gcutm, igtongl
    USE klist , ONLY: nks, nelec, xk, wk, degauss, ngauss, igk_k, ngk
    USE lsda_mod, ONLY: lsda, nspin
-   USE scf, ONLY: rho, rho_core, rhog_core, v
+   USE scf, ONLY: rho, rho_core, rhog_core, v  !, rhoz_or_updw   !^
    USE ldaU, ONLY : eth
    USE vlocal, ONLY: vloc, strf
    USE wvfct, ONLY: npwx, nbnd, wg, et
@@ -448,8 +448,14 @@ CONTAINS
       !
       ! compute hartree and xc contribution
       !
+      !^               
+        !IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'updw_rhoz' )    !^...VIA              
+      !^  
       CALL v_of_rho( rho, rho_core, rhog_core, &
                      ehart, etxc, vtxc, eth, etotefield, charge, v )
+      !^               
+        !IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'rhoz_updw' )    !^...VIA              
+      !^  
       !
       ! compute exact exchange contribution (if present)
       !

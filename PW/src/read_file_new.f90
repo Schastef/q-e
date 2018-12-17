@@ -116,7 +116,7 @@ SUBROUTINE read_xml_file ( )
   USE fft_base,             ONLY : dfftp, dffts
   USE gvecs,                ONLY : ngms, gcutms 
   USE spin_orb,             ONLY : lspinorb, domag
-  USE scf,                  ONLY : rho, rho_core, rhog_core, v
+  USE scf,                  ONLY : rho, rho_core, rhog_core, v, rhoz_or_updw    !^
   USE wavefunctions, ONLY : psic
   USE vlocal,               ONLY : strf
   USE io_files,             ONLY : tmp_dir, prefix, iunpun, nwordwfc, iunwfc
@@ -313,6 +313,9 @@ SUBROUTINE read_xml_file ( )
   ! ... read the charge density
   !
   CALL read_scf( rho, nspin, gamma_only )
+  !^               
+     IF (nspin == 2) CALL rhoz_or_updw( rho, 'only_g', 'rhoz_updw' )    !^...VIA              
+  !^ 
   ! FIXME: for compatibility. rho was previously read and written in real space
   ! FIXME: now it is in G space - to be removed together with old format
   CALL rho_g2r ( dfftp, rho%of_g, rho%of_r )
@@ -342,8 +345,14 @@ SUBROUTINE read_xml_file ( )
   !
   ! ... recalculate the potential
   !
+  !^               
+    IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'updw_rhoz' )    !^...VIA              
+  !^  
   CALL v_of_rho( rho, rho_core, rhog_core, &
                  ehart, etxc, vtxc, eth, etotefield, charge, v )
+  !^               
+    IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'rhoz_updw' )    !^...VIA              
+  !^  
   !
   !
   CALL qes_reset_output ( output_obj )  
