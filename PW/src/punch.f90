@@ -20,7 +20,7 @@ SUBROUTINE punch( what )
   USE io_files,             ONLY : xmlpun_schema, psfile, pseudo_dir
   USE wrappers,             ONLY : f_copy
   USE spin_orb,             ONLY : lforcet
-  USE scf,                  ONLY : rho
+  USE scf,                  ONLY : rho, rhoz_or_updw  !^
   USE lsda_mod,             ONLY : nspin
   USE ions_base,            ONLY : nsp
   USE funct,                ONLY : get_inlc
@@ -67,7 +67,13 @@ SUBROUTINE punch( what )
   ! ... (except in the 'force theorem' calculation of MAE where the
   ! ...  charge density differs from the one read from disk)
   !
+  !^
+    !IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'updw_rhoz' )                !^...VIA
+  !^
   IF ( lscf .OR. lforcet ) CALL write_scf( rho, nspin )
+  !^
+    !IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'rhoz_updw' )                !^...VIA
+  !^
   !
   IF (TRIM(what) == 'all') THEN 
      !

@@ -112,6 +112,7 @@ SUBROUTINE add_efield(vpoten,etotefield,rho,iflag)
   ! dipole correction is active 
   !
      CALL compute_el_dip(emaxpos, eopreg, edir, rho, el_dipole)
+     !
      CALL compute_ion_dip(emaxpos, eopreg, edir, ion_dipole)
     
      tot_dipole  = -el_dipole + ion_dipole

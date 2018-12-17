@@ -16,20 +16,21 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   ! ... Hartree potential is computed in reciprocal space.
   !
   USE kinds,            ONLY : DP
+  USE lsda_mod,         ONLY : nspin
   USE fft_base,         ONLY : dfftp
   USE gvect,            ONLY : ngm
   USE noncollin_module, ONLY : noncolin, nspin_lsda
   USE ions_base,        ONLY : nat, tau
   USE ldaU,             ONLY : lda_plus_U 
   USE funct,            ONLY : dft_is_meta, get_meta
-  USE scf,              ONLY : scf_type
+  USE scf,              ONLY : scf_type, rhoz_or_updw
   USE cell_base,        ONLY : alat
   USE control_flags,    ONLY : ts_vdw
   USE tsvdw_module,     ONLY : tsvdw_calculate, UtsvdW
   !
   IMPLICIT NONE
   !
-  TYPE(scf_type), INTENT(IN) :: rho  ! the valence charge
+  TYPE(scf_type), INTENT(INOUT) :: rho  ! the valence charge
   TYPE(scf_type), INTENT(INOUT) :: v ! the scf (Hxc) potential 
   !!!!!!!!!!!!!!!!! NB: NOTE that in F90 derived data type must be INOUT and 
   !!!!!!!!!!!!!!!!! not just OUT because otherwise their allocatable or pointer
@@ -51,15 +52,28 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !
   CALL start_clock( 'v_of_rho' )
   !
+  IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'rhoz_updw' )      !^  ->...PROVISIONAL...
+  !
   ! ... calculate exchange-correlation potential
   !
-  !
-  if (dft_is_meta() .and. (get_meta() /= 4)) then
-     call v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v%of_r, v%kin_r )
-  else
+  IF (dft_is_meta() .and. (get_meta() /= 4)) then
+     CALL v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v%of_r, v%kin_r )
+  ELSE
      CALL v_xc( rho, rho_core, rhog_core, etxc, vtxc, v%of_r )
-  endif
+  ENDIF
   !
+  ! ... add Tkatchenko-Scheffler potential (factor 2: Ha -> Ry)
+  !
+  IF (ts_vdw) THEN
+     CALL tsvdw_calculate(tau*alat,rho%of_r)
+     DO is = 1, nspin_lsda
+        DO ir=1,dfftp%nnr
+           v%of_r(ir,is)=v%of_r(ir,is)+2.0d0*UtsvdW(ir)
+        END DO
+     END DO
+  END IF
+  !
+  IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', 'updw_rhoz' )       !^...
   !
   ! ... add a magnetic field  (if any)
   !
@@ -71,30 +85,19 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   !
   ! ... LDA+U: build up Hubbard potential 
   !
-  if (lda_plus_u) then
-     if(noncolin) then
-        call v_hubbard_nc(rho%ns_nc,v%ns_nc,eth)
-     else
-        call v_hubbard(rho%ns,v%ns,eth)
-     endif
-  endif
+  IF (lda_plus_u) then
+     IF (noncolin) then
+        CALL v_hubbard_nc(rho%ns_nc,v%ns_nc,eth)
+     ELSE
+        CALL v_hubbard(rho%ns,v%ns,eth)
+     ENDIF
+  ENDIF
   !
   ! ... add an electric field
   ! 
   DO is = 1, nspin_lsda
-     CALL add_efield(v%of_r(1,is), etotefield, rho%of_r, .false. )
+     CALL add_efield(v%of_r(1,is), etotefield, rho%of_r(:,1), .false. )
   END DO
-  !
-  ! ... add Tkatchenko-Scheffler potential (factor 2: Ha -> Ry)
-  ! 
-  IF (ts_vdw) THEN
-     CALL tsvdw_calculate(tau*alat,rho%of_r)
-     DO is = 1, nspin_lsda
-        DO ir=1,dfftp%nnr
-           v%of_r(ir,is)=v%of_r(ir,is)+2.0d0*UtsvdW(ir)
-        END DO
-     END DO
-  END IF
   !
   CALL stop_clock( 'v_of_rho' )
   !
@@ -574,8 +577,6 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      !
      charge = omega*REAL( rhog(1,1) )
      !
-     IF ( nspin == 2 ) charge = charge + omega*REAL( rhog(1,2) )
-     !
   END IF
   !
   CALL mp_sum(  charge , intra_bgrp_comm )
@@ -594,7 +595,7 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      aux1(:,:) = 0.D0
      !
      IF (do_cutoff_2D) THEN  !TS
-        CALL cutoff_hartree(rhog, aux1, ehart)
+        CALL cutoff_hartree(rhog(:,1), aux1, ehart)
      ELSE
 !$omp parallel do private( fac, rgtot_re, rgtot_im ), reduction(+:ehart)
         DO ig = gstart, ngm
@@ -603,13 +604,6 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
            !
            rgtot_re = REAL(  rhog(ig,1) )
            rgtot_im = AIMAG( rhog(ig,1) )
-           !
-           IF ( nspin == 2 ) THEN
-              !
-              rgtot_re = rgtot_re + REAL(  rhog(ig,2) )
-              rgtot_im = rgtot_im + AIMAG( rhog(ig,2) )
-              !
-           END IF
            !
            ehart = ehart + ( rgtot_re**2 + rgtot_im**2 ) * fac
            !
@@ -639,7 +633,6 @@ SUBROUTINE v_h( rhog, ehart, charge, v )
      if (do_comp_mt) then
         ALLOCATE( vaux( ngm ), rgtot(ngm) )
         rgtot(:) = rhog(:,1)
-        if (nspin==2) rgtot(:) = rgtot(:) + rhog(:,2)
         CALL wg_corr_h (omega, ngm, rgtot, vaux, eh_corr)
         aux1(1,1:ngm) = aux1(1,1:ngm) + REAL( vaux(1:ngm))
         aux1(2,1:ngm) = aux1(2,1:ngm) + AIMAG(vaux(1:ngm))

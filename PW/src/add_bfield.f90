@@ -87,7 +87,7 @@ SUBROUTINE add_bfield (v,rho)
         END IF
      END DO ! na
 
-     if (noncolin) then
+     IF (noncolin) THEN
         DO ir = 1, dfftp%nnr
            if (pointlist(ir) .eq. 0 ) cycle
            fact = 2.D0*lambda*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
@@ -95,14 +95,14 @@ SUBROUTINE add_bfield (v,rho)
               v(ir,ipol+1) = v(ir,ipol+1) + fact*m2(ipol,pointlist(ir))
            END DO       ! ipol
         END DO      ! points
-     else
+     ELSE
         DO ir = 1, dfftp%nnr
            if (pointlist(ir) .eq. 0 ) cycle
            fact = 2.D0*lambda*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
            v(ir,1) = v(ir,1) + fact*m2(1,pointlist(ir))
            v(ir,2) = v(ir,2) - fact*m2(1,pointlist(ir))
         END DO      ! points
-     end if
+     END IF
      deallocate (m2, m_loc, r_loc)
 
      write (stdout,'(4x,a,F15.8)' ) " constraint energy (Ryd) = ", etcon
@@ -127,8 +127,8 @@ SUBROUTINE add_bfield (v,rho)
        ELSE
           fact = 2.D0 * lambda
           DO ipol = 1, 3
-             !^na,nt: index stuff
-             !^na = ipol+npol/3  ;  nt = ABS( ipol*na+npol*(na-1) )
+             !na,nt: index tricks
+             !na = ipol+npol/3  ;  nt = ABS( ipol*na+npol*(na-1) )
              bfield(ipol) = -fact * (m1(ipol)-mcons(ipol,1))
              DO ir = 1, dfftp%nnr
                 v(ir,ipol+1) = v(ir,ipol+1)-bfield(ipol)

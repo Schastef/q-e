@@ -87,7 +87,8 @@ SUBROUTINE potinit()
         ! ... lsda calculation, set noncolinear magnetization from angles
         !
         CALL read_rhog ( filename, root_bgrp, intra_bgrp_comm, &
-             ig_l2g, nspin, rho%of_g, gamma_only )
+             ig_l2g, nspin, rho%of_g, gamma_only ) 
+        !
         CALL nc_magnetization_from_lsda ( dfftp%ngm, nspin, rho%of_g )
      END IF
      !
@@ -117,8 +118,9 @@ SUBROUTINE potinit()
             FMT = '(/5X,"Initial potential from superposition of free atoms")' )
      !
      CALL atomic_rho_g( rho%of_g, nspin )
-
+     !
      ! ... in the lda+U case set the initial value of ns
+     !
      IF (lda_plus_u) THEN
         !
         IF (noncolin) THEN
@@ -156,7 +158,6 @@ SUBROUTINE potinit()
   charge = 0.D0
   IF ( gstart == 2 ) THEN
      charge = omega*REAL( rho%of_g(1,1) )
-     IF ( nspin == 2 ) charge = charge + omega*REAL( rho%of_g(1,2) )
   END IF
   CALL mp_sum(  charge , intra_bgrp_comm )
   !
@@ -169,13 +170,7 @@ SUBROUTINE potinit()
      ELSE 
         WRITE( stdout, '(/,5X,"Starting from uniform charge")')
         rho%of_g(:,1:nspin) = (0.0_dp,0.0_dp)
-        IF ( gstart == 2 ) THEN
-           IF ( nspin == 2 ) THEN
-              rho%of_g(1,1:nspin) = nelec / omega / nspin
-           ELSE
-              rho%of_g(1,1) = nelec / omega
-           END IF
-        END IF
+        IF ( gstart == 2 ) rho%of_g(1,1) = nelec / omega
      ENDIF
      !
   ELSE IF ( .NOT. lscf .AND. ABS( charge - nelec ) > (1.D-3 * charge ) ) THEN
@@ -212,6 +207,7 @@ SUBROUTINE potinit()
   !
   CALL v_of_rho( rho, rho_core, rhog_core, &
                  ehart, etxc, vtxc, eth, etotefield, charge, v )
+  !
   IF (okpaw) CALL PAW_potential(rho%bec, ddd_PAW, epaw)
   !
   ! ... define the total local potential (external+scf)
@@ -233,9 +229,9 @@ SUBROUTINE potinit()
      ENDIF
      !
   END IF
-  !
+  !  
   IF ( report /= 0 .AND. &
-       noncolin .AND. domag .AND. lscf ) CALL report_mag()
+       noncolin .AND. domag .AND. lscf ) CALL report_mag()    
   !
   CALL stop_clock('potinit')
   !

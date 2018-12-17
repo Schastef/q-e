@@ -53,7 +53,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
                              assign_scf_to_mix_type, assign_mix_to_scf_type, &
                              mix_type_AXPY, davcio_mix_type, rho_ddot, &
                              high_frequency_mixing, &
-                             mix_type_COPY, mix_type_SCAL
+                             mix_type_COPY, mix_type_SCAL,rhoz_or_updw
   USE io_global,     ONLY : stdout
 #if defined(__GFORTRAN_HACK)
   USE mix_save
@@ -77,7 +77,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   LOGICAL, INTENT(OUT) :: &
     conv          ! .true. if the convergence has been reached
 
-  type(scf_type), intent(in)    :: input_rhout
+  type(scf_type), intent(inout)    :: input_rhout
   type(scf_type), intent(inout) :: rhoin
   !
   ! ... Here the local variables
@@ -127,7 +127,7 @@ SUBROUTINE mix_rho( input_rhout, rhoin, alphamix, dr2, tr2_min, iter, n_iter,&
   !
   call assign_scf_to_mix_type(rhoin, rhoin_m)
   call assign_scf_to_mix_type(input_rhout, rhout_m)
-
+  !
   call mix_type_AXPY ( -1.d0, rhoin_m, rhout_m )
   !
   dr2 = rho_ddot( rhout_m, rhout_m, ngms )  !!!! this used to be ngm NOT ngms
@@ -337,30 +337,14 @@ SUBROUTINE approx_screening( drho )
   !
   type (mix_type), intent(INOUT) :: drho ! (in/out)
   !
-  REAL(DP) :: rrho, rmag, rs, agg0
+  REAL(DP) :: rs, agg0
   INTEGER  :: ig, is
   !
   rs = ( 3.D0 * omega / fpi / nelec )**( 1.D0 / 3.D0 )
   !
   agg0 = ( 12.D0 / pi )**( 2.D0 / 3.D0 ) / tpiba2 / rs
   !
-  IF ( nspin == 1 .OR. nspin == 4 ) THEN
-     !
-     drho%of_g(:ngm0,1) =  drho%of_g(:ngm0,1) * gg(:ngm0) / (gg(:ngm0)+agg0)
-     !
-  ELSE IF ( nspin == 2 ) THEN
-     !
-     DO ig = 1, ngm0
-        !
-        rrho = ( drho%of_g(ig,1) + drho%of_g(ig,2) ) * gg(ig) / (gg(ig)+agg0)
-        rmag = ( drho%of_g(ig,1) - drho%of_g(ig,2) )
-        !
-        drho%of_g(ig,1) =  0.5D0*( rrho + rmag )
-        drho%of_g(ig,2) =  0.5D0*( rrho - rmag )
-        !
-     END DO
-     !
-  END IF
+  drho%of_g(:ngm0,1) =  drho%of_g(:ngm0,1) * gg(:ngm0) / (gg(:ngm0)+agg0)
   !
   RETURN
   !
@@ -408,26 +392,8 @@ SUBROUTINE approx_screening2( drho, rhobest )
   REAL(DP), ALLOCATABLE :: &
     alpha(:)     ! alpha(dffts%nnr)
   !
-  COMPLEX(DP)         :: rrho, rmag
   INTEGER             :: ir, ig
   REAL(DP), PARAMETER :: one_third = 1.D0 / 3.D0
-  !
-  !
-  IF ( nspin == 2 ) THEN
-     !
-     !$omp parallel do private(rrho,rmag)
-     DO ig = 1, ngm0
-        !
-        rrho = drho%of_g(ig,1) + drho%of_g(ig,2)
-        rmag = drho%of_g(ig,1) - drho%of_g(ig,2)
-        !        
-        drho%of_g(ig,1) = rrho
-        drho%of_g(ig,2) = rmag
-        !
-     END DO
-     !$omp end parallel do
-     !
-  END IF
   !
   target = 0.D0
   !
@@ -620,28 +586,12 @@ SUBROUTINE approx_screening2( drho, rhobest )
      !
      IF ( dr2_best < target ) THEN
         !
-        !$omp parallel private(rrho,rmag)
+        !$omp parallel
            !$omp do
            DO ig = 1, ngm0
               drho%of_g(ig,1) = vbest(ig)
            ENDDO
            !$omp end do nowait
-           !
-           IF ( nspin == 2 ) THEN
-              !
-              !$omp do
-              DO ig = 1, ngm0
-                 !
-                 rrho = drho%of_g(ig,1)
-                 rmag = drho%of_g(ig,2)
-                 !
-                 drho%of_g(ig,1) = 0.5D0 * ( rrho + rmag )
-                 drho%of_g(ig,2) = 0.5D0 * ( rrho - rmag )
-                 !
-              END DO
-              !$omp end do nowait
-              !
-           END IF
         !$omp end parallel
         !
         DEALLOCATE( alpha, v, w, dv, vbest, wbest )

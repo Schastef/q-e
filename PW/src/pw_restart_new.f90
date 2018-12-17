@@ -843,7 +843,7 @@ MODULE pw_restart_new
       !
       USE control_flags,        ONLY : twfcollect
       USE io_rho_xml,           ONLY : read_scf
-      USE scf,                  ONLY : rho
+      USE scf,                  ONLY : rho, rhoz_or_updw  !^
       USE lsda_mod,             ONLY : nspin
       USE qes_types_module,     ONLY : input_type, output_type, &
                                        general_info_type, parallel_info_type    
@@ -1051,6 +1051,9 @@ MODULE pw_restart_new
          ! ... it also reads ns for ldaU and becsum for PAW
          !
          CALL read_scf( rho, nspin )
+         !^               
+          IF (nspin == 2) CALL rhoz_or_updw( rho, 'only_g', 'rhoz_updw' )    !^...VIA              
+         !^ 
          !
       END IF
       IF ( lef ) THEN

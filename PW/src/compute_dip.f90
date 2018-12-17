@@ -145,23 +145,22 @@ SUBROUTINE compute_el_dip(emaxpos, eopreg, edir, charge, e_dipole)
      idx = idx - dfftp%nr1x * j
      j   = j + j0
      i   = idx
-
+     !
      ! ... do not include points outside the physical range
-
+     !
 !     IF ( i >= dfftp%nr1 .OR. j >= dfftp%nr2 .OR. k >= dfftp%nr3 ) CYCLE
-
      !
      ! Define the argument for the saw function     
      !
      if (edir.eq.1) sawarg = DBLE(i)/DBLE(dfftp%nr1)
      if (edir.eq.2) sawarg = DBLE(j)/DBLE(dfftp%nr2)
      if (edir.eq.3) sawarg = DBLE(k)/DBLE(dfftp%nr3)
-
+     !
      rhoir = charge(ir)
      !
      e_dipole = e_dipole + rhoir * saw(emaxpos,eopreg, sawarg) &
                       * (alat/bmod) * (fpi/(dfftp%nr1*dfftp%nr2*dfftp%nr3))
-
+     !
   END DO
 
   CALL mp_sum(  e_dipole , intra_bgrp_comm )
