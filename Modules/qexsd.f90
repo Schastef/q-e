@@ -656,12 +656,14 @@ CONTAINS
          !
       END SUBROUTINE qexsd_init_hybrid 
          !
-      SUBROUTINE qexsd_init_dftU (obj, is_hubbard, psd, U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc ) 
+      SUBROUTINE qexsd_init_dftU (obj, is_hubbard, lda_plus_u_kind, U_projection_type, &
+                                  psd, U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc )
          IMPLICIT NONE 
          TYPE(dftU_type),INTENT(INOUT)  :: obj 
-         INTEGER, INTENT(IN)            :: H_lmax
+         INTEGER,INTENT(IN)             :: lda_plus_u_kind
+         CHARACTER(LEN=*),INTENT(IN)    :: U_projection_type
          REAL(DP),OPTIONAL,INTENT(IN)   :: U(:), J0(:), alpha(:), beta(:), J(:,:)
-         REAL(DP),OPTIONAL,INTENT(IN)   :: Hub_ns(:,:,:,:), Hub_ns_nc(:,:,:,:) 
+         REAL(DP),OPTIONAL,INTENT(IN)   :: starting_ns(:,:,:), Hub_ns(:,:,:,:), Hub_ns_nc(:,:,:,:)
          CHARACTER(len=*),INTENT(IN)    :: psd(:) 
          LOGICAL,INTENT(IN)             :: is_hubbard(:) 
          !
@@ -677,10 +679,10 @@ CONTAINS
          IF (PRESENT(U))   CALL init_hubbard_commons(U, U_, label, "Hubbard_U") 
          IF (PRESENT(J0))  CALL init_hubbard_commons(J0, J0_, label, "Hubbard_J0" ) 
          IF (PRESENT(alpha)) CALL init_hubbard_commons(alpha, alpha_,label, "Hubbard_alpha") 
-         IF (PRESENT(Hubbard_beta))  CALL init_hubbard_commons(beta, beta_, label, "Hubbard_beta") 
-         IF (PRESENT(Hubbard_J))     CALL init_hubbard_J (J, J_, label, "Hubbard_J" )  
+         IF (PRESENT(beta))  CALL init_hubbard_commons(beta, beta_, label, "Hubbard_beta")
+         IF (PRESENT(J))     CALL init_hubbard_J (J, J_, label, "Hubbard_J" )
          IF (PRESENT(starting_ns)) CALL init_starting_ns(starting_ns_ , label)
-         IF (PRESENT(Hubbard_ns))  CALL init_Hubbard_ns(Hubbard_ns_ , label)  
+         IF (PRESENT(Hub_ns))  CALL init_Hubbard_ns(Hubbard_ns_ , label)
          !
          CALL qes_init (obj, "dftU", lda_plus_u_kind, U_, J0_, alpha_, beta_, J_, starting_ns_, Hubbard_ns_, &
                            U_projection_type)
@@ -828,7 +830,7 @@ CONTAINS
                   DO is = 1, nspin
                      ind = ind+1
                      CALL qes_init(objs(ind),"Hubbard_ns", SPECIE = TRIM(species(ityp(i))), SPIN = is, &
-                        ORDER = 'F', INDEX = ind, LABEL = TRIM(labs(ityp(i))), Hubbard_NS = Hubbard_ns(:,:,is,i))
+                        ORDER = 'F', INDEX = ind, LABEL = TRIM(labs(ityp(i))), Hubbard_NS = Hub_ns(:,:,is,i))
                   END DO
                END DO
                RETURN 
@@ -867,7 +869,7 @@ CONTAINS
             dft_is_vdw = PRESENT(non_local_term) 
             IF ( .NOT. (dft_is_vdW .OR. empirical_vdw)) RETURN
             IF ( PRESENT (london_c6)) CALL init_londonc6(london_c6, london_c6_obj) 
-            CALL qes_init (obj, "vdW", VDW_CORR = vdw_corr, NON_LOCAL_TERM = non_local_term, FUNCTIONAL = functional,&
+            CALL qes_init (obj, "vdW", VDW_CORR = vdw_corr, NON_LOCAL_TERM = non_local_term,&
                            TOTAL_ENERGY_TERM = vdw_term, LONDON_S6  = london_s6,& 
                             TS_VDW_ECONV_THR = ts_thr,  TS_VDW_ISOLATED  = ts_isol, LONDON_RCUT = london_rcut, &
                             XDM_A1 = xdm_a1, XDM_A2  = xdm_a2, LONDON_C6 = london_c6_obj)
@@ -881,12 +883,14 @@ CONTAINS
           CONTAINS
           ! 
           SUBROUTINE init_londonc6(c6data, c6objs)
+            USE constants, ONLY: eps16
             IMPLICIT NONE 
             REAL(DP),INTENT(IN)  :: c6data(:)
             TYPE(HubbardCommon_type),ALLOCATABLE,INTENT(INOUT) :: c6objs(:) 
             ! 
-            INTEGER :: ndim_london_c6, isp, ind  
+            INTEGER :: ndim_london_c6, isp, ind, nsp
             !
+            nsp = SIZE(c6data)
             ndim_london_c6 = COUNT ( c6data .GT. -eps16) 
             IF ( ndim_london_c6 .GT. 0 ) THEN 
                ALLOCATE (c6objs(ndim_london_c6))
