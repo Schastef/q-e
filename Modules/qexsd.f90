@@ -89,7 +89,7 @@ MODULE qexsd_module
             qexsd_init_magnetization, qexsd_init_band_structure, & 
             qexsd_init_total_energy, qexsd_init_forces, qexsd_init_stress, &
             qexsd_init_dipole_info, qexsd_init_outputElectricField,   &
-            qexsd_init_outputPBC, qexsd_init_gate_info  
+            qexsd_init_outputPBC, qexsd_init_gate_info, qexsd_init_hybrid, qexsd_init_dftU
   !
   PUBLIC :: qexsd_step_addstep, qexsd_set_status, qexsd_reset_steps    
   ! 
@@ -630,7 +630,7 @@ CONTAINS
        TYPE(vdW_type),OPTIONAL,INTENT(IN)      :: vdW_
        TYPE(dftU_type),OPTIONAL,INTENT(IN)     :: dftU_ 
        ! 
-       CALL qes_init(obj, 'dft', functional, hybrid_, dftU_, vdW) 
+       CALL qes_init(obj, 'dft', functional, hybrid_, dftU_, vdW_)
     END SUBROUTINE qexsd_init_dft 
 
     !------------------------------------------------------------------------
@@ -656,26 +656,32 @@ CONTAINS
          !
       END SUBROUTINE qexsd_init_hybrid 
          !
-      SUBROUTINE qexsd_init_dftU (obj, is_hubbard, lda_plus_u_kind, U_projection_type, &
-                                  psd, U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc )
+      SUBROUTINE qexsd_init_dftU (obj, nsp, psd, species, ityp, is_hubbard, lda_plus_u_kind, U_projection_type, &
+                                   U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc )
          IMPLICIT NONE 
          TYPE(dftU_type),INTENT(INOUT)  :: obj 
+         INTEGER,INTENT(IN)             :: nsp
+         CHARACTER(LEN=*),INTENT(IN)    :: psd(nsp)
+         CHARACTER(LEN=*),INTENT(IN)    :: species(nsp)
+         INTEGER,INTENT(IN)             :: ityp(:)
+         LOGICAL,INTENT(IN)             :: is_hubbard(nsp)
          INTEGER,INTENT(IN)             :: lda_plus_u_kind
          CHARACTER(LEN=*),INTENT(IN)    :: U_projection_type
          REAL(DP),OPTIONAL,INTENT(IN)   :: U(:), J0(:), alpha(:), beta(:), J(:,:)
-         REAL(DP),OPTIONAL,INTENT(IN)   :: starting_ns(:,:,:), Hub_ns(:,:,:,:), Hub_ns_nc(:,:,:,:)
-         CHARACTER(len=*),INTENT(IN)    :: psd(:) 
-         LOGICAL,INTENT(IN)             :: is_hubbard(:) 
+         REAL(DP),OPTIONAL,INTENT(IN)   :: starting_ns(:,:,:), Hub_ns(:,:,:,:)
+         COMPLEX(DP),OPTIONAL,INTENT(IN) :: Hub_ns_nc(:,:,:,:)
          !
          CHARACTER(10), ALLOCATABLE            :: label(:)
          TYPE(HubbardCommon_type),ALLOCATABLE  :: U_(:), J0_(:), alpha_(:), beta_(:) 
          TYPE(HubbardJ_type),ALLOCATABLE       :: J_(:) 
          TYPE(starting_ns_type),ALLOCATABLE    :: starting_ns_(:) 
-         TYPE(Hubbard_ns_type),ALLOCATABLE     :: Hubbard_ns_(:) 
-         INTEGER                               :: nsp 
+         TYPE(Hubbard_ns_type),ALLOCATABLE     :: Hubbard_ns_(:)
+         LOGICAL                               :: noncolin_ =.FALSE.
          !
-         nsp = SIZE(is_hubbard) 
          CALL set_labels ()
+         noncolin_ = PRESENT( Hub_ns_nc)
+         IF ( (.NOT. noncolin_) .AND. (.NOT. PRESENT(Hub_ns))) &
+               CALL errore("qexsd_init_dftU:",  "ns and ns_nc are both nonpresent",1)
          IF (PRESENT(U))   CALL init_hubbard_commons(U, U_, label, "Hubbard_U") 
          IF (PRESENT(J0))  CALL init_hubbard_commons(J0, J0_, label, "Hubbard_J0" ) 
          IF (PRESENT(alpha)) CALL init_hubbard_commons(alpha, alpha_,label, "Hubbard_alpha") 
@@ -713,11 +719,12 @@ CONTAINS
             END DO
          END SUBROUTINE set_labels 
 
-         SUBROUTINE init_hubbard_commons(dati, objs)
+         SUBROUTINE init_hubbard_commons(dati, objs, labs, tag)
             IMPLICIT NONE
             REAL(DP)   :: dati(:) 
             TYPE(HubbardCommon_type),ALLOCATABLE  :: objs(:)
             CHARACTER(LEN=*) :: labs(:), tag
+            INTEGER          :: i
             !
 
             ALLOCATE (objs(nsp)) 
@@ -731,6 +738,7 @@ CONTAINS
             REAL(DP)  :: dati(:,:)
             TYPE(HubbardJ_type),ALLOCATABLE :: objs(:)
             CHARACTER(LEN=*)  :: labs(:), tag 
+            INTEGER           :: i
             !
             IF ( SIZE(dati,2) .LE. 0 ) RETURN 
             ALLOCATE (objs(nsp)) 
@@ -765,12 +773,13 @@ CONTAINS
             IMPLICIT NONE
             TYPE(starting_ns_type), ALLOCATABLE   :: objs(:)
             CHARACTER(len=*)                      :: labs(nsp)
-            INTEGER                               :: i, ispin, ind, llmax   
+            INTEGER                               :: i, is, ind, llmax, nspin
             !  
             IF ( .NOT. PRESENT(starting_ns)) RETURN
             
-            IF (noncolin) THEN 
+            IF (noncolin_) THEN
                llmax = SIZE(Hub_ns_nc,1) 
+               nspin = SIZE(Hub_ns_nc,3)
                ALLOCATE(objs(nsp))
                DO i = 1, nsp
                   IF (.NOT. ANY(starting_ns(1:2*llmax,1,i)>0.d0)) CYCLE
@@ -781,9 +790,10 @@ CONTAINS
                RETURN 
             ELSE
                llmax = SIZE (Hub_ns, 1) 
-               ALLOCATE(objs(min(nspin,nspinx)*nsp))
+               nspin = SIZE(Hub_ns, 3)
+               ALLOCATE(objs(nspin*nsp))
                ind = 0 
-               DO ispin = 1, MIN(nspin, nspinx)
+               DO is = 1, nspin
                   DO i = 1, nsp 
                      IF (.NOT. ANY (starting_ns(1:llmax,is,i) > 0.d0)) CYCLE 
                      CALL qes_init(objs(ind), "starting_ns", TRIM(species(i)), TRIM (labs(i)), & 
@@ -800,22 +810,23 @@ CONTAINS
             CHARACTER(LEN=*)                    :: labs(nsp) 
             !
             REAL(DP), ALLOCATABLE               :: Hubb_occ_aux(:,:) 
-            INTEGER                             :: i, is,ind, ldim, m1, m2, llmax  
+            INTEGER                             :: i, is,ind, ldim, m1, m2, llmax, nat, nspin
             ! 
             ! 
-            IF (PRESENT(Hubbard_ns_nc )) THEN 
+            IF (PRESENT(Hub_ns_nc )) THEN
                llmax = SIZE ( Hub_ns_nc, 1) 
+               nat = size(Hub_ns_nc,4)
                ALLOCATE (objs(nat))
-               ldim = SIZE(Hubbard_ns_nc,1) 
+               ldim = SIZE(Hub_ns_nc,1)
                ALLOCATE (Hubb_occ_aux(2*ldim, 2*ldim)) 
                DO i =1, nat 
                   Hubb_occ_aux = 0._DP 
                   DO m2 = 1, ldim
                      DO m1 =1, ldim 
-                        Hubb_occ_aux(m1,m2)=SQRT(DCONJG(Hubbard_ns_nc(m1,m2,1,i))*Hubbard_ns_nc(m1,m2,1,i))
-                        Hubb_occ_aux(m1,ldim+m2)=SQRT(DCONJG(Hubbard_ns_nc(m1,m2,2,i))*Hubbard_ns_nc(m1,m2,2,i))
-                        Hubb_occ_aux(ldim+m1,m2)=SQRT(DCONJG(Hubbard_ns_nc(m1,m2,3,i))*Hubbard_ns_nc(m1,m2,3,i))
-                        Hubb_occ_aux(ldim+m1,ldim+m2)=SQRT(DCONJG(Hubbard_ns_nc(m1,m2,4,i))*Hubbard_ns_nc(m1,m2,4,i))
+                        Hubb_occ_aux(m1,m2)=SQRT(DCONJG(Hub_ns_nc(m1,m2,1,i))*Hub_ns_nc(m1,m2,1,i))
+                        Hubb_occ_aux(m1,ldim+m2)=SQRT(DCONJG(Hub_ns_nc(m1,m2,2,i))*Hub_ns_nc(m1,m2,2,i))
+                        Hubb_occ_aux(ldim+m1,m2)=SQRT(DCONJG(Hub_ns_nc(m1,m2,3,i))*Hub_ns_nc(m1,m2,3,i))
+                        Hubb_occ_aux(ldim+m1,ldim+m2)=SQRT(DCONJG(Hub_ns_nc(m1,m2,4,i))*Hub_ns_nc(m1,m2,4,i))
                      END DO
                   END DO
                   CALL qes_init (objs(i), TAGNAME = "Hubbard_ns_mod", SPECIE = TRIM(species(ityp(i))), &
@@ -824,6 +835,8 @@ CONTAINS
                RETURN 
             ELSE 
                llmax = SIZE ( Hub_ns,1) 
+               nat = size(Hub_ns,4)
+               nspin = size(Hub_ns,3)
                ALLOCATE( objs(nspin*nat) )
                ind = 0 
                DO i = 1, nat
@@ -853,12 +866,13 @@ CONTAINS
          ! 
          !
          SUBROUTINE qexsd_init_vdw(obj, non_local_term, vdw_corr, vdw_term, ts_thr, ts_isol,& 
-                                   london_s6, london_c6, london_rcut, xdm_a1, xdm_a2 )
+                                   london_s6, london_c6, london_rcut, species, xdm_a1, xdm_a2 )
             IMPLICIT NONE 
             TYPE(vdW_type)  :: obj 
-            CHARACTER(LEN=*),INTENT(IN)            :: non_local_term, vdw_corr 
+            CHARACTER(LEN=*),OPTIONAL,INTENT(IN)            :: non_local_term, vdw_corr
             REAL(DP),OPTIONAL,INTENT(IN)           :: vdw_term, london_c6(:), london_rcut,  xdm_a1, xdm_a2, ts_thr,&
                                                       london_s6
+            CHARACTER(LEN=*),OPTIONAL              :: species(:)
             LOGICAL,OPTIONAL,INTENT(IN)            :: ts_isol 
             !
             LOGICAL         :: empirical_vdw = .FALSE. , dft_is_vdw  = .FALSE. 
@@ -882,7 +896,7 @@ CONTAINS
           DEALLOCATE ( london_c6_obj)
           CONTAINS
           ! 
-          SUBROUTINE init_londonc6(c6data, c6objs)
+          SUBROUTINE init_londonc6(c6data, c6objs )
             USE constants, ONLY: eps16
             IMPLICIT NONE 
             REAL(DP),INTENT(IN)  :: c6data(:)
@@ -890,6 +904,7 @@ CONTAINS
             ! 
             INTEGER :: ndim_london_c6, isp, ind, nsp
             !
+            IF (.NOT. PRESENT ( species)) RETURN
             nsp = SIZE(c6data)
             ndim_london_c6 = COUNT ( c6data .GT. -eps16) 
             IF ( ndim_london_c6 .GT. 0 ) THEN 
@@ -897,7 +912,7 @@ CONTAINS
                DO isp = 1, nsp
                   IF ( c6data(isp) .GT. -eps16 ) THEN
                      ind  = ind + 1  
-                     CALL init(c6objs(ind ), "london_c6", SPECIE = TRIM(species(isp)), HUBBARDCOMMON = c6data(isp))
+                     CALL qes_init(c6objs(ind ), "london_c6", SPECIE = TRIM(species(isp)), HUBBARDCOMMON = c6data(isp))
                   END IF 
                END DO                        
             END IF 
@@ -970,10 +985,15 @@ CONTAINS
     ndim_ks_energies=nks   
     !
     IF ( lsda ) THEN 
-       IF ( .NOT. (PRESENT(nbnd_up) .AND. PRESENT(nbnd_dw) ) ) &
-          CALL errore ("qexsd:qexsd_init_band_structure:" , "lsda is true but nbnd_up/ nbnd_dw are missing", 10) 
        ndim_ks_energies=ndim_ks_energies/2
-       nbnd_=nbnd_up+nbnd_dw
+       IF ( PRESENT(nbnd_up) .AND. PRESENT(nbnd_dw) ) THEN
+            nbnd_ = nbnd_up+nbnd_dw
+       ELSE IF ( PRESENT (nbnd) ) THEN
+            nbnd_ = 2*nbnd
+       ELSE
+            CALL errore ( "qexsd:qexsd_init_band_structure: ", &
+                          "in case of lsda nbnd_up+nbnd_dw or nbnd must be givens as arguments", 10)
+       END IF
     ELSE 
        IF (.NOT. PRESENT(nbnd) ) &
           CALL errore ("qexsd:qexsd_init_band_structure:", "lsda is false but needed nbnd argument is missing", 10)

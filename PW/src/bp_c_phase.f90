@@ -174,7 +174,7 @@ SUBROUTINE c_phase
    USE spin_orb,             ONLY : lspinorb
    USE mp_bands,             ONLY : intra_bgrp_comm, nproc_bgrp
    USE mp,                   ONLY : mp_sum
-   USE qes_libs_module,      ONLY : qes_reset_berryPhaseOutput
+   USE qes_libs_module,      ONLY : qes_reset
    USE qexsd_module,         ONLY : qexsd_init_berryPhaseOutput,  qexsd_bp_obj
 !  --- Avoid implicit definitions ---
    IMPLICIT NONE

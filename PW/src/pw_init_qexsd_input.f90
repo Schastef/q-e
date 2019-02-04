@@ -195,15 +195,18 @@
   !
   vdw_corr_ = vdw_corr
   IF ( london ) vdw_corr_ = 'grimme-d2'
-  CALL qexsd_init_dft (obj%dft, TRIM(dft_name), .FALSE., dft_is_hybrid, &
-       ip_nqx1, ip_nqx2, ip_nqx3, ip_ecutfock/e2, exx_fraction, &
-       screening_parameter, exxdiv_treatment, x_gamma_extrapolation, ip_ecutvcut/e2, &
-       dft_is_nonlocc, vdw_corr_, TRIM (get_nonlocc_name()), london_s6, &
-       london_c6, london_rcut, xdm_a1,xdm_a2, ts_vdw_econv_thr,ts_vdw_isolated,&
-       ip_lda_plus_U, ip_lda_plus_u_kind, 2*hubbard_lmax+1, ip_noncolin, &
-       ip_nspin, ntyp, ip_nat, atm, ip_ityp, ip_hubbard_u, ip_hubbard_j0,&
-       ip_hubbard_alpha,ip_hubbard_beta,ip_hubbard_j, starting_ns_eigenvalue,&
-       u_projection_type, is_hubbard,upf(1:ntyp)%psd )
+  CALL qexsd_init_dft(obj%dft, TRIM(dft_name), hybrid_, vdW_, dftU_)
+
+
+  !CALL qexsd_init_dft (obj%dft, TRIM(dft_name), .FALSE., dft_is_hybrid, &
+  !     ip_nqx1, ip_nqx2, ip_nqx3, ip_ecutfock/e2, exx_fraction, &
+  !     screening_parameter, exxdiv_treatment, x_gamma_extrapolation, ip_ecutvcut/e2, &
+  !     dft_is_nonlocc, vdw_corr_, TRIM (get_nonlocc_name()), london_s6, &
+  !     london_c6, london_rcut, xdm_a1,xdm_a2, ts_vdw_econv_thr,ts_vdw_isolated,&
+  !     ip_lda_plus_U, ip_lda_plus_u_kind, 2*hubbard_lmax+1, ip_noncolin, &
+  !     ip_nspin, ntyp, ip_nat, atm, ip_ityp, ip_hubbard_u, ip_hubbard_j0,&
+  !     ip_hubbard_alpha,ip_hubbard_beta,ip_hubbard_j, starting_ns_eigenvalue,&
+  !     u_projection_type, is_hubbard,upf(1:ntyp)%psd )
   !------------------------------------------------------------------------------------------------------------------------
   !                                                   SPIN ELEMENT
   !-------------------------------------------------------------------------------------------------------------------------

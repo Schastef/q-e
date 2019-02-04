@@ -80,7 +80,8 @@ MODULE pw_restart_new
       USE fft_base,             ONLY : dffts
       USE wvfct,                ONLY : npwx, et, wg, nbnd
       USE ener,                 ONLY : ef, ef_up, ef_dw, vtxc, etxc, ewld, etot, &
-                                       ehart, eband, demet 
+                                       ehart, eband, demet, edftd3, elondon, exdm
+      USE tsvdw_module,         ONLY : EtsvdW
       USE gvecw,                ONLY : ecutwfc
       USE fixed_occ,            ONLY : tfixed_occ, f_inp
       USE ldaU,                 ONLY : lda_plus_u, lda_plus_u_kind, U_projection, &
@@ -126,7 +127,8 @@ MODULE pw_restart_new
               qexsd_init_occupations, qexsd_init_smearing
       USE fcp_variables,        ONLY : lfcpopt, lfcpdyn, fcp_mu  
       USE io_files,             ONLY : pseudo_dir
-      USE control_flags,        ONLY : conv_elec, conv_ions 
+      USE control_flags,        ONLY : conv_elec, conv_ions
+      USE input_parameters,     ONLY :  ts_vdw_econv_thr, ts_vdw_isolated
       !
       IMPLICIT NONE
       !
@@ -141,7 +143,7 @@ MODULE pw_restart_new
       LOGICAL               :: lwfc, lrho, lxsd, occupations_are_fixed
       INTEGER                  :: iclass, isym, ielem
       CHARACTER(LEN=15)        :: symop_2_class(48)
-      LOGICAL                  :: opt_conv_ispresent
+      LOGICAL                  :: opt_conv_ispresent, dft_is_vdw, empirical_vdw
       INTEGER                  :: n_opt_steps, n_scf_steps_, h_band
       REAL(DP)                 :: h_energy
       TYPE(gateInfo_type),TARGET      :: gate_info_temp
@@ -149,6 +151,13 @@ MODULE pw_restart_new
       TYPE(dipoleOutput_type),TARGET  :: dipol_obj 
       TYPE(dipoleOutput_type),POINTER :: dipol_ptr  => NULL()
       TYPE(BerryPhaseOutput_type),  POINTER :: bp_obj_ptr => NULL()
+      TYPE(hybrid_type), POINTER            :: hybrid_obj => NULL()
+      TYPE(vdW_type), POINTER               :: vdw_obj => NULL()
+      TYPE(dftU_type), POINTER              :: dftU_obj => NULL()
+      REAL(DP), POINTER                     :: dispersion_energy_term => NULL()
+      REAL(DP), TARGET                      :: lumo_tmp, ef_targ
+      REAL(DP), POINTER                     :: lumo_energy => NULL(), ef_point => NULL()
+      REAL(DP), ALLOCATABLE                 :: ef_updw(:)
       !
       !
       !
@@ -321,71 +330,76 @@ MODULE pw_restart_new
          !
          IF (dft_is_hybrid() ) THEN 
             ALLOCATE ( hybrid_obj) 
-            CALL qexsd_init_hybrid(hybrid_obj, nq1 = nq1 , nq2 = nq2, nq3 =nq3, ecutfock = ecutfock/e2, &
-                                   exx_fraction = get_exx_fraction(), screening_parameter = get_screening_parameter(),&
-                                   exxdiv_treatment = exxdiv_treatment, x_gamma_extrapolation = x_gamma_extrapolation,&
-                                   ecutvcut = ecutvcut/e2 )
+            CALL qexsd_init_hybrid(hybrid_obj, DFT_IS_HYBRID = .TRUE., NQ1 = nq1 , NQ2 = nq2, NQ3 =nq3, ECUTFOCK = ecutfock/e2, &
+                                   EXX_FRACTION = get_exx_fraction(), SCREENING_PARAMETER = get_screening_parameter(),&
+                                   EXXDIV_TREATMENT = exxdiv_treatment, X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation,&
+                                   ECUTVCUT = ecutvcut/e2 )
          END IF 
 
-         empirical_vdw = (llondon .OR. ldft3 .OR. lxdm .OR. ts_vdw ) 
+         empirical_vdw = (llondon .OR. ldftd3 .OR. lxdm .OR. ts_vdw )
          dft_is_vdw = dft_is_nonlocc() 
          IF ( dft_is_vdw .OR. empirical_vdw ) THEN 
             ALLOCATE (vdw_obj)
-            IF (llondon ) THEN 
-               vdw_term = elondon/e2
-            ELSE IF ( lxdm ) THEN
-               vdw_term = exdm/e2 
-            ELSE IF ( ldftd3) THEN 
-               vdw_term = edftd3/e2
-            ELSE IF ( ts_vdw ) THEN 
-               vdw_term = 2._DP * EtsvdW/e2 
+            IF ( empirical_vdw) THEN
+                ALLOCATE ( dispersion_energy_term)
+                IF (llondon ) THEN
+                    dispersion_energy_term = elondon/e2
+                ELSE IF ( lxdm ) THEN
+                    dispersion_energy_term = exdm/e2
+                ELSE IF ( ldftd3) THEN
+                    dispersion_energy_term = edftd3/e2
+                ELSE IF ( ts_vdw ) THEN
+                    dispersion_energy_term = 2._DP * EtsvdW/e2
+                END IF
             END IF 
-            CALL qexsd_init_vdw(vdw_obj, get_nonlocc_name, vdw_corr, vdw_term, ts_vdw_econv_thr, ts_vdw_isolated,&  
-                                scal6, c6_i, lon_rcut, xdm_a1, xdm_a2 ) 
+            CALL qexsd_init_vdw(vdw_obj, get_nonlocc_name, vdw_corr, dispersion_energy_term, &
+                                ts_vdw_econv_thr, ts_vdw_isolated, scal6, c6_i, lon_rcut, xdm_a1, xdm_a2 )
          END IF 
          IF ( lda_plus_u) THEN 
             ALLOCATE (dftU_obj)  
-            CALL qexsd_init_dftU (dftU_obj, is_hubbard = is_hubbard, psd = psd , U = Hubbard_U,&
+            CALL qexsd_init_dftU (dftU_obj, NSP = nsp, SPECIES = atm(1:nsp), ITYP = ityp(1:nat),&
+                                  IS_HUBBARD = is_hubbard, PSD = upf(1:nsp)%psd, U = Hubbard_U, &
+                                  LDA_PLUS_U_KIND = lda_plus_u_kind, U_PROJECTION_TYPE = U_projection, &
                                   J0 = Hubbard_J0, alpha = Hubbard_alpha, beta = Hubbard_beta, J = Hubbard_J, &
-                                   starting_ns = starting_ns, Hub_ns = rho%ns, Hub_ns_nc = rho%ns_nc ) 
+                                   starting_ns = starting_ns_eigenvalue, Hub_ns = rho%ns, Hub_ns_nc = rho%ns_nc )
          END IF 
          dft_name = get_dft_short()
          inlc = get_inlc()
          !
-         IF (llondon .OR. ldftd3 .OR. exdm .OR. ts_vdw ) THEN
+         IF (llondon .OR. ldftd3 .OR. lxdm .OR. ts_vdw ) THEN
             ALLOCATE (dispersion_energy_term) 
             IF (llondon)  dispersion_energy_term = elondon/e2 
             IF (ldftd3)   dispersion_energy_term = edftd3/e2 
             IF (lxdm)     dispersion_energy_term = exdm/e2 
             IF (ts_vdw)   dispersion_energy_term = 2._DP* Etsvdw/e2 
          END IF 
-         CALL qexsd_init_dft  (output%dft, dft_name, dft_is_hybrid(),&
+         CALL qexsd_init_dft  (output%dft, dft_name, hybrid_obj, vdw_obj, dftU_obj)
             ! variables for hybrid functionals 
-         nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), get_screening_parameter(), &
-         exxdiv_treatment, x_gamma_extrapolation, ecutvcut,        &
-            ! variables for vdW corrections 
-         dft_is_vdW = dft_is_nonlocc(), vdw_corr=TRIM(vdw_corr), DISPERSION_ENERGY_TERM = dispersion_energy_term,&
-         NONLOCAL_TERM = TRIM(get_nonlocc_name()), london_s6 scal6, london_c6 = c6_i, &
-         london_rcut = lon_rcut, xdm_a1 = xdm_a1, xdm_a2 = xdm_a2 ,ts_vdw_econv_thr, ts_vdw_isolated, non_local_term, &
-         dft_is_lda_plus_U, lda_plus_U_kind, llmax, noncolin, nspin, nsp, &
-         nat, species, ityp, Hubbard_U, Hubbard_J0, Hubbard_alpha,  &
-         Hubbard_beta, Hubbard_J, starting_ns, U_projection_type, is_hubbard, &
-         psd,  Hubbard_ns, Hubbard_ns_nc )
+         !nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), get_screening_parameter(), &
+         !exxdiv_treatment, x_gamma_extrapolation, ecutvcut,        &
+         !   ! variables for vdW corrections
+         !dft_is_vdW = dft_is_nonlocc(), vdw_corr=TRIM(vdw_corr), DISPERSION_ENERGY_TERM = dispersion_energy_term,&
+         !NONLOCAL_TERM = TRIM(get_nonlocc_name()), london_s6 scal6, london_c6 = c6_i, &
+         !london_rcut = lon_rcut, xdm_a1 = xdm_a1, xdm_a2 = xdm_a2 ,ts_vdw_econv_thr, ts_vdw_isolated, non_local_term, &
+         !dft_is_lda_plus_U, lda_plus_U_kind, llmax, noncolin, nspin, nsp, &
+         !nat, species, ityp, Hubbard_U, Hubbard_J0, Hubbard_alpha,  &
+         !Hubbard_beta, Hubbard_J, starting_ns, U_projection_type, is_hubbard, &
+         !psd,  Hubbard_ns, Hubbard_ns_nc )
 
          
          
          
-              (output%dft, dft_name, .TRUE., dft_is_hybrid(), &
-              nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), &
-              get_screening_parameter(), exxdiv_treatment, &
-              x_gamma_extrapolation, ecutvcut/e2, &
-              dft_is_nonlocc(), TRIM(vdw_corr), TRIM ( get_nonlocc_name()), &
-              scal6, c6_i, lon_rcut, xdm_a1, xdm_a2, vdw_econv_thr, &
-              vdw_isolated,&
-              lda_plus_u, lda_plus_u_kind, 2*Hubbard_lmax+1, noncolin, nspin, &
-              nsp, nat, atm, ityp, Hubbard_U, Hubbard_J0,  &
-              Hubbard_alpha, Hubbard_beta, Hubbard_J, starting_ns_eigenvalue, &
-              U_projection, is_hubbard, upf(1:nsp)%psd, rho%ns, rho%ns_nc )
+              !(output%dft, dft_name, .TRUE., dft_is_hybrid(), &
+              !nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), &
+              !get_screening_parameter(), exxdiv_treatment, &
+              !x_gamma_extrapolation, ecutvcut/e2, &
+              !dft_is_nonlocc(), TRIM(vdw_corr), TRIM ( get_nonlocc_name()), &
+              !scal6, c6_i, lon_rcut, xdm_a1, xdm_a2, vdw_econv_thr, &
+              !vdw_isolated,&
+              !lda_plus_u, lda_plus_u_kind, 2*Hubbard_lmax+1, noncolin, nspin, &
+              !nsp, nat, atm, ityp, Hubbard_U, Hubbard_J0,  &
+              !Hubbard_alpha, Hubbard_beta, Hubbard_J, starting_ns_eigenvalue, &
+              !U_projection, is_hubbard, upf(1:nsp)%psd, rho%ns, rho%ns_nc )
          !
 !-------------------------------------------------------------------------------
 ! ... PERIODIC BOUNDARY CONDITIONS 
@@ -413,16 +427,13 @@ MODULE pw_restart_new
          IF ( TRIM(what) == "init-config" ) GO TO 10
          !
          IF (TRIM(input_parameters_occupations) == 'fixed') THEN 
-            occupations_are_fixed = .TRUE. 
-            IF ( noncolin ) THEN 
-               h_band = NINT ( nelec ) 
-            ELSE 
-               h_band = NINT ( nelec/2.d0 ) 
+            occupations_are_fixed = .TRUE.
+            CALL get_homo_lumo( h_energy, lumo_tmp)
+            IF ( lumo_tmp .LT. 1.d+6 ) THEN
+                lumo_energy => lumo_tmp
             END IF
-            h_energy =MAXVAL (et(h_band, 1:nkstot))
          ELSE 
             occupations_are_fixed = .FALSE. 
-            h_energy  = ef 
          END IF
          IF (nks_start == 0 .AND. nk1*nk2*nk3 > 0 ) THEN 
             CALL qexsd_init_k_points_ibz(qexsd_start_k_obj, "automatic", calculation, &
@@ -446,17 +457,23 @@ MODULE pw_restart_new
                CALL qexsd_init_smearing(qexsd_smear_obj, smearing, degauss)
             END IF  
             !  
-            CALL qexsd_init_band_structure(  output%band_structure,lsda,noncolin,lspinorb, nbnd, nbnd,      &
-                   nelec, natomwfc, occupations_are_fixed, h_energy,two_fermi_energies, [ef_up,ef_dw],      &
-                   et,wg,nkstot,xk,ngk_g,wk, STARTING_KPOINTS = qexsd_start_k_obj,                          &
-                   OCCUPATION_KIND = qexsd_occ_obj, WF_COLLECTED = wf_collect , SMEARING = qexsd_smear_obj )
-
+            IF ( two_fermi_energies ) THEN
+                ALLOCATE ( ef_updw (2) )
+                ef_updw = [ef_up, ef_dw]
+            ELSE
+                ef_targ = ef
+                ef_point => ef_targ
+            END IF
+            CALL qexsd_init_band_structure(  output%band_structure,lsda,noncolin,lspinorb, nelec, natomwfc, &
+                                 et, wg, nkstot, xk, ngk_g, wk, SMEARING = qexsd_smear_obj,  &
+                                 STARTING_KPOINTS = qexsd_start_k_obj, OCCUPATIONS_KIND = qexsd_occ_obj, &
+                                 WF_COLLECTED = .TRUE., NBND = nbnd, FERMI_ENERGY = ef_point, EF_UPDW = ef_updw )
             CALL qes_reset (qexsd_smear_obj)
          ELSE     
-            CALL  qexsd_init_band_structure(output%band_structure,lsda,noncolin,lspinorb, nbnd, nbnd, nelec,& 
-                                natomwfc, occupations_are_fixed, h_energy,two_fermi_energies, [ef_up,ef_dw],&
-                                et,wg,nkstot,xk,ngk_g,wk, STARTING_KPOINTS = qexsd_start_k_obj,             &
-                                OCCUPATION_KIND = qexsd_occ_obj, WF_COLLECTED = wf_collect )
+            CALL  qexsd_init_band_structure(output%band_structure,lsda, noncolin,lspinorb, nelec, natomwfc, &
+                                et, wg, nkstot, xk, ngk_g, wk, &
+                                STARTING_KPOINTS =  qexsd_start_k_obj, OCCUPATIONS_KIND = qexsd_occ_obj,&
+                                WF_COLLECTED = wf_collect, NBND = nbnd, HOMO = h_energy, LUMO = lumo_energy )
          END IF 
          CALL qes_reset (qexsd_start_k_obj)
          CALL qes_reset (qexsd_occ_obj)
@@ -908,6 +925,7 @@ MODULE pw_restart_new
     SUBROUTINE init_vars_from_schema( what, ierr, output_obj, par_info, gen_info, input_obj )
       !------------------------------------------------------------------------
       !
+      USE control_flags,        ONLY : twfcollect
       USE io_rho_xml,           ONLY : read_scf
       USE scf,                  ONLY : rho
       USE lsda_mod,             ONLY : nspin
@@ -973,6 +991,10 @@ MODULE pw_restart_new
       CASE( 'header' )
          !
          lheader = .TRUE.
+         !
+      CASE ( 'wf_collect' ) 
+         ! 
+         twfcollect = output_obj%band_structure%wf_collected 
          !
       CASE( 'dim' )
          !
@@ -1068,6 +1090,7 @@ MODULE pw_restart_new
       END IF
       !
       IF ( lpw ) THEN
+         twfcollect = output_obj%band_structure%wf_collected
          CALL readschema_planewaves( output_obj%basis_set) 
       END IF
       IF ( lions ) THEN
@@ -1094,6 +1117,8 @@ MODULE pw_restart_new
          CALL readschema_band_structure( output_obj%band_structure )
       END IF
       IF ( lwfc ) THEN
+         !
+         twfcollect = output_obj%band_structure%wf_collected
          IF (output_obj%band_structure%wf_collected)  CALL read_collected_to_evc(dirname ) 
       END IF
       IF ( lsymm ) THEN
@@ -1949,6 +1974,7 @@ MODULE pw_restart_new
     SUBROUTINE readschema_band_structure( band_struct_obj )
       !------------------------------------------------------------------------
       !
+      USE control_flags, ONLY : lkpoint_dir
       USE constants,     ONLY : e2
       USE basis,    ONLY : natomwfc
       USE lsda_mod, ONLY : lsda, isk
@@ -1961,6 +1987,8 @@ MODULE pw_restart_new
       TYPE ( band_structure_type)         :: band_struct_obj
       INTEGER                             :: ik, nbnd_, nbnd_up_, nbnd_dw_
       ! 
+      lkpoint_dir = .FALSE.
+      !! left here to write bw compatible xml
       lsda = band_struct_obj%lsda
       nbnd  = band_struct_obj%nbnd 
       nkstot = band_struct_obj%nks 
@@ -2065,7 +2093,7 @@ MODULE pw_restart_new
       INTEGER, ALLOCATABLE :: igk_l2g(:), igk_l2g_kdip(:)
       LOGICAL              :: opnd, ionode_k
       REAL(DP)             :: scalef, xk_(3), b1(3), b2(3), b3(3)
-
+ 
       !
       iks = global_kpoint_index (nkstot, 1)
       ike = iks + nks - 1
