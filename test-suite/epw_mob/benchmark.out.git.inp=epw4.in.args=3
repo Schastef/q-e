@@ -1,0 +1,271 @@
+                                                                                      
+                                       ``:oss/                                        
+                           `.+s+.     .+ys--yh+     `./ss+.                           
+                          -sh//yy+`   +yy   +yy    -+h+-oyy                           
+                          -yh- .oyy/.-sh.   .syo-.:sy-  /yh                           
+                 `.-.`    `yh+   -oyyyo.     `/syys:    oys      `.`                  
+               `/+ssys+-` `sh+      `                   oys`   .:osyo`                
+               -yh- ./syyooyo`                          .sys+/oyo--yh/                
+               `yy+    .-:-.                             `-/+/:`  -sh-                
+                /yh.                                              oys                 
+          ``..---hho---------`   .---------..`      `.-----.`    -hd+---.             
+       `./osmNMMMMMMMMMMMMMMMs. +NNMMMMMMMMNNmh+.   yNMMMMMNm-  oNMMMMMNmo++:`        
+       +sy--/sdMMMhyyyyyyyNMMh- .oyNMMmyyyyyhNMMm+` -yMMMdyyo:` .oyyNMMNhs+syy`       
+       -yy/   /MMM+.`-+/``mMMy-   `mMMh:`````.dMMN:` `MMMy-`-dhhy```mMMy:``+hs        
+        -yy+` /MMMo:-mMM+`-oo/.    mMMh:     `dMMN/`  dMMm:`dMMMMy..MMMo-.+yo`        
+         .sys`/MMMMNNMMMs-         mMMmyooooymMMNo:   oMMM/sMMMMMM++MMN//oh:          
+          `sh+/MMMhyyMMMs- `-`     mMMMMMMMMMNmy+-`   -MMMhMMMsmMMmdMMd/yy+           
+    `-/+++oyy-/MMM+.`/hh/.`mNm:`   mMMd+/////:-.`      NMMMMMd/:NMMMMMy:/yyo/:.`      
+   +os+//:-..-oMMMo:--:::-/MMMo. .-mMMd+---`           hMMMMN+. oMMMMMo. `-+osyso:`   
+   syo     `mNMMMMMNNNNNNNNMMMo.oNNMMMMMNNNN:`         +MMMMs:`  dMMMN/`     ``:syo   
+   /yh`     :syyyyyyyyyyyyyyyy+.`+syyyyyyyyo:`         .oyys:`   .oyys:`        +yh   
+   -yh-        ````````````````    `````````              ``        ``          oys   
+   -+h/------------------------::::::::://////++++++++++++++++++++++///////::::/yd:   
+   shdddddddddddddddddddddddddddddhhhhhhhhyyyyyssssssssssssssssyyyyyyyhhhhhhhddddh`   
+                                                                                      
+  S. Ponce, E. R. Margine, C. Verdi, and F. Giustino,                                 
+                                                Comput. Phys. Commun. 209, 116 (2016) 
+                                                                                      
+
+     Program EPW v.5.0.0 starts on  9Jan2019 at 15:12:57 
+
+     This program is part of the open-source Quantum ESPRESSO suite
+     for quantum simulation of materials; please cite
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 21 395502 (2009);
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 29 465901 (2017);
+          URL http://www.quantum-espresso.org", 
+     in publications or presentations arising from this work. More details at
+     http://www.quantum-espresso.org/quote
+
+     Parallel version (MPI), running on     1 processors
+
+     MPI processes distributed on     1 nodes
+                      
+     ------------------------------------------------------------------------ 
+                   RESTART - RESTART - RESTART - RESTART                         
+     Restart is done without reading PWSCF save file.                  
+     Be aware that some consistency checks are therefore not done.                  
+     ------------------------------------------------------------------------ 
+                      
+
+     --                                                                         
+
+     bravais-lattice index     =            0
+     lattice parameter (a_0)   =       0.0000  a.u.
+     unit-cell volume          =       0.0000 (a.u.)^3
+     number of atoms/cell      =            0
+     number of atomic types    =            0
+     kinetic-energy cut-off    =       0.0000  Ry
+     charge density cut-off    =       0.0000  Ry
+     convergence threshold     =      0.0E+00
+     beta                      =       0.0000
+     number of iterations used =            0
+     Exchange-correlation      = not set (-1 -1 -1 -1-1-1)
+
+
+     celldm(1)=    0.00000  celldm(2)=    0.00000  celldm(3)=    0.00000
+     celldm(4)=    0.00000  celldm(5)=    0.00000  celldm(6)=    0.00000
+
+     crystal axes: (cart. coord. in units of a_0)
+               a(1) = (  0.0000  0.0000  0.0000 )  
+               a(2) = (  0.0000  0.0000  0.0000 )  
+               a(3) = (  0.0000  0.0000  0.0000 )  
+
+     reciprocal axes: (cart. coord. in units 2 pi/a_0)
+               b(1) = (  0.0000  0.0000  0.0000 )  
+               b(2) = (  0.0000  0.0000  0.0000 )  
+               b(3) = (  0.0000  0.0000  0.0000 )  
+
+
+     Atoms inside the unit cell: 
+
+   Cartesian axes
+
+     site n.  atom      mass           positions (a_0 units)
+
+
+     No symmetry!
+
+     G cutoff =    0.0000  (      0 G-vectors)     FFT grid: (  0,  0,  0)
+     number of k points=    0
+                       cart. coord. in units 2pi/a_0
+     EPW          :      0.00s CPU      0.00s WALL
+
+     EPW          :      0.00s CPU      0.00s WALL
+
+     No wavefunction gauge setting applied
+
+     -------------------------------------------------------------------
+     Using si.ukk from disk
+     -------------------------------------------------------------------
+
+
+     Using kmap and kgmap from disk
+
+     Do not need to read .epb files; read .fmt files
+
+
+     Band disentanglement is used:  nbndsub =   16
+     Use zone-centred Wigner-Seitz cells 
+     Number of WS vectors for electrons       93
+     Number of WS vectors for phonons       19
+     Number of WS vectors for electron-phonon       19
+     Maximum number of cores for efficient parallelization      114
+     Results may improve by using use_ws == .true. 
+
+     Reading Hamiltonian, Dynamical matrix and EP vertex in Wann rep from file
+
+
+     Reading interatomic force constants
+
+     IFC last   -0.0032828
+     Norm of the difference between old and new effective charges:    0.0000000
+     Norm of the difference between old and new force-constants:    0.0000291
+     Imposed crystal ASR
+
+     Finished reading ifcs
+
+
+     Finished reading Wann rep data from file
+
+     ===================================================================
+     Memory usage:  VmHWM =        13Mb
+                   VmPeak =       273Mb
+     ===================================================================
+     
+     Using uniform q-mesh:    4   4   4
+     Size of q point mesh for interpolation:         64
+     Using uniform k-mesh:    8   8   8
+     Size of k point mesh for interpolation:       1024
+     Max number of k points per pool:             1024
+
+     Fermi energy coarse grid =   0.000000 eV
+
+     ===================================================================
+
+     Fermi energy is read from the input file: Ef =   6.800000 eV
+
+     ===================================================================
+     Applying a scissor shift of   0.70000 eV to the conduction states
+
+              ibndmin =     3  ebndmin =     0.209
+              ibndmax =    16  ebndmax =     0.794
+
+
+     Number of ep-matrix elements per pool :       602112 ~=    4.59 Mb (@ 8 bytes/ DP)
+      
+     A selecq.fmt file was found but re-created because selecqread == .false. 
+     We only need to compute       64 q-points
+      
+
+     ===================================================================
+     Phonon-assisted absorption
+     ===================================================================
+
+
+     Fermi Surface thickness =   4.000000 eV
+
+     Temperature T =   0.025852 eV
+
+     Phonon-assisted absorption versus energy
+     Broadenings:        0.000073       0.000147       0.000367       0.000735
+               0.001470       0.003675       0.007350       0.014700       0.036749
+
+     For the first Broadening we have:
+     Photon energy (eV), Imaginary dielectric function along x,y,z
+            0.050000  0.99023342377430E-13  0.98464470315032E-13  0.99385459345725E-13
+            0.100000  0.13251678685098E-12  0.13207980510379E-12  0.13410569988145E-12
+            0.150000  0.20072567530324E-12  0.20041553822337E-12  0.20278287230822E-12
+            0.200000  0.37189410341480E-12  0.37095106894744E-12  0.37634785367902E-12
+            0.250000  0.75676282226179E-12  0.75498270200405E-12  0.76603943338442E-12
+            0.300000  0.16366007773163E-11  0.16330303553406E-11  0.16571507135278E-11
+            0.350000  0.36756220929067E-11  0.36682184482072E-11  0.37229025924018E-11
+            0.400000  0.84842214982810E-11  0.84684613540256E-11  0.85954407149061E-11
+            0.450000  0.19902850550148E-10  0.19867972655707E-10  0.20166564843887E-10
+            0.500000  0.46846288488887E-10  0.46775560068407E-10  0.47477984098929E-10
+            0.550000  0.11022603658181E-09  0.11007527212665E-09  0.11173830148512E-09
+            0.600000  0.25871275816952E-09  0.25839896611934E-09  0.26232625974836E-09
+            0.650000  0.60459726095382E-09  0.60395576617109E-09  0.61318533798373E-09
+            0.700000  0.14039112398444E-08  0.14026312115160E-08  0.14241699786093E-08
+            0.750000  0.32340175208991E-08  0.32315434992098E-08  0.32813699158093E-08
+            0.800000  0.73807719031406E-08  0.73761866359279E-08  0.74902895131485E-08
+            0.850000  0.16671173687818E-07  0.16663167939357E-07  0.16921524514459E-07
+            0.900000  0.37235880098863E-07  0.37223151411832E-07  0.37800982791493E-07
+            0.950000  0.82182516128731E-07  0.82165584820476E-07  0.83441074001601E-07
+            1.000000  0.17912796469437E-06  0.17911495354415E-06  0.18189166953122E-06
+            1.050000  0.38538970935875E-06  0.38541224102739E-06  0.39137009198174E-06
+            1.100000  0.81811012266325E-06  0.81826348000502E-06  0.83085586354685E-06
+            1.150000  0.17129724003498E-05  0.17135111864590E-05  0.17397152400694E-05
+            1.200000  0.35366571859312E-05  0.35382130482291E-05  0.35918759718691E-05
+            1.250000  0.71984413472728E-05  0.72025003776516E-05  0.73106051977542E-05
+            1.300000  0.14441236057500E-04  0.14451152231376E-04  0.14665299903852E-04
+            1.350000  0.28551194547398E-04  0.28574279757891E-04  0.28991266205273E-04
+            1.400000  0.55621901643066E-04  0.55673623172105E-04  0.56471472191503E-04
+            1.450000  0.10676495388825E-03  0.10687715790994E-03  0.10837671897982E-03
+            1.500000  0.20190310021182E-03  0.20213974873511E-03  0.20490738302831E-03
+            1.550000  0.37615551481883E-03  0.37664212962881E-03  0.38165642700065E-03
+            1.600000  0.69037974391871E-03  0.69135730687999E-03  0.70027228907073E-03
+            1.650000  0.12482354188662E-02  0.12501569610507E-02  0.12657053468888E-02
+            1.700000  0.22232523511510E-02  0.22269524467219E-02  0.22535437453354E-02
+            1.750000  0.39008889456662E-02  0.39078750186039E-02  0.39524512417804E-02
+            1.800000  0.67425036867916E-02  0.67554463977997E-02  0.68286573642686E-02
+            1.850000  0.11480529137458E-01  0.11504070888038E-01  0.11621812608269E-01
+            1.900000  0.19256835514995E-01  0.19298895675273E-01  0.19484206810818E-01
+            1.950000  0.31819047502097E-01  0.31892884934187E-01  0.32178102315772E-01
+            2.000000  0.51791961520192E-01  0.51919363230326E-01  0.52348280856606E-01
+            2.050000  0.83042444544366E-01  0.83258545535842E-01  0.83888087223713E-01
+            2.100000  0.13115519726578E+00  0.13151559808297E+00  0.13241619437439E+00
+            2.150000  0.20403214085748E+00  0.20462316566144E+00  0.20587662830997E+00
+            2.200000  0.31261834649522E+00  0.31357145469206E+00  0.31526469889234E+00
+            2.250000  0.47174083510690E+00  0.47325232841502E+00  0.47546486846257E+00
+            2.300000  0.70102218173335E+00  0.70337938505287E+00  0.70616222566853E+00
+            2.350000  0.10257987037480E+01  0.10294136762560E+01  0.10327571773613E+01
+            2.400000  0.14779349458991E+01  0.14833864230222E+01  0.14871750907352E+01
+            2.450000  0.20963865639049E+01  0.21044701681451E+01  0.21084232750134E+01
+            2.500000  0.29273298932473E+01  0.29391156300374E+01  0.29427142032416E+01
+            2.550000  0.40236587065141E+01  0.40405533732408E+01  0.40429564243213E+01
+            2.600000  0.54436591121791E+01  0.54674695584973E+01  0.54674253274920E+01
+            2.650000  0.72487243960784E+01  0.72817157392767E+01  0.72774768689924E+01
+            2.700000  0.95000719030163E+01  0.95450130832519E+01  0.95342675106477E+01
+            2.750000  0.12254575896705E+02  0.12314763701464E+02  0.12294594982166E+02
+            2.800000  0.15560025009435E+02  0.15639277296849E+02  0.15606168334233E+02
+            2.850000  0.19450328103025E+02  0.19552937770560E+02  0.19502829857606E+02
+            2.900000  0.23941391819429E+02  0.24072035327184E+02  0.24000449649959E+02
+            2.950000  0.29028529599709E+02  0.29192127557665E+02  0.29094348922994E+02
+            3.000000  0.34686284500173E+02  0.34887816637596E+02  0.34759129816861E+02
+
+     Values with other broadening are reported in the files epsilon2_indabs.dat
+
+     ===================================================================
+     Memory usage:  VmHWM =        43Mb
+                   VmPeak =       320Mb
+     ===================================================================
+
+
+     Unfolding on the coarse grid
+     elphon_wrap  :      0.00s CPU      0.00s WALL (       1 calls)
+
+     INITIALIZATION: 
+
+
+
+     Electron-Phonon interpolation
+     ephwann      :     49.05s CPU     49.43s WALL (       1 calls)
+     ep-interp    :     48.70s CPU     49.08s WALL (      64 calls)
+
+     DynW2B       :      0.00s CPU      0.00s WALL (      64 calls)
+     HamW2B       :      4.80s CPU      4.84s WALL (   67072 calls)
+     ephW2Bp      :      0.17s CPU      0.47s WALL (      64 calls)
+
+
+     Total program execution
+     EPW          :     49.05s CPU     49.44s WALL
+
+                                                                                          
+ Please consider citing:                                                                  
+ S. Ponce, E. R. Margine, C. Verdi and F. Giustino, Comput. Phys. Commun. 209, 116 (2016) 
+                                                                                          
+ In addition, if you used anisotropic Eliashberg superconductivity please cite:           
+              E. R. Margine and F. Giustino, Phys. Rev. B 87, 024505 (2013)               
+              if you used transport properties (scattering rates, mobility) please cite:  
+              S. Ponce, E. R. Margine and F. Giustino, Phys. Rev. B 97, 121201 (2018)     

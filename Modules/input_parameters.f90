@@ -231,13 +231,12 @@ MODULE input_parameters
         INTEGER  :: nberrycyc = 1
           !number of covergence cycles on electric field
 
-        LOGICAL :: wf_collect = .false.
+        LOGICAL :: wf_collect = .true.
           ! This flag controls the way wavefunctions are stored to disk:
           !  .TRUE.  collect wavefunctions from all processors, store them
           !          into a single restart file on a single processors
           !  .FALSE. do not collect wavefunctions, store them into distributed
-          !          files
-          ! Only for PW and only in the parallel case
+          !          files - NO LONGER IMPLEMENTED SINCE v.6.3
 
         LOGICAL :: saverho = .true.
           ! This flag controls the saving of charge density in CP codes:
@@ -247,7 +246,7 @@ MODULE input_parameters
         LOGICAL :: tabps = .false. ! for ab-initio pressure and/or surface
                                    ! calculations
 
-        LOGICAL :: lkpoint_dir = .true. ! opens a directory for each k point
+        LOGICAL :: lkpoint_dir = .false. ! obsolete, for compatibility
 
         LOGICAL :: use_wannier = .false. ! use or not Wannier functions
 
@@ -269,8 +268,6 @@ MODULE input_parameters
           !                     even if they are slower than the default
           ! if memory = 'large' then QE tries to use (when implemented) algorithms using more memory
           !                     to enhance performance.
-
-          ! if .TRUE., perform exact exchange calculation using Wannier functions (X. Wu et al., Phys. Rev. B. 79, 085102 (2009))
 
         LOGICAL  :: lfcpopt = .FALSE. ! FCP optimisation switch
         LOGICAL  :: lfcpdyn = .FALSE. ! FCP thermostat enabled if .true.
@@ -441,7 +438,7 @@ MODULE input_parameters
         REAL(DP) :: conv_thr_multi = 0.1_DP
         REAL(DP) :: ecutfock = -1.d0
           ! variables used in Lin Lin's ACE and SCDM
-        REAL(DP) :: localization_thr = 0.0_dp, scdmden=0.10d0, scdmgrd=0.20d0
+        REAL(DP) :: localization_thr = 0.0_dp, scdmden=1.0d0, scdmgrd=1.0d0
         INTEGER  :: n_proj  = 0
         LOGICAL  :: scdm=.FALSE.
         LOGICAL  :: ace=.TRUE.
@@ -517,13 +514,9 @@ MODULE input_parameters
                        london_rvdw( nsx ) = -1.0_DP
 
           ! Grimme-D3 (DFT-D3) dispersion correction.
-          ! Values taken for PBE functional,
-          ! as found in original code of Grimme.
-        REAL ( DP ) :: dftd3_s6  =  1.0_DP ,&
-                       dftd3_rs6 =  1.217_DP ,&
-                       dftd3_s18 =  0.722_DP ,&
-                       dftd3_rs18 = 1.0_DP ,&
-                       dftd3_alp =  14.0_DP
+          ! version=3 is Grimme-D3, version=2 is Grimme-D2,
+          ! version=3 dftd3_threebody = .false. similar to grimme d2 but with
+          ! the two_body parameters of d3
         integer  ::    dftd3_version = 3
         logical ::     dftd3_threebody = .true.
 
@@ -538,10 +531,8 @@ MODULE input_parameters
 
         LOGICAL :: xdm = .FALSE.
           ! OBSOLESCENT: same as vdw_corr='xdm'
-        REAL(DP) :: xdm_a1 = 0.6836_DP
-        REAL(DP) :: xdm_a2 = 1.5045_DP
-          ! xdm_a1 and xdm_a2 -- parameters for the BJ damping function
-          ! The default values are for the b86bpbe functional.
+        REAL(DP) :: xdm_a1 = 0.0_DP
+        REAL(DP) :: xdm_a2 = 0.0_DP
           !
         CHARACTER(LEN=3) :: esm_bc = 'pbc'
           ! 'pbc': ordinary calculation with periodic boundary conditions
@@ -639,8 +630,7 @@ MODULE input_parameters
              sic, sic_epsilon, force_pairing, sic_alpha,                      &
              tot_charge, tot_magnetization, spline_ps, one_atom_occupations,  &
              vdw_corr, london, london_s6, london_rcut, london_c6, london_rvdw,&
-             dftd3_s6, dftd3_rs6, dftd3_s18, dftd3_rs18, dftd3_alp,           &
-             dftd3_version,                                                   &
+             dftd3_version, dftd3_threebody,                                  &
              ts_vdw, ts_vdw_isolated, ts_vdw_econv_thr,                       &
              xdm, xdm_a1, xdm_a2,                                             &
              step_pen, A_pen, sigma_pen, alpha_pen, no_t_rev,                 &
@@ -853,7 +843,7 @@ MODULE input_parameters
           ! used only in PWscf
 
         CHARACTER(len=80) :: diagonalization = 'david'
-          ! diagonalization = 'david' or 'cg'
+          ! diagonalization = 'david', 'cg' or 'ppcg'
           ! algorithm used by PWscf for iterative diagonalization
 
         REAL(DP) :: diago_thr_init = 0.0_DP
@@ -863,6 +853,10 @@ MODULE input_parameters
         INTEGER :: diago_cg_maxiter = 100
           ! max number of iterations for the first iterative diagonalization
           ! using conjugate-gradient algorithm - used only in PWscf
+
+        INTEGER :: diago_ppcg_maxiter = 100
+          ! max number of iterations for the first iterative diagonalization
+          ! using projected preconditioned conjugate-gradient algorithm - used only in PWscf
 
         INTEGER :: diago_david_ndim = 4
           ! dimension of the subspace used in Davidson diagonalization
@@ -1016,7 +1010,7 @@ MODULE input_parameters
 !=----------------------------------------------------------------------------=!
 !  IONS Namelist Input Parameters
 !=----------------------------------------------------------------------------=!
-!
+
 
         CHARACTER(len=80) :: ion_dynamics = 'none'
           ! set how ions should be moved
@@ -1265,11 +1259,15 @@ MODULE input_parameters
           ! in a ionic steepest descent simulation
 
         REAL(DP) :: press_conv_thr = 0.5_DP
+        
+        LOGICAL :: treinit_gvecs  = .FALSE. 
+          ! if true all the quantities related to fft g vectors are updated at 
+          ! step of variable cell structural optimization 
 
         NAMELIST / cell / cell_parameters, cell_dynamics, cell_velocities, &
                           press, wmass, cell_temperature, temph, fnoseh,   &
                           cell_dofree, greash, cell_factor, cell_nstepe,   &
-                          cell_damping, press_conv_thr
+                          cell_damping, press_conv_thr, treinit_gvecs 
 
 !
 !=----------------------------------------------------------------------------=!!

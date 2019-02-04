@@ -2,8 +2,9 @@
 include ../../make.inc
 
 # location of required modules and include files
-MODFLAGS= $(MOD_FLAG)../../iotk/src $(MOD_FLAG)../../Modules $(MOD_FLAG)../../FFTXlib $(MOD_FLAG)../../UtilXlib $(MOD_FLAG)../../CPV/src
-IFLAGS=#-DDEBUG_QECOUPLE
+MODFLAGS= $(BASEMOD_FLAGS) \
+          $(MOD_FLAG)../../CPV/src
+
 TLDEPS=pw cp
 
 COUPLEOBJS= \

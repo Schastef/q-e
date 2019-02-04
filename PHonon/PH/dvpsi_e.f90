@@ -22,12 +22,12 @@ subroutine dvpsi_e (ik, ipol)
   USE klist,           ONLY : xk, ngk, igk_k
   USE gvect,           ONLY : g
   USE wvfct,           ONLY : npwx, nbnd, g2kin, et
-  USE wavefunctions_module, ONLY: evc
+  USE wavefunctions, ONLY: evc
   USE buffers,         ONLY : save_buffer, get_buffer
   USE noncollin_module,ONLY : noncolin, npol
   USE becmod,          ONLY : bec_type, becp, calbec, &
                               allocate_bec_type, deallocate_bec_type
-  USE mp_bands,        ONLY : use_bgrp_in_hpsi, set_bgrp_indices
+  USE mp_bands,        ONLY : use_bgrp_in_hpsi, inter_bgrp_comm
   USE funct,           ONLY : exx_is_active
   USE uspp,            ONLY : okvan, nkb, vkb
   USE uspp_param,      ONLY : nh, nhm
@@ -129,7 +129,7 @@ subroutine dvpsi_e (ik, ipol)
      !
      allocate (spsi ( npwx*npol, nbnd))
      if (use_bgrp_in_hpsi .AND. .NOT. exx_is_active() .and. nbnd>1 ) then
-        call set_bgrp_indices(nbnd,n_start,n_end)
+        call divide(inter_bgrp_comm,nbnd,n_start,n_end)
         if (n_end >= n_start) CALL calbec (npw, vkb, dvpsi(:,n_start:n_end), becp , n_end-n_start+1 )
      else
         CALL calbec (npw, vkb, dvpsi, becp )

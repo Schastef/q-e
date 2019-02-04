@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2008 Quantum ESPRESSO group
+! Copyright (C) 2001-2018 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -21,17 +21,15 @@ subroutine newdq (dvscf, npe)
   USE cell_base,            ONLY : omega
   USE fft_base,             ONLY : dfftp
   USE fft_interfaces,       ONLY : fwfft
-  USE gvect,                ONLY : g, gg, ngm, mill, eigts1, eigts2, eigts3, nl
+  USE gvect,                ONLY : g, gg, ngm, mill, eigts1, eigts2, eigts3
   USE uspp,                 ONLY : okvan
   USE uspp_param,           ONLY : upf, lmaxq, nh, nhm
   USE paw_variables,        ONLY : okpaw
-
-  USE mp_bands,  ONLY: intra_bgrp_comm
-  USE mp,        ONLY: mp_sum
-
-  USE lrus,       ONLY : int3, int3_paw
-  USE qpoint,     ONLY : xq, eigqts
-  USE control_lr, ONLY : lgamma
+  USE mp_bands,             ONLY: intra_bgrp_comm
+  USE mp,                   ONLY: mp_sum
+  USE lrus,                 ONLY : int3, int3_paw
+  USE qpoint,               ONLY : xq, eigqts
+  USE control_lr,           ONLY : lgamma
 
   implicit none
   !
@@ -60,8 +58,9 @@ subroutine newdq (dvscf, npe)
   ! work space
 
   if (.not.okvan) return
+  !
   call start_clock ('newdq')
-
+  !
   int3 (:,:,:,:,:) = (0.d0, 0.0d0)
   allocate (aux1 (ngm))
   allocate (aux2 (ngm , nspin_mag))
@@ -69,7 +68,7 @@ subroutine newdq (dvscf, npe)
   allocate (ylmk0(ngm , lmaxq * lmaxq))
   allocate (qgm  (ngm))
   allocate (qmod (ngm))
-
+  !
   if (.not.lgamma) allocate (qg (3,  ngm))
   !
   !    first compute the spherical harmonics
@@ -97,9 +96,9 @@ subroutine newdq (dvscf, npe)
         do ir = 1, dfftp%nnr
            veff (ir) = dvscf (ir, is, ipert)
         enddo
-        CALL fwfft ('Dense', veff, dfftp)
+        CALL fwfft ('Rho', veff, dfftp)
         do ig = 1, ngm
-           aux2 (ig, is) = veff (nl (ig) )
+           aux2 (ig, is) = veff (dfftp%nl (ig) )
         enddo
      enddo
 
@@ -145,9 +144,14 @@ subroutine newdq (dvscf, npe)
 #if defined(__MPI)
   call mp_sum ( int3, intra_bgrp_comm )
 #endif
+  !
   IF (noncolin) CALL set_int3_nc(npe)
-  IF (okpaw) int3=int3+int3_paw
-
+  !
+  ! Sum of the USPP and PAW terms 
+  ! (see last two terms in Eq.(12) in PRB 81, 075123 (2010))
+  !
+  IF (okpaw) int3 = int3 + int3_paw
+  !
   if (.not.lgamma) deallocate (qg)
   deallocate (qmod)
   deallocate (qgm)
@@ -155,7 +159,9 @@ subroutine newdq (dvscf, npe)
   deallocate (veff)
   deallocate (aux2)
   deallocate (aux1)
-
+  !
   call stop_clock ('newdq')
+  !
   return
+  !
 end subroutine newdq

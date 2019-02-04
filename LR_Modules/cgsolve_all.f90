@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2004 PWSCF group
+! Copyright (C) 2001-2018 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -54,7 +54,7 @@ subroutine cgsolve_all (ch_psi, cg_psi, e, d0psi, dpsi, h_diag, &
   !   revised (to reduce memory) 29 May 2004 by S. de Gironcoli
   !
   USE kinds,          ONLY : DP
-  USE mp_bands,       ONLY : intra_bgrp_comm, inter_bgrp_comm, set_bgrp_indices, use_bgrp_in_hpsi
+  USE mp_bands,       ONLY : intra_bgrp_comm, inter_bgrp_comm, use_bgrp_in_hpsi
   USE mp,             ONLY : mp_sum, mp_barrier
   USE control_flags,  ONLY : gamma_only
   USE gvect,          ONLY : gstart
@@ -86,7 +86,7 @@ subroutine cgsolve_all (ch_psi, cg_psi, e, d0psi, dpsi, h_diag, &
   !
   !  here the local variables
   !
-  integer, parameter :: maxter = 200
+  integer, parameter :: maxter = 400
   ! the maximum number of iterations
   integer :: iter, ibnd, ibnd_, lbnd
   ! counters on iteration, bands
@@ -118,7 +118,8 @@ subroutine cgsolve_all (ch_psi, cg_psi, e, d0psi, dpsi, h_diag, &
   !
   call start_clock ('cgsolve')
 
-  call set_bgrp_indices(nbnd,n_start,n_end) ; my_nbnd = n_end - n_start + 1
+  call divide (inter_bgrp_comm,nbnd,n_start,n_end)
+  my_nbnd = n_end - n_start + 1
 
   ! allocate workspace (bgrp distributed)
   allocate ( conv(nbnd) )

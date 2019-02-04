@@ -10,6 +10,10 @@ MODULE io_files
 !=----------------------------------------------------------------------------=!
   !
   USE parameters, ONLY: ntypx
+  USE kinds,      ONLY: dp
+  USE io_global,  ONLY: ionode, ionode_id, stdout
+  USE mp,         ONLY : mp_barrier, mp_bcast, mp_sum
+  USE mp_images,  ONLY : me_image, intra_image_comm, nproc_image
   !
   ! ... I/O related variables: file names, units, utilities
   ! ... IMPORTANT: when directory names are set, they must always end with "/"
@@ -17,12 +21,21 @@ MODULE io_files
   IMPLICIT NONE
   !
   SAVE
+  PUBLIC :: create_directory, check_tempdir, clean_tempdir, check_file_exist, &
+       delete_if_present, check_writable, restart_dir, check_restartfile
+  !
   ! ... directory for all temporary files
   CHARACTER(len=256) :: tmp_dir = './'
   ! ... directory for large files on each node. Default: same as tmp_dir
   CHARACTER(len=256) :: wfc_dir = 'undefined'
   ! ... prefix is prepended to all file (and directory) names 
   CHARACTER(len=256) :: prefix  = 'os'
+  ! ... postfix is appended to directory names
+#if defined (_WIN32)
+  CHARACTER(len=6) :: postfix  = '.save\'
+#else
+  CHARACTER(len=6) :: postfix  = '.save/'
+#endif
   ! ... for parallel case and distributed I/O: node number
   CHARACTER(len=6)   :: nd_nmbr = '000000'
   ! ... directory where pseudopotential files are found
@@ -31,24 +44,16 @@ MODULE io_files
   CHARACTER(len=256) :: pseudo_dir_cur = ' '
   CHARACTER(len=256) :: psfile( ntypx ) = 'UPF'
   !
-  CHARACTER(len=256) :: qexml_version = ' '       ! the format of the current qexml datafile 
-  LOGICAL            :: qexml_version_init = .FALSE.  ! whether the fmt has been read or not
-  !
-!
   CHARACTER(LEN=256) :: qexsd_fmt = ' ', qexsd_version = ' '
   LOGICAL            :: qexsd_init = .FALSE. 
-!
+  ! ... next two variables obsolete?
   CHARACTER(LEN=256) :: input_drho = ' '          ! name of the file with the input drho
   CHARACTER(LEN=256) :: output_drho = ' '         ! name of the file with the output drho
   !
   CHARACTER(LEN=5 ), PARAMETER :: crash_file  = 'CRASH'
   CHARACTER (LEN=261) :: exit_file = 'os.EXIT' ! file required for a soft exit  
   !
-  CHARACTER (LEN=13), PARAMETER :: xmlpun      = 'data-file.xml'
-  !
-!
   CHARACTER (LEN=20), PARAMETER :: xmlpun_schema = 'data-file-schema.xml'
-!
   !
   ! ... The units where various variables are saved
   ! ... Only units that are kept open during the run should be listed here
@@ -65,6 +70,7 @@ MODULE io_files
   !
   INTEGER :: iunexit     = 26 ! unit for a soft exit  
   INTEGER :: iunupdate   = 27 ! unit for saving old positions (extrapolation)
+  ! NEB
   INTEGER :: iunnewimage = 28 ! unit for parallelization among images
   INTEGER :: iunlock     = 29 ! as above (locking file)
   !
@@ -95,11 +101,141 @@ MODULE io_files
   !
 CONTAINS
   !
+  !------------------------------------------------------------------------
+  SUBROUTINE create_directory( dirname )
+    !------------------------------------------------------------------------
+    !
+    USE wrappers,  ONLY : f_mkdir_safe
+    !
+    CHARACTER(LEN=*), INTENT(IN) :: dirname
+    !
+    INTEGER                    :: ierr, length
+    !
+    CHARACTER(LEN=6), EXTERNAL :: int_to_char
+    !
+    length = LEN_TRIM(dirname)
+#if defined (_WIN32)
+    ! Windows returns error if tmp_dir ends with a backslash
+    IF ( dirname(length:length) == '\' ) length=length-1
+#endif
+    IF ( ionode ) ierr = f_mkdir_safe( dirname(1:length ) )
+    CALL mp_bcast ( ierr, ionode_id, intra_image_comm )
+    !
+    CALL errore( 'create_directory', &
+         'unable to create directory ' // TRIM( dirname ), ierr )
+    !
+    ! ... syncronize all jobs (not sure it is really useful)
+    !
+    CALL mp_barrier( intra_image_comm )
+    !
+    ! ... check whether the scratch directory is writable
+    !
+    IF ( ionode ) ierr = check_writable ( dirname, me_image )
+    CALL mp_bcast( ierr, ionode_id, intra_image_comm )
+    !
+    CALL errore( 'create_directory:', &
+         TRIM( dirname ) // ' non existent or non writable', ierr )
+    !
+    RETURN
+    !
+  END SUBROUTINE create_directory
+  !
+  !-----------------------------------------------------------------------
+  SUBROUTINE check_tempdir ( tmp_dir, exst, pfs )
+    !-----------------------------------------------------------------------
+    !
+    ! ... Verify if tmp_dir exists, creates it if not
+    ! ... On output:
+    ! ...    exst= .t. if tmp_dir exists
+    ! ...    pfs = .t. if tmp_dir visible from all procs of an image
+    !
+    USE wrappers,      ONLY : f_mkdir_safe
+    !
+    IMPLICIT NONE
+    !
+    CHARACTER(len=*), INTENT(in) :: tmp_dir
+    LOGICAL, INTENT(out)         :: exst, pfs
+    !
+    INTEGER             :: ios, image, proc, nofi, length
+    CHARACTER (len=256) :: file_path, filename
+    CHARACTER(len=6), EXTERNAL :: int_to_char
+    !
+    ! ... create tmp_dir on ionode
+    ! ... f_mkdir_safe returns -1 if tmp_dir already exists
+    ! ...                       0 if         created
+    ! ...                       1 if         cannot be created
+    !
+    length = LEN_TRIM(tmp_dir)
+#if defined (_WIN32)
+    ! Windows returns error if tmp_dir ends with a backslash
+    IF ( tmp_dir(length:length) == '\' ) length=length-1
+#endif
+    IF ( ionode ) ios = f_mkdir_safe( tmp_dir(1:length) )
+    CALL mp_bcast ( ios, ionode_id, intra_image_comm )
+    exst = ( ios == -1 )
+    IF ( ios > 0 ) CALL errore ('check_tempdir','tmp_dir cannot be opened',1)
+    !
+    ! ... let us check now if tmp_dir is visible on all nodes
+    ! ... if not, a local tmp_dir is created on each node
+    !
+    ios = f_mkdir_safe( TRIM(tmp_dir) )
+    CALL mp_sum ( ios, intra_image_comm )
+    pfs = ( ios == -nproc_image ) ! actually this is true only if .not.exst 
+    !
+    RETURN
+    !
+  END SUBROUTINE check_tempdir
+  !
+  !-----------------------------------------------------------------------
+  SUBROUTINE clean_tempdir( tmp_dir )
+    !-----------------------------------------------------------------------
+    !
+    IMPLICIT NONE
+    !
+    CHARACTER(len=*), INTENT(in) :: tmp_dir
+    !
+    CHARACTER (len=256) :: file_path, filename
+    !
+    ! ... remove temporary files from tmp_dir ( only by the master node )
+    !
+    file_path = trim( tmp_dir ) // trim( prefix )
+    IF ( ionode ) THEN
+       CALL delete_if_present( trim( file_path ) // '.update' )
+       CALL delete_if_present( trim( file_path ) // '.md' )
+       CALL delete_if_present( trim( file_path ) // '.bfgs' )
+    ENDIF
+    !
+    RETURN
+    !
+  END SUBROUTINE clean_tempdir
+  !
+  !------------------------------------------------------------------------
+  FUNCTION check_file_exist( filename )
+    !------------------------------------------------------------------------
+    !
+    IMPLICIT NONE
+    !
+    LOGICAL          :: check_file_exist
+    CHARACTER(LEN=*) :: filename
+    !
+    LOGICAL :: lexists
+    !
+    IF ( ionode ) THEN 
+       !
+       INQUIRE( FILE = TRIM( filename ), EXIST = lexists )
+       !
+    ENDIF
+    !
+    CALL mp_bcast ( lexists, ionode_id, intra_image_comm )
+    !
+    check_file_exist = lexists
+    RETURN
+    !
+  END FUNCTION check_file_exist
+  !
   !--------------------------------------------------------------------------
   SUBROUTINE delete_if_present( filename, in_warning )
     !--------------------------------------------------------------------------
-    !
-    USE io_global, ONLY : ionode, stdout
     !
     IMPLICIT NONE
     !
@@ -167,7 +303,70 @@ CONTAINS
     !
     !-----------------------------------------------------------------------
   END FUNCTION check_writable 
-!-----------------------------------------------------------------------
+  !-----------------------------------------------------------------------
+  !
+  !
+  !------------------------------------------------------------------------
+  FUNCTION restart_dir( outdir, runit )
+    !------------------------------------------------------------------------
+    !
+    ! CP specific
+    CHARACTER(LEN=256)           :: restart_dir
+    CHARACTER(LEN=*), INTENT(IN) :: outdir
+    INTEGER,          INTENT(IN) :: runit
+    !
+    CHARACTER(LEN=256)         :: dirname
+    INTEGER                    :: strlen
+    CHARACTER(LEN=6), EXTERNAL :: int_to_char
+    !
+    ! ... main restart directory
+    !
+    dirname = TRIM( prefix ) // '_' // TRIM( int_to_char( runit ) )// '.save/'
+    !
+    IF ( LEN( outdir ) > 1 ) THEN
+       !
+       strlen = INDEX( outdir, ' ' ) - 1
+       !
+       dirname = outdir(1:strlen) // '/' // dirname
+       !
+    END IF
+    !
+    restart_dir = TRIM( dirname )
+    !
+    RETURN
+    !
+    END FUNCTION restart_dir
+    !
+    !------------------------------------------------------------------------
+    FUNCTION check_restartfile( outdir, ndr )
+      !------------------------------------------------------------------------
+      !
+      IMPLICIT NONE
+      !
+      LOGICAL                      :: check_restartfile
+      INTEGER,          INTENT(IN) :: ndr
+      CHARACTER(LEN=*), INTENT(IN) :: outdir
+      CHARACTER(LEN=256)           :: filename
+      LOGICAL                      :: lval
+      !
+      !
+      filename = restart_dir( outdir, ndr )
+      !
+      IF ( ionode ) THEN
+         !
+         filename = TRIM( filename ) // '/' // TRIM( xmlpun_schema )
+         !
+         INQUIRE( FILE = TRIM( filename ), EXIST = lval )
+         !
+      END IF
+      !
+      CALL mp_bcast( lval, ionode_id, intra_image_comm )
+      !
+      check_restartfile = lval
+      !
+      RETURN
+      !
+    END FUNCTION check_restartfile
 !
 !-----------------------------------------------------------------------
 subroutine diropn (unit, extension, recl, exst, tmp_dir_)
@@ -180,16 +379,6 @@ subroutine diropn (unit, extension, recl, exst, tmp_dir_)
   !     On output, "exst" is .T. if opened file already exists
   !     If recl=-1, the file existence is checked, nothing else is done
   !
-#if defined(__SX6)
-#  define DIRECT_IO_FACTOR 1
-#else
-#  define DIRECT_IO_FACTOR 8 
-#endif
-  !
-  ! the  record length in direct-access I/O is given by the number of
-  ! real*8 words times DIRECT_IO_FACTOR (may depend on the compiler)
-  !
-  USE kinds
   implicit none
   !
   !    first the input variables
@@ -208,26 +397,23 @@ subroutine diropn (unit, extension, recl, exst, tmp_dir_)
   !
   character(len=256) :: tempfile, filename
   ! complete file name
-  integer :: ios
+  real(dp):: dummy
   integer*8 :: unf_recl
-  ! used to check I/O operations
-  ! length of the record
+  ! double precision to prevent integer overflow
+  integer :: ios, direct_io_factor
   logical :: opnd
-
-  ! Check if the optional variable tmp_dir is included
   !
-
-  ! if true the file is already opened
+  !    initial checks
   !
   if (unit < 0) call errore ('diropn', 'wrong unit', 1)
   !
-  !    we first check that the file is not already openend
+  !    ifirst we check that the file is not already openend
   !
   ios = 0
   inquire (unit = unit, opened = opnd)
   if (opnd) call errore ('diropn', "can't open a connected unit", abs(unit))
   !
-  !      then we check the filename extension
+  !    then we check the filename extension
   !
   if (extension == ' ') call errore ('diropn','filename extension not given',2)
   filename = trim(prefix) // "." // trim(extension)
@@ -240,12 +426,14 @@ subroutine diropn (unit, extension, recl, exst, tmp_dir_)
   inquire (file = tempfile, exist = exst)
   if (recl == -1) RETURN
   !
-  !      the unit for record length is unfortunately machine-dependent
+  ! the  record length in direct-access I/O is given by the number of
+  ! real*8 words times direct_io_factor (may depend on the compiler)
   !
-  unf_recl = DIRECT_IO_FACTOR * int(recl, kind=kind(unf_recl))
+  INQUIRE (IOLENGTH=direct_io_factor) dummy
+  unf_recl = direct_io_factor * int(recl, kind=kind(unf_recl))
   if (unf_recl <= 0) call errore ('diropn', 'wrong record length', 3)
   !
-  open (unit, file = trim(adjustl(tempfile)), iostat = ios, form = 'unformatted', &
+  open (unit, file=trim(adjustl(tempfile)), iostat=ios, form='unformatted', &
        status = 'unknown', access = 'direct', recl = unf_recl)
 
   if (ios /= 0) call errore ('diropn', 'error opening '//trim(tempfile), unit)
@@ -340,7 +528,7 @@ SUBROUTINE davcio( vect, nword, unit, nrec, io )
   ! ... direct-access vector input/output
   ! ... read/write nword words starting from the address specified by vect
   !
-  USE kinds,     ONLY : DP
+  USE kinds ,     ONLY : DP
   !
   IMPLICIT NONE
   !

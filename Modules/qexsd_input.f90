@@ -5,14 +5,6 @@
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
-#if defined(__OLDXLM)
-! 
-MODULE qexsd_input
-  IMPLICIT NONE
-  INTEGER :: dummy__
-END MODULE qexsd_input
-!
-#else
 !---------------------------------------------------------
 MODULE qexsd_input
 !--------------------------------------------------------
@@ -24,10 +16,9 @@ MODULE qexsd_input
   USE kinds,            ONLY : DP
   USE input_parameters, ONLY : input_xml_schema_file
   !
-  USE iotk_base,        ONLY : iotk_indent, iotk_maxindent
   USE constants,        ONLY : e2,bohr_radius_angs
-  USE iotk_module
-  USE qes_module
+  USE qes_types_module
+  USE qes_libs_module
   !
   IMPLICIT NONE
   !
@@ -252,8 +243,8 @@ MODULE qexsd_input
   SUBROUTINE qexsd_init_electron_control( obj,diagonalization,mixing_mode,mixing_beta,&
                                           conv_thr, mixing_ndim, max_nstep, tqr,tq_smoothing, &
                                           tbeta_smoothing, & 
-                                          diago_thr_init, diago_full_acc, diago_cg_maxiter,&
-                                          diago_david_ndim)
+                                          diago_thr_init, diago_full_acc, &
+                                          diago_cg_maxiter, diago_ppcg_maxiter, diago_david_ndim)
   !-------------------------------------------------------------------------------------------
   !
   IMPLICIT NONE
@@ -261,8 +252,8 @@ MODULE qexsd_input
   TYPE(electron_control_type)             ::  obj
   CHARACTER(LEN=*),INTENT(IN)             :: diagonalization,mixing_mode
   REAL(DP),INTENT(IN)                     :: mixing_beta, conv_thr, diago_thr_init
-  INTEGER,INTENT(IN)                      :: mixing_ndim,max_nstep,diago_cg_maxiter,&
-                                             diago_david_ndim
+  INTEGER,INTENT(IN)                      :: mixing_ndim,max_nstep, diago_cg_maxiter, &
+                                             diago_ppcg_maxiter, diago_david_ndim
   LOGICAL,INTENT(IN)                      :: diago_full_acc,tqr, tq_smoothing, tbeta_smoothing
   !
   CHARACTER(LEN=*),PARAMETER              :: TAGNAME="electron_control"
@@ -272,7 +263,8 @@ MODULE qexsd_input
                                 conv_thr=conv_thr,mixing_ndim=mixing_ndim,max_nstep=max_nstep,&
                                 tq_smoothing= tq_smoothing, tbeta_smoothing = tbeta_smoothing,& 
                                 real_space_q=tqr,diago_thr_init=diago_thr_init,& 
-                                diago_full_acc=diago_full_acc,diago_cg_maxiter=diago_cg_maxiter)
+                                diago_full_acc=diago_full_acc,diago_cg_maxiter=diago_cg_maxiter, &
+                                diago_ppcg_maxiter=diago_ppcg_maxiter)
    !
    END SUBROUTINE qexsd_init_electron_control
    !
@@ -604,7 +596,7 @@ MODULE qexsd_input
    ! 
    !-------------------------------------------------------------------------------------------------
    SUBROUTINE qexsd_init_electric_field_input (obj,tefield,dipfield,lelfield,lberry,edir,gdir,emaxpos,eopreg,eamp,    &
-                                               efield,efield_cart,nberrycyc,nppstr)
+         efield,efield_cart,nberrycyc,nppstr, gate, zgate, relaxz, block, block_1, block_2, block_height )
    !---------------------------------------------------------------------------------------------------
    ! 
    IMPLICIT NONE
@@ -615,6 +607,8 @@ MODULE qexsd_input
    REAL(DP),INTENT(IN),OPTIONAL                 :: emaxpos,eopreg,eamp
    REAL(DP),INTENT(IN),OPTIONAL                 :: efield
    REAL(DP),INTENT(IN),OPTIONAL,DIMENSION(3)    :: efield_cart
+   LOGICAL,INTENT(IN),OPTIONAL                  :: gate, block,relaxz 
+   REAL(DP),INTENT(IN),OPTIONAL                 :: zgate,block_1, block_2, block_height
    ! 
    CHARACTER(LEN=*),PARAMETER                   :: TAGNAME="electric_field",&
                                                    SAWTOOTH="sawtooth_potential",&
@@ -627,7 +621,12 @@ MODULE qexsd_input
    LOGICAL                                      :: dir_ispresent=.FALSE., amp_ispresent= .FALSE.,&
                                                    nberrycyc_ispresent=.FALSE.,nppstr_ispresent=.FALSE., &
                                                    electric_field_ispresent = .FALSE.
+   LOGICAL                                      :: gate_, block_
+   REAL(DP)                                     :: block_1_, block_2_, block_3_
+   TYPE(gate_settings_type),TARGET              :: gata_settings_obj
+   TYPE(gate_settings_type),POINTER             :: gata_settings_ptr
    ! 
+   electric_potential = "none"
    IF (tefield) THEN  
       electric_potential=SAWTOOTH
       emaxpos_loc=emaxpos
@@ -664,7 +663,11 @@ MODULE qexsd_input
          electric_field_direction = gdir
       END IF
    END IF  
-      
+   IF (PRESENT (gate)) THEN 
+      gata_settings_ptr => gata_settings_obj 
+      CALL qes_init_gate_settings(gata_settings_obj, "gate_settings", gate, zgate, relaxz,&
+         block, block_1, block_2, block_height ) 
+   END IF 
    CALL  qes_init_electric_field( obj, TAGNAME, electric_potential=electric_potential,        &
                                 dipole_correction_ispresent=dipfield, dipole_correction = dipfield, &
                                 electric_field_direction_ispresent= dir_ispresent, &
@@ -676,7 +679,8 @@ MODULE qexsd_input
                                 electric_field_vector = efield_cart_loc,                                     &
                                 electric_field_vector_ispresent= electric_field_ispresent, &
                                 n_berry_cycles_ispresent=nberrycyc_ispresent,n_berry_cycles=nberrycyc_loc,&
-                                nk_per_string_ispresent=nppstr_ispresent,nk_per_string=nppstr_loc  )
+                                nk_per_string_ispresent=nppstr_ispresent,nk_per_string=nppstr_loc, &
+                                gate_settings = gata_settings_obj)
    END SUBROUTINE qexsd_init_electric_field_input
    !
    !----------------------------------------------------------------------------------------------------------
@@ -761,6 +765,4 @@ MODULE qexsd_input
       !--------------------------------------------------------------------------------------------
       !
 END MODULE qexsd_input          
-! 
-#endif
   

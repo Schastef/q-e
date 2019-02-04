@@ -71,6 +71,7 @@ MODULE qes_read_module
     MODULE PROCEDURE qes_read_ekin_functional
     MODULE PROCEDURE qes_read_spin_constraints
     MODULE PROCEDURE qes_read_electric_field
+    MODULE PROCEDURE qes_read_gate_settings
     MODULE PROCEDURE qes_read_atomic_constraints
     MODULE PROCEDURE qes_read_atomic_constraint
     MODULE PROCEDURE qes_read_inputOccupations
@@ -82,6 +83,7 @@ MODULE qes_read_module
     MODULE PROCEDURE qes_read_ionicPolarization
     MODULE PROCEDURE qes_read_electronicPolarization
     MODULE PROCEDURE qes_read_phase
+    MODULE PROCEDURE qes_read_gateInfo
     MODULE PROCEDURE qes_read_convergence_info
     MODULE PROCEDURE qes_read_scf_conv
     MODULE PROCEDURE qes_read_opt_conv
@@ -939,18 +941,22 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "convergence_info")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:outputType","convergence_info: wrong number of occurrences")
+           CALL infomsg("qes_read:outputType","convergence_info: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:outputType","convergence_info: wrong number of occurrences",10)
+           CALL errore("qes_read:outputType","convergence_info: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL qes_read_convergence_info(tmp_node, obj%convergence_info, ierr )
+    IF (tmp_node_list_size>0) THEN
+      obj%convergence_info_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_convergence_info(tmp_node, obj%convergence_info, ierr )
+    ELSE
+       obj%convergence_info_ispresent = .FALSE.
+    END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "algorithmic_info")
     tmp_node_list_size = getLength(tmp_node_list)
@@ -2145,6 +2151,26 @@ MODULE qes_read_module
       CALL qes_read_wyckoff_positions(tmp_node, obj%wyckoff_positions, ierr )
     ELSE
        obj%wyckoff_positions_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "crystal_positions")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:atomic_structureType","crystal_positions: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:atomic_structureType","crystal_positions: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%crystal_positions_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_atomic_positions(tmp_node, obj%crystal_positions, ierr )
+    ELSE
+       obj%crystal_positions_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "cell")
@@ -4555,25 +4581,57 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "real_space_q")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:electron_controlType","real_space_q: wrong number of occurrences")
+           CALL infomsg("qes_read:electron_controlType","real_space_q: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:electron_controlType","real_space_q: wrong number of occurrences",10)
+           CALL errore("qes_read:electron_controlType","real_space_q: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%real_space_q, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:electron_controlType","error reading real_space_q")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:electron_controlType","error reading real_space_q",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%real_space_q_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%real_space_q , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:electron_controlType","error reading real_space_q")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:electron_controlType","error reading real_space_q",10)
+         END IF
+      END IF
+    ELSE
+       obj%real_space_q_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "real_space_beta")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:electron_controlType","real_space_beta: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:electron_controlType","real_space_beta: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%real_space_beta_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%real_space_beta , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:electron_controlType","error reading real_space_beta")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:electron_controlType","error reading real_space_beta",10)
+         END IF
+      END IF
+    ELSE
+       obj%real_space_beta_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "tq_smoothing")
@@ -4698,6 +4756,34 @@ MODULE qes_read_module
       END IF
     ELSE
        obj%diago_cg_maxiter_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "diago_ppcg_maxiter")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:electron_controlType","diago_ppcg_maxiter: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:electron_controlType","diago_ppcg_maxiter: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%diago_ppcg_maxiter_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%diago_ppcg_maxiter , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:electron_controlType","error reading diago_ppcg_maxiter")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:electron_controlType","error reading diago_ppcg_maxiter",10)
+         END IF
+      END IF
+    ELSE
+       obj%diago_ppcg_maxiter_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "diago_david_ndim")
@@ -6408,6 +6494,26 @@ MODULE qes_read_module
        obj%dipole_correction_ispresent = .FALSE.
     END IF
     !
+    tmp_node_list => getElementsByTagname(xml_node, "gate_settings")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:electric_fieldType","gate_settings: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:electric_fieldType","gate_settings: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%gate_settings_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_gate_settings(tmp_node, obj%gate_settings, ierr )
+    ELSE
+       obj%gate_settings_ispresent = .FALSE.
+    END IF
+    !
     tmp_node_list => getElementsByTagname(xml_node, "electric_field_direction")
     tmp_node_list_size = getLength(tmp_node_list)
     !
@@ -6608,6 +6714,220 @@ MODULE qes_read_module
     obj%lwrite = .TRUE.
     !
   END SUBROUTINE qes_read_electric_field
+  !
+  !
+  SUBROUTINE qes_read_gate_settings(xml_node, obj, ierr )
+    !
+    IMPLICIT NONE
+    !
+    TYPE(Node), INTENT(IN), POINTER                 :: xml_node
+    TYPE(gate_settings_type), INTENT(OUT) :: obj
+    INTEGER, OPTIONAL, INTENT(OUT)                  :: ierr 
+    ! 
+    TYPE(Node), POINTER :: tmp_node
+    TYPE(NodeList), POINTER :: tmp_node_list
+    INTEGER :: tmp_node_list_size, index, iostat_
+    !
+    obj%tagname = getTagName(xml_node)
+    !
+    !
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "use_gate")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","use_gate: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","use_gate: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%use_gate, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:gate_settingsType","error reading use_gate")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:gate_settingsType","error reading use_gate",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "zgate")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","zgate: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","zgate: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%zgate_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%zgate , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:gate_settingsType","error reading zgate")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:gate_settingsType","error reading zgate",10)
+         END IF
+      END IF
+    ELSE
+       obj%zgate_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "relaxz")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","relaxz: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","relaxz: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%relaxz_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%relaxz , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:gate_settingsType","error reading relaxz")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:gate_settingsType","error reading relaxz",10)
+         END IF
+      END IF
+    ELSE
+       obj%relaxz_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "block")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","block: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","block: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%block_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%block , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:gate_settingsType","error reading block")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:gate_settingsType","error reading block",10)
+         END IF
+      END IF
+    ELSE
+       obj%block_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "block_1")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","block_1: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","block_1: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%block_1_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%block_1 , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:gate_settingsType","error reading block_1")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:gate_settingsType","error reading block_1",10)
+         END IF
+      END IF
+    ELSE
+       obj%block_1_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "block_2")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","block_2: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","block_2: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%block_2_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%block_2 , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:gate_settingsType","error reading block_2")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:gate_settingsType","error reading block_2",10)
+         END IF
+      END IF
+    ELSE
+       obj%block_2_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "block_height")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gate_settingsType","block_height: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gate_settingsType","block_height: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%block_height_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%block_height , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:gate_settingsType","error reading block_height")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:gate_settingsType","error reading block_height",10)
+         END IF
+      END IF
+    ELSE
+       obj%block_height_ispresent = .FALSE.
+    END IF
+    !
+    !
+    obj%lwrite = .TRUE.
+    !
+  END SUBROUTINE qes_read_gate_settings
   !
   !
   SUBROUTINE qes_read_atomic_constraints(xml_node, obj, ierr )
@@ -6925,6 +7245,26 @@ MODULE qes_read_module
       CALL qes_read_dipoleOutput(tmp_node, obj%dipoleInfo, ierr )
     ELSE
        obj%dipoleInfo_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "gateInfo")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:outputElectricFieldType","gateInfo: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:outputElectricFieldType","gateInfo: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%gateInfo_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_gateInfo(tmp_node, obj%gateInfo, ierr )
+    ELSE
+       obj%gateInfo_ispresent = .FALSE.
     END IF
     !
     !
@@ -7529,6 +7869,124 @@ MODULE qes_read_module
   END SUBROUTINE qes_read_phase
   !
   !
+  SUBROUTINE qes_read_gateInfo(xml_node, obj, ierr )
+    !
+    IMPLICIT NONE
+    !
+    TYPE(Node), INTENT(IN), POINTER                 :: xml_node
+    TYPE(gateInfo_type), INTENT(OUT) :: obj
+    INTEGER, OPTIONAL, INTENT(OUT)                  :: ierr 
+    ! 
+    TYPE(Node), POINTER :: tmp_node
+    TYPE(NodeList), POINTER :: tmp_node_list
+    INTEGER :: tmp_node_list_size, index, iostat_
+    !
+    obj%tagname = getTagName(xml_node)
+    !
+    !
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "pot_prefactor")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gateInfoType","pot_prefactor: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gateInfoType","pot_prefactor: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%pot_prefactor, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:gateInfoType","error reading pot_prefactor")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:gateInfoType","error reading pot_prefactor",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "gate_zpos")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gateInfoType","gate_zpos: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gateInfoType","gate_zpos: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%gate_zpos, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:gateInfoType","error reading gate_zpos")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:gateInfoType","error reading gate_zpos",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "gate_gate_term")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gateInfoType","gate_gate_term: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gateInfoType","gate_gate_term: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%gate_gate_term, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:gateInfoType","error reading gate_gate_term")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:gateInfoType","error reading gate_gate_term",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "gatefieldEnergy")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:gateInfoType","gatefieldEnergy: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:gateInfoType","gatefieldEnergy: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%gatefieldEnergy, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:gateInfoType","error reading gatefieldEnergy")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:gateInfoType","error reading gatefieldEnergy",10)
+       END IF
+    END IF
+    !
+    !
+    obj%lwrite = .TRUE.
+    !
+  END SUBROUTINE qes_read_gateInfo
+  !
+  !
   SUBROUTINE qes_read_convergence_info(xml_node, obj, ierr )
     !
     IMPLICIT NONE
@@ -7603,6 +8061,30 @@ MODULE qes_read_module
     !
     !
     !
+    tmp_node_list => getElementsByTagname(xml_node, "convergence_achieved")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:scf_convType","convergence_achieved: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:scf_convType","convergence_achieved: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%convergence_achieved, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:scf_convType","error reading convergence_achieved")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:scf_convType","error reading convergence_achieved",10)
+       END IF
+    END IF
+    !
     tmp_node_list => getElementsByTagname(xml_node, "n_scf_steps")
     tmp_node_list_size = getLength(tmp_node_list)
     !
@@ -7672,6 +8154,30 @@ MODULE qes_read_module
     obj%tagname = getTagName(xml_node)
     !
     !
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "convergence_achieved")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:opt_convType","convergence_achieved: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:opt_convType","convergence_achieved: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%convergence_achieved, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:opt_convType","error reading convergence_achieved")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:opt_convType","error reading convergence_achieved",10)
+       END IF
+    END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "n_opt_steps")
     tmp_node_list_size = getLength(tmp_node_list)
@@ -7764,6 +8270,30 @@ MODULE qes_read_module
           ierr = ierr + 1
        ELSE 
           CALL errore ("qes_read:algorithmic_infoType","error reading real_space_q",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "real_space_beta")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:algorithmic_infoType","real_space_beta: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:algorithmic_infoType","real_space_beta: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%real_space_beta, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:algorithmic_infoType","error reading real_space_beta")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:algorithmic_infoType","error reading real_space_beta",10)
        END IF
     END IF
     !
@@ -8609,6 +9139,34 @@ MODULE qes_read_module
       END IF
     ELSE
        obj%potentiostat_contr_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "gatefield_contr")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:total_energyType","gatefield_contr: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:total_energyType","gatefield_contr: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%gatefield_contr_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%gatefield_contr , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:total_energyType","error reading gatefield_contr")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:total_energyType","error reading gatefield_contr",10)
+         END IF
+      END IF
+    ELSE
+       obj%gatefield_contr_ispresent = .FALSE.
     END IF
     !
     !

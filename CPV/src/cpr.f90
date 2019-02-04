@@ -18,7 +18,9 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
                                        ndr, ndw, nomore, tsde, textfor,        &
                                        tortho, tnosee, tnosep, trane, tranp,   &
                                        tsdp, tcp, tcap, ampre, amprp, tnoseh,  &
-                                       tolp, ortho_eps, ortho_max
+                                       tolp, ortho_eps, ortho_max,             &
+                                       tfirst, tlast !moved here to make
+                                                     !autopilot work
   USE core,                     ONLY : rhoc
   USE uspp_param,               ONLY : nhm, nh, nvb, ish
   USE uspp,                     ONLY : nkb, vkb, becsum, deeq, okvan, nlcc_any
@@ -37,10 +39,8 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
                                        berry_energy2, pberryel2, pberryion2
   USE ensemble_dft,             ONLY : tens, z0t, gibbsfe
   USE cg_module,                ONLY : tcg,  cg_update, c0old
-  USE gvect,                    ONLY : ngm, ngm_g
-  USE gvecs,                    ONLY : ngms
-  USE smallbox_gvec,                    ONLY : ngb
-  USE gvecw,                    ONLY : ngw, ngw_g
+  USE smallbox_gvec,            ONLY : ngb
+  USE gvecw,                    ONLY : ngw
   USE gvect,       ONLY : gstart, mill, eigts1, eigts2, eigts3
   USE ions_base,                ONLY : na, nat, amass, nax, nsp, rcmax
   USE ions_base,                ONLY : ind_srt, ions_cofmass, ions_kinene, &
@@ -80,7 +80,7 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
                                        electrons_nosevel, electrons_noseupd
   USE pres_ai_mod,              ONLY : P_ext, P_in, P_fin, pvar, volclu, &
                                        surfclu, Surf_t, abivol, abisur
-  USE wavefunctions_module,     ONLY : c0_bgrp, cm_bgrp, phi_bgrp
+  USE wavefunctions,     ONLY : c0_bgrp, cm_bgrp, phi_bgrp
   USE wannier_module,           ONLY : allocate_wannier
   USE cp_interfaces,            ONLY : printout_new, move_electrons, newinit
   USE cell_nose,                ONLY : xnhh0, xnhhm, xnhhp, vnhh, temph, &
@@ -108,13 +108,13 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
   USE cp_autopilot,             ONLY : pilot
   USE ions_nose,                ONLY : ions_nose_allocate, ions_nose_shiftvar
   USE orthogonalize_base,       ONLY : updatc
-  USE control_flags,            ONLY : force_pairing
+  USE control_flags,            ONLY : force_pairing, tprint
   USE mp,                       ONLY : mp_bcast, mp_sum
   USE mp_global,                ONLY : root_bgrp, intra_bgrp_comm, np_ortho, &
                                        me_ortho, ortho_comm, &
                                        me_bgrp, inter_bgrp_comm, nbgrp, me_image
   USE ldaU_cp,                  ONLY : lda_plus_u, vupsi
-  USE fft_base,                 ONLY : dfftp
+  USE fft_base,                 ONLY : dfftp, dffts
   USE london_module,            ONLY : energy_london, force_london, stres_london
   USE input_parameters,         ONLY : tcpbo
   USE funct,                    ONLY : dft_is_hybrid, start_exx, exx_is_active
@@ -130,8 +130,8 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
   !
   ! ... control variables
   !
-  LOGICAL :: tfirst, tlast, tstop, tconv
-  LOGICAL :: tprint, tfile, tstdout
+  LOGICAL :: tstop, tconv
+  LOGICAL :: tfile, tstdout
     !  logical variable used to control printout
   !
   ! ... forces on ions
@@ -171,9 +171,9 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
   enow     = 1.D9
   stress   = 0.0D0
   thstress   = 0.0D0
-  !
-  tfirst = .TRUE.
-  tlast  = .FALSE.
+  !  moved to control_flags.f90 (Modules)
+  !  tfirst = .TRUE.
+  !  tlast  = .FALSE.
   nacc   = 5
   !
   if (dft_is_meta()) then
@@ -215,7 +215,7 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
      dt2bye   = dt2 / emass
      nfi     = nfi + 1
      tlast   = ( nfi == nomore ) .OR. tlast
-     tprint  = ( MOD( nfi, iprint ) == 0 ) .OR. tlast 
+     tprint  = ( MOD( nfi, iprint ) == 0 ) .OR. tlast !this can be set to .true. also by cp_autopilot in 'call pilot(nfi)', to compute velocities of the wfc in the last step of CG
      tfile   = ( MOD( nfi, iprint ) == 0 )
      tstdout = ( MOD( nfi, iprint_stdout ) == 0 ) .OR. tlast
      !
@@ -278,7 +278,7 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
         !
         ! ... strucf calculates the structure factor sfac
         !
-        CALL strucf( sfac, eigts1, eigts2, eigts3, mill, ngms )
+        CALL strucf( sfac, eigts1, eigts2, eigts3, mill, dffts%ngm )
         !
      END IF
      !
@@ -672,7 +672,7 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
         IF ( tempp > (tempw+tolp) .OR. &
              tempp < (tempw-tolp) .AND. tempp /= 0.D0 ) THEN
            !
-           CALL  ions_vrescal( tcap, tempw, tempp, taup, &
+           CALL  ions_vrescal( .false., tempw, tempp, taup, &
                                tau0, taum, na, nsp, fion, iforce, pmass, delt )
            CALL r_to_s( taup, tausp, na, nsp, ainv ) 
            !
@@ -806,7 +806,7 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
            END IF
            CALL r_to_s( tau0, taus, na, nsp, ainv )
            CALL phfacs( eigts1,eigts2,eigts3, eigr, mill, taus, dfftp%nr1,dfftp%nr2,dfftp%nr3, nat )
-           CALL strucf( sfac, eigts1, eigts2, eigts3, mill, ngms )
+           CALL strucf( sfac, eigts1, eigts2, eigts3, mill, dffts%ngm )
            !
            IF ( thdyn )    CALL formf( tfirst, eself )
            IF ( tefield )  CALL efield_update( eigr )
@@ -825,6 +825,8 @@ SUBROUTINE cprmain( tau_out, fion_out, etot_out )
      END IF
      !
      ! ... now:  cm=c(t) c0=c(t+dt)
+     ! ... and, if tcg == .true.  :
+     ! ...    c0old=c(t),c0=c(t+dt)
      !
      tfirst = .FALSE.
      !

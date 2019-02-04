@@ -11,15 +11,12 @@
 ! ... adapted to accept any kind of density by Oliviero Andreussi
 !
 !--------------------------------------------------------------------
-SUBROUTINE compute_dipole( nnr, nspin, rho, r0, dipole, quadrupole )
+SUBROUTINE compute_dipole( nnr, rho, r0, dipole, quadrupole )
 !--------------------------------------------------------------------
   USE kinds,            ONLY : DP
   USE cell_base,        ONLY : at, bg, alat, omega
   USE fft_base,         ONLY : dfftp
   USE mp_bands,         ONLY : intra_bgrp_comm
-#if defined (__MPI)
-  USE mp_bands,         ONLY : me_bgrp
-#endif
   USE mp,               ONLY : mp_sum
   !
   IMPLICIT NONE
@@ -28,8 +25,8 @@ SUBROUTINE compute_dipole( nnr, nspin, rho, r0, dipole, quadrupole )
   !
   !     nnr is passed in input, but nnr should match dfftp%nnr
   !     for the calculation to be meaningful
-  INTEGER,  INTENT(IN)  :: nnr, nspin
-  REAL(DP), INTENT(IN)  :: rho( nnr, nspin )
+  INTEGER,  INTENT(IN)  :: nnr
+  REAL(DP), INTENT(IN)  :: rho( nnr )
   REAL(DP), INTENT(IN)  :: r0(3)
   REAL(DP), INTENT(OUT) :: dipole(0:3), quadrupole(3)
   !
@@ -88,9 +85,7 @@ SUBROUTINE compute_dipole( nnr, nspin, rho, r0, dipole, quadrupole )
      !
      CALL cryst_to_cart( 1, r, at, 1 )
      !
-     rhoir = rho( ir, 1 )
-     !
-     IF ( nspin == 2 ) rhoir = rhoir + rho(ir,2)
+     rhoir = rho( ir )
      !
      ! ... dipole(0) = charge density
      !

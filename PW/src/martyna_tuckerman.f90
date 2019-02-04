@@ -83,15 +83,15 @@ CONTAINS
   RETURN
   END SUBROUTINE wg_corr_loc
 !----------------------------------------------------------------------------
-  SUBROUTINE wg_corr_force( lnuclei, omega, nat, ntyp, ityp, ngm, g, tau, zv, strf, nspin, &
+  SUBROUTINE wg_corr_force( lnuclei, omega, nat, ntyp, ityp, ngm, g, tau, zv, strf, &
                             rho, force )
 !----------------------------------------------------------------------------
   USE cell_base, ONLY : tpiba
   USE mp_bands,  ONLY : intra_bgrp_comm
   USE mp,        ONLY : mp_sum
-  INTEGER, INTENT(IN) :: nat, ntyp, ityp(nat), ngm, nspin
+  INTEGER, INTENT(IN) :: nat, ntyp, ityp(nat), ngm
   REAL(DP), INTENT(IN) :: omega, zv(ntyp), tau(3,nat), g(3,ngm)
-  COMPLEX(DP), INTENT(IN) :: strf(ngm,ntyp), rho(ngm,nspin)
+  COMPLEX(DP), INTENT(IN) :: strf(ngm,ntyp), rho(ngm)
   LOGICAL, INTENT(IN) :: lnuclei
   ! this variable is used in wg_corr_force to select if
   ! corr should be done on rho and nuclei or only on rho
@@ -105,9 +105,8 @@ CONTAINS
   !
   allocate ( v(ngm) )
   do ig=1,ngm
-     rho_tot = rho(ig,1)
+     rho_tot = rho(ig)
      if(lnuclei) rho_tot = rho_tot - SUM(zv(1:ntyp)*strf(ig,1:ntyp)) / omega
-     if (nspin==2) rho_tot = rho_tot + rho(ig,2)
      v(ig) = e2 * wg_corr(ig) * rho_tot
   end do
   force(:,:) = 0._dp
@@ -131,7 +130,7 @@ CONTAINS
   USE fft_base,      ONLY : dfftp
   USE fft_interfaces,ONLY : fwfft, invfft
   USE control_flags, ONLY : gamma_only_ => gamma_only
-  USE gvect,         ONLY : ngm, gg, gstart_ => gstart, nl, nlm, ecutrho
+  USE gvect,         ONLY : ngm, gg, gstart_ => gstart, ecutrho
   USE cell_base,     ONLY : at, alat, tpiba2, omega
 
   INTEGER :: idx, ir, i,j,k, j0, k0, ig, nt
@@ -202,10 +201,10 @@ CONTAINS
 
   END DO
 
-  CALL fwfft ('Dense', aux, dfftp)
+  CALL fwfft ('Rho', aux, dfftp)
 
   do ig =1, ngm
-     wg_corr(ig) = omega * REAL(aux(nl(ig))) - smooth_coulomb_g( tpiba2*gg(ig))
+     wg_corr(ig) = omega * REAL(aux(dfftp%nl(ig))) - smooth_coulomb_g( tpiba2*gg(ig))
   end do
   wg_corr(:) =  wg_corr(:) * exp(-tpiba2*gg(:)*beta/4._dp)**2
   !
@@ -218,29 +217,29 @@ CONTAINS
      ALLOCATE(plot(dfftp%nnr))
 
      filplot = 'wg_corr_r'
-     CALL invfft ('Dense', aux, dfftp)
+     CALL invfft ('Rho', aux, dfftp)
      plot(:) = REAL(aux(:))
      call  write_wg_on_file(filplot, plot)
 
      filplot = 'wg_corr_g'
      aux(:) = (0._dp,0._dp)
      do ig =1, ngm
-        aux(nl(ig))  = smooth_coulomb_g( tpiba2*gg(ig))/omega
+        aux(dfftp%nl(ig))  = smooth_coulomb_g( tpiba2*gg(ig))/omega
      end do
-     if (gamma_only) aux(nlm(1:ngm)) = CONJG( aux(nl(1:ngm)) )
+     if (gamma_only) aux(dfftp%nlm(1:ngm)) = CONJG( aux(dfftp%nl(1:ngm)) )
 
-     CALL invfft ('Dense', aux, dfftp)
+     CALL invfft ('Rho', aux, dfftp)
      plot(:) = REAL(aux(:))
      call  write_wg_on_file(filplot, plot)
 
      filplot = 'wg_corr_diff'
      aux(:) = (0._dp,0._dp)
-     aux(nl(1:ngm)) = wg_corr(1:ngm) / omega
+     aux(dfftp%nl(1:ngm)) = wg_corr(1:ngm) / omega
      if (gamma_only) then
         aux(:) = 0.5_dp * aux(:) 
-        aux(nlm(1:ngm)) = aux(nlm(1:ngm)) + CONJG( aux(nl(1:ngm)) )
+        aux(dfftp%nlm(1:ngm)) = aux(dfftp%nlm(1:ngm)) + CONJG( aux(dfftp%nl(1:ngm)) )
      end if
-     CALL invfft ('Dense', aux, dfftp)
+     CALL invfft ('Rho', aux, dfftp)
      plot(:) = REAL(aux(:))
      call  write_wg_on_file(filplot, plot)
 
@@ -266,7 +265,7 @@ CONTAINS
   USE ions_base,       ONLY : zv, ntyp => nsp, nat, ityp, atm, tau
   CHARACTER (LEN=25), INTENT(IN) :: filplot
   REAL(DP) :: plot(dfftp%nnr)
-  CHARACTER (LEN=25) :: title
+  CHARACTER (LEN=75) :: title
   INTEGER :: plot_num=0, iflag=+1
 
   CALL plot_io (filplot, title, dfftp%nr1x, dfftp%nr2x, dfftp%nr3x, &

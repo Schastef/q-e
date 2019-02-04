@@ -23,13 +23,12 @@ SUBROUTINE init_run()
                                        vels, velsm, velsp, fion, fionm
   USE gvecw,                    ONLY : ngw, ngw_g, g2kin, g2kin_init
   USE smallbox_gvec,            ONLY : ngb
-  USE gvecs,                    ONLY : ngms
-  USE gvect,                    ONLY : ngm, gstart, gg
+  USE gvect,                    ONLY : gstart, gg
   USE fft_base,                 ONLY : dfftp, dffts
   USE electrons_base,           ONLY : nspin, nbsp, nbspx, nupdwn, f
   USE uspp,                     ONLY : nkb, vkb, deeq, becsum,nkbus
   USE core,                     ONLY : rhoc
-  USE wavefunctions_module,     ONLY : c0_bgrp, cm_bgrp, phi_bgrp
+  USE wavefunctions,     ONLY : c0_bgrp, cm_bgrp, phi_bgrp
   USE ensemble_dft,             ONLY : tens, z0t
   USE cg_module,                ONLY : tcg
   USE electrons_base,           ONLY : nudx, nbnd
@@ -63,11 +62,11 @@ SUBROUTINE init_run()
   USE efield_module,            ONLY : allocate_efield, allocate_efield2
   USE cg_module,                ONLY : allocate_cg
   USE wannier_module,           ONLY : allocate_wannier  
-  USE io_files,                 ONLY : tmp_dir, prefix
+  USE io_files,                 ONLY : tmp_dir, prefix, create_directory, &
+       restart_dir
   USE io_global,                ONLY : ionode, stdout
   USE printout_base,            ONLY : printout_base_init
   USE wave_types,               ONLY : wave_descriptor_info
-  USE xml_io_base,              ONLY : restart_dir, create_directory
   USE orthogonalize_base,       ONLY : mesure_diag_perf, mesure_mmul_perf
   USE ions_base,                ONLY : ions_reference_positions, cdmi
   USE mp_bands,                 ONLY : nbgrp
@@ -75,9 +74,9 @@ SUBROUTINE init_run()
   USE wrappers
   USE ldaU_cp
   USE control_flags,            ONLY : lwfpbe0nscf         ! exx_wf related 
-  USE wavefunctions_module,     ONLY : cv0                 ! exx_wf related
+  USE wavefunctions,     ONLY : cv0                 ! exx_wf related
   USE wannier_base,             ONLY : vnbsp               ! exx_wf related
-  USE cp_restart,               ONLY : cp_read_wfc_Kong    ! exx_wf related
+  !!!USE cp_restart,               ONLY : cp_read_wfc_Kong    ! exx_wf related
   USE input_parameters,         ONLY : ref_cell
   USE cell_base,                ONLY : ref_tpiba2, init_tpiba2
   USE tsvdw_module,             ONLY : tsvdw_initialize
@@ -138,7 +137,7 @@ SUBROUTINE init_run()
   !     allocate and initialize local and nonlocal potentials
   !=======================================================================
   !
-  CALL allocate_local_pseudo( ngms, nsp )
+  CALL allocate_local_pseudo( dffts%ngm, nsp )
   !
   CALL nlinit()
   !
@@ -146,7 +145,7 @@ SUBROUTINE init_run()
   !     allocation of all arrays not already allocated in init and nlinit
   !=======================================================================
   !
-  CALL allocate_mainvar( ngw, ngw_g, ngb, ngms, ngm, dfftp%nr1,dfftp%nr2,dfftp%nr3, dfftp%nr1x, &
+  CALL allocate_mainvar( ngw, ngw_g, ngb, dffts%ngm, dfftp%ngm, dfftp%nr1,dfftp%nr2,dfftp%nr3, dfftp%nr1x, &
                          dfftp%nr2x, dfftp%my_nr3p, dfftp%nnr, dffts%nnr, nat, nax, nsp,   &
                          nspin, nbsp, nbspx, nupdwn, nkb, gstart, nudx, &
                          tpre, nbspx_bgrp )
@@ -222,7 +221,7 @@ SUBROUTINE init_run()
   IF ( lwf ) THEN
      IF( nbgrp > 1 ) &
         CALL errore( ' init_run ', ' wannier with band parallelization not implemented ', 1 )
-     CALL allocate_wannier( nbsp, dffts%nnr, nspin, ngm )
+     CALL allocate_wannier( nbsp, dffts%nnr, nspin, dfftp%ngm )
   END IF
   !
   IF ( tens .OR. tcg ) THEN
@@ -317,7 +316,8 @@ SUBROUTINE init_run()
      !======================================================================
      ! Kong, read the valence orbitals
      IF(lwfpbe0nscf) THEN
-        CALL cp_read_wfc_Kong( 36, tmp_dir, 1, 1, 1, 1, cv0, 'v' )
+       !!! CALL cp_read_wfc_Kong( 36, tmp_dir, 1, 1, 1, 1, cv0, 'v' )
+       CALL errore( 'init_run', 'cp_read_wfc_Kong no longer available', 1)
      ENDIF
      !======================================================================
      i = 1  

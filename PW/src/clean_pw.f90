@@ -24,9 +24,8 @@ SUBROUTINE clean_pw( lflag )
   USE basis,                ONLY : swfcatom
   USE cellmd,               ONLY : lmovecell
   USE ions_base,            ONLY : deallocate_ions_base
-  USE gvect,                ONLY : g, gg, gl, nl, nlm, igtongl, mill, &
+  USE gvect,                ONLY : g, gg, gl, igtongl, mill, &
                                    eigts1, eigts2, eigts3
-  USE gvecs,                ONLY : nls, nlsm
   USE fixed_occ,            ONLY : f_inp
   USE ktetra,               ONLY : deallocate_tetra
   USE klist,                ONLY : deallocate_igk
@@ -38,7 +37,7 @@ SUBROUTINE clean_pw( lflag )
                                    vrs, kedtau, destroy_scf_type, vnew
   USE symm_base,            ONLY : irt
   USE symme,                ONLY : sym_rho_deallocate
-  USE wavefunctions_module, ONLY : evc, psic, psic_nc
+  USE wavefunctions, ONLY : evc, psic, psic_nc
   USE us,                   ONLY : qrad, tab, tab_at, tab_d2y, spline_ps
   USE uspp,                 ONLY : deallocate_uspp
   USE uspp_param,           ONLY : upf
@@ -67,6 +66,7 @@ SUBROUTINE clean_pw( lflag )
   !
   USE control_flags,        ONLY : ts_vdw
   USE tsvdw_module,         ONLY : tsvdw_finalize
+  USE dftd3_qe,             ONLY : dftd3_clean
   !
   IMPLICIT NONE
   !
@@ -96,6 +96,7 @@ SUBROUTINE clean_pw( lflag )
      !
      CALL dealloca_london()
      CALL cleanup_xdm()
+     CALL dftd3_clean()
      CALL deallocate_constraint()
      CALL deallocate_tetra ( )
      !
@@ -120,8 +121,6 @@ SUBROUTINE clean_pw( lflag )
   !
   IF ( ALLOCATED( g ) )          DEALLOCATE( g )
   IF ( ALLOCATED( gg ) )         DEALLOCATE( gg )
-  IF ( ALLOCATED( nl ) )         DEALLOCATE( nl )  
-  IF ( ALLOCATED( nlm ) )        DEALLOCATE( nlm )
   IF ( ALLOCATED( igtongl ) )    DEALLOCATE( igtongl )  
   IF ( ALLOCATED( mill ) )       DEALLOCATE( mill )
   call destroy_scf_type(rho)
@@ -137,8 +136,6 @@ SUBROUTINE clean_pw( lflag )
   if (spline_ps) then
     IF ( ALLOCATED( tab_d2y) )     DEALLOCATE( tab_d2y )
   endif
-  IF ( ALLOCATED( nls ) )     DEALLOCATE( nls )
-  IF ( ALLOCATED( nlsm ) )   DEALLOCATE( nlsm )
   !
   ! ... arrays allocated in allocate_locpot.f90 ( and never deallocated )
   !
@@ -215,7 +212,7 @@ SUBROUTINE clean_pw( lflag )
   !
   IF (ts_vdw) CALL tsvdw_finalize()
   !
-  CALL plugin_clean( lflag )
+  CALL plugin_clean( 'PW', lflag )
   !
   RETURN
   !

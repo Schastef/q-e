@@ -5,10 +5,6 @@
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
-#if defined(__OLDXML)
-   SUBROUTINE read_file_dummy()
-   END SUBROUTINE read_file_dummy
-#else
 !----------------------------------------------------------------------------
 SUBROUTINE read_file()
   !----------------------------------------------------------------------------
@@ -30,8 +26,7 @@ SUBROUTINE read_file()
   USE dfunct,               ONLY : newd
   USE ldaU,                 ONLY : lda_plus_u, U_projection
   USE pw_restart_new,       ONLY : read_collected_to_evc
-  USE control_flags,        ONLY : twfcollect
-  USE io_files,             ONLY : tmp_dir, prefix
+  USE io_files,             ONLY : tmp_dir, prefix, postfix
   USE control_flags,        ONLY : io_level
   USE klist,                ONLY : init_igk
   USE gvect,                ONLY : ngm, g
@@ -47,7 +42,7 @@ SUBROUTINE read_file()
   !
   ! ... Read the contents of the xml data file
   !
-  dirname = TRIM( tmp_dir ) // TRIM( prefix ) // '.save/'
+  dirname = TRIM( tmp_dir ) // TRIM( prefix ) // postfix
   IF ( ionode ) WRITE( stdout, '(/,5x,A,/,5x,A)') &
      'Reading data from directory:', TRIM( dirname )
   !
@@ -67,7 +62,7 @@ SUBROUTINE read_file()
   !
   CALL init_igk ( npwx, ngm, g, gcutw ) 
   !
-  IF ( twfcollect )  CALL read_collected_to_evc ( TRIM ( dirname )) 
+  CALL read_collected_to_evc ( TRIM ( dirname )) 
   !
   ! ... Assorted initialization: pseudopotentials, PAW
   ! ... Not sure which ones (if any) should be done here
@@ -93,11 +88,6 @@ SUBROUTINE read_file()
 END SUBROUTINE read_file
 !
 !----------------------------------------------------------------------------
-SUBROUTINE read_xml_file_nobs ( )
-! wrapper, to be removed ASAP
-  CALL read_xml_file ( )
-END SUBROUTINE read_xml_file_nobs
-!----------------------------------------------------------------------------
 SUBROUTINE read_xml_file ( )
   !----------------------------------------------------------------------------
   !
@@ -119,19 +109,19 @@ SUBROUTINE read_xml_file ( )
   USE fft_base,             ONLY : dfftp
   USE fft_interfaces,       ONLY : fwfft
   USE fft_types,            ONLY : fft_type_allocate
-  USE recvec_subs,          ONLY : ggen
-  USE gvect,                ONLY : gg, ngm, g, gcutm, &
-                                   eigts1, eigts2, eigts3, nl, gstart
+  USE recvec_subs,          ONLY : ggen, ggens
+  USE gvect,                ONLY : gg, ngm, g, gcutm, mill, ngm_g, ig_l2g, &
+                                   eigts1, eigts2, eigts3, gstart
   USE fft_base,             ONLY : dfftp, dffts
-  USE gvecs,                ONLY : ngms, nls, gcutms 
+  USE gvecs,                ONLY : ngms, gcutms 
   USE spin_orb,             ONLY : lspinorb, domag
   USE scf,                  ONLY : rho, rho_core, rhog_core, v
-  USE wavefunctions_module, ONLY : psic
+  USE wavefunctions, ONLY : psic
   USE vlocal,               ONLY : strf
   USE io_files,             ONLY : tmp_dir, prefix, iunpun, nwordwfc, iunwfc
   USE noncollin_module,     ONLY : noncolin, npol, nspin_lsda, nspin_mag, nspin_gga
   USE pw_restart_new,       ONLY :  pw_readschema_file, init_vars_from_schema 
-  USE qes_types_module,     ONLY :  output_type, parallel_info_type, general_info_type
+  USE qes_types_module,     ONLY :  output_type, parallel_info_type, general_info_type, input_type
   USE qes_libs_module,      ONLY :  qes_reset_output, qes_reset_input, qes_reset_general_info, qes_reset_parallel_info 
   USE io_rho_xml,           ONLY : read_scf
   USE fft_rho,              ONLY : rho_g2r
@@ -147,6 +137,11 @@ SUBROUTINE read_xml_file ( )
   USE esm,                  ONLY : do_comp_esm, esm_init
   USE mp_bands,             ONLY : intra_bgrp_comm, nyfft
   USE Coul_cut_2D,          ONLY : do_cutoff_2D, cutoff_fact 
+#if defined(__BEOWULF)
+  USE io_global,             ONLY : ionode, ionode_id
+  USE bcast_qes_types_module,ONLY : qes_bcast 
+  USE mp_images,             ONLY : intra_image_comm
+#endif
   !
   IMPLICIT NONE
 
@@ -156,11 +151,23 @@ SUBROUTINE read_xml_file ( )
   CHARACTER(LEN=20) dft_name
   TYPE ( output_type)                   :: output_obj 
   TYPE (parallel_info_type)             :: parinfo_obj
-  TYPE (general_info_type )             :: geninfo_obj 
+  TYPE (general_info_type )             :: geninfo_obj
+  TYPE (input_type)                     :: input_obj
   !
   !
-  CALL pw_readschema_file ( ierr, output_obj, parinfo_obj, geninfo_obj)
+#if defined(__BEOWULF)
+   IF (ionode) THEN
+      CALL pw_readschema_file ( ierr, output_obj, parinfo_obj, geninfo_obj, input_obj)
+      IF ( ierr /= 0 ) CALL errore ( 'read_schema', 'unable to read xml file', ierr ) 
+   END IF
+   CALL qes_bcast(output_obj, ionode_id, intra_image_comm)
+   CALL qes_bcast(parinfo_obj, ionode_id, intra_image_comm)
+   CALL qes_bcast(geninfo_obj, ionode_id, intra_image_comm) 
+   CALL qes_bcast(input_obj, ionode_id, intra_image_comm)
+#else
+  CALL pw_readschema_file ( ierr, output_obj, parinfo_obj, geninfo_obj, input_obj)
   IF ( ierr /= 0 ) CALL errore ( 'read_schema', 'unable to read xml file', ierr ) 
+#endif
   ! ... first we get the version of the qexml file
   !     if not already read
   !
@@ -223,7 +230,7 @@ SUBROUTINE read_xml_file ( )
   !
   ! ... here we read all the variables defining the system
   !
-  CALL init_vars_from_schema ( 'nowave', ierr, output_obj, parinfo_obj, geninfo_obj )
+  CALL init_vars_from_schema ( 'nowave', ierr, output_obj, parinfo_obj, geninfo_obj, input_obj )
   !
   ! ... distribute across pools k-points and related variables.
   ! ... nks is defined by the following routine as the number 
@@ -276,7 +283,9 @@ SUBROUTINE read_xml_file ( )
   CALL pre_init()
   CALL data_structure ( gamma_only )
   CALL allocate_fft()
-  CALL ggen ( gamma_only, at, bg ) 
+  CALL ggen ( dfftp, gamma_only, at, bg, gcutm, ngm_g, ngm, &
+       g, gg, mill, ig_l2g, gstart ) 
+  CALL ggens( dffts, gamma_only, at, g, gg, mill, gcutms, ngms ) 
   IF (do_comp_esm) THEN
      CALL init_vars_from_schema ( 'esm', ierr, output_obj, parinfo_obj, geninfo_obj ) 
      CALL esm_init()
@@ -295,18 +304,17 @@ SUBROUTINE read_xml_file ( )
   !
   IF ( lda_plus_u ) THEN
      CALL init_lda_plus_u ( upf(1:nsp)%psd, noncolin )
+     CALL init_at_1()
   ENDIF
   !
   CALL allocate_wfc()
   !
   ! ... read the charge density
   !
-  CALL read_scf( rho, nspin )
-#if ! defined (__OLDXML)
+  CALL read_scf( rho, nspin, gamma_only )
   ! FIXME: for compatibility. rho was previously read and written in real space
   ! FIXME: now it is in G space - to be removed together with old format
-  CALL rho_g2r ( rho%of_g, rho%of_r )
-#endif
+  CALL rho_g2r ( dfftp, rho%of_g, rho%of_r )
   !
   ! ... re-calculate the local part of the pseudopotential vltot
   ! ... and the core correction charge (if any) - This is done here
@@ -326,8 +334,8 @@ SUBROUTINE read_xml_file ( )
   DO is = 1, nspin
      !
      psic(:) = rho%of_r(:,is)
-     CALL fwfft ('Dense', psic, dfftp)
-     rho%of_g(:,is) = psic(nl(:))
+     CALL fwfft ('Rho', psic, dfftp)
+     rho%of_g(:,is) = psic(dfftp%nl(:))
      !
   END DO
   !
@@ -340,6 +348,7 @@ SUBROUTINE read_xml_file ( )
   CALL qes_reset_output ( output_obj )  
   CALL qes_reset_general_info ( geninfo_obj ) 
   CALL qes_reset_parallel_info ( parinfo_obj ) 
+  IF ( TRIM(input_obj%tagname) == "input") CALL qes_reset_input ( input_obj) 
   ! 
   RETURN
   !
@@ -349,7 +358,7 @@ SUBROUTINE read_xml_file ( )
     SUBROUTINE set_dimensions()
       !------------------------------------------------------------------------
       !
-      USE constants, ONLY : pi
+      USE constants, ONLY : pi, eps8
       USE cell_base, ONLY : alat, tpiba, tpiba2
       USE gvect,     ONLY : ecutrho, gcutm
       USE gvecs,     ONLY : gcutms, dual, doublegrid
@@ -367,7 +376,7 @@ SUBROUTINE read_xml_file ( )
       gcutm = dual * ecutwfc / tpiba2
       ecutrho=dual * ecutwfc
       !
-      doublegrid = ( dual > 4.D0 )
+      doublegrid = ( dual > 4.0_dp + eps8 )
       IF ( doublegrid ) THEN
          gcutms = 4.D0 * ecutwfc / tpiba2
       ELSE
@@ -377,4 +386,3 @@ SUBROUTINE read_xml_file ( )
     END SUBROUTINE set_dimensions
     !
   END SUBROUTINE read_xml_file
-#endif

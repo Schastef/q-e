@@ -10,31 +10,45 @@ MODULE emend_upf_module
   !! Contains utility to make the old UPF format readable by FoX
 
 PRIVATE 
-PUBLIC make_emended_upf_copy 
+PUBLIC make_emended_upf_copy
 
 CONTAINS 
-SUBROUTINE make_emended_upf_copy( filename, tempname) 
+FUNCTION  make_emended_upf_copy( filename, tempname)  RESULT(xml_check)
   !! author: Pietro Delugas
   !! Utility to make the old UPF format readable by FoX
   !! Replaces "&" with "&amp;" in file "filename", writes to file "tempname"
   !
   IMPLICIT NONE
   CHARACTER(LEN=*),INTENT(IN)      :: filename, tempname
+  LOGICAL                          :: xml_check
   !
   INTEGER                          :: iun_source, iun_dest, ierr 
   INTEGER,EXTERNAL                 :: find_free_unit 
   LOGICAL                          :: icopy = .FALSE.
-  CHARACTER(LEN=256)               :: line 
+  CHARACTER(LEN=1024)              :: line 
   ! 
   iun_source = find_free_unit()
   OPEN (UNIT = iun_source, FILE = TRIM(filename), STATUS = 'old', &
-       ACTION = 'read', FORM='formatted')
+       ACTION = 'read', FORM='formatted', iostat=ierr)
+  IF ( ierr /= 0 ) CALL errore ("make_emended_upf", &
+          "error opening file " // TRIM (filename),abs(ierr))
+  READ ( iun_source, "(a)", IOSTAT = ierr ) line
+     IF ( ierr < 0 ) CALL errore ("make_emended_upf", &
+             TRIM (filename) // " is empty",abs(ierr))
+     IF (INDEX(line, '<?xml') == 0 .AND. INDEX(line,'<UPF') == 0) THEN
+        xml_check = .FALSE. 
+        CLOSE ( iun_source )
+        RETURN 
+     ELSE 
+        xml_check = .TRUE. 
+        REWIND( iun_source )
+     END IF
   iun_dest = find_free_unit()
   OPEN (UNIT = iun_dest, FILE = TRIM(tempname), STATUS = 'unknown', &
        ACTION = 'write', FORM = 'formatted')
   copy_loop: DO
      ! 
-     READ(iun_source, "(a256)", IOSTAT = ierr ) line 
+     READ(iun_source, "(a)", IOSTAT = ierr ) line 
      IF (ierr < 0 ) EXIT copy_loop
      !  
      IF ( INDEX(line,"<UPF") /= 0 ) icopy = .TRUE. 
@@ -46,9 +60,11 @@ SUBROUTINE make_emended_upf_copy( filename, tempname)
   END DO copy_loop
   ! 
   CLOSE ( iun_source) 
-  CLOSE ( iun_dest )   
-END SUBROUTINE  make_emended_upf_copy 
+  CLOSE ( iun_dest )
+  !
+END FUNCTION make_emended_upf_copy
 !
+
 FUNCTION check(in) RESULT (out) 
       CHARACTER (LEN = *)     :: in
 #if defined(__PGI)

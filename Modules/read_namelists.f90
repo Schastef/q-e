@@ -120,7 +120,6 @@ MODULE read_namelists_module
        lelfield = .FALSE.
        lorbm = .FALSE.
        nberrycyc  = 1
-       lkpoint_dir = .TRUE.
        lecrpa   = .FALSE.   
        tqmmm = .FALSE.
        !
@@ -223,8 +222,8 @@ MODULE read_namelists_module
        n_proj = 0    
        localization_thr = 0.0_dp
        scdm=.FALSE.
-       scdmden=0.10d0
-       scdmgrd=0.20d0
+       scdmden=1.0d0
+       scdmgrd=1.0d0
        !
        ! ... electric fields
        !
@@ -280,8 +279,8 @@ MODULE read_namelists_module
        ts_vdw_isolated = .FALSE.
        ts_vdw_econv_thr = 1.E-6_DP
        xdm = .FALSE.
-       xdm_a1 = 0.6836_DP
-       xdm_a2 = 1.5045_DP
+       xdm_a1 = 0.0_DP
+       xdm_a2 = 0.0_DP
        !
        ! ... ESM
        !
@@ -380,6 +379,7 @@ MODULE read_namelists_module
        diagonalization = 'david'
        diago_thr_init = 0.0_DP
        diago_cg_maxiter = 20
+       diago_ppcg_maxiter = 20
        diago_david_ndim = 4
        diago_full_acc = .FALSE.
        !
@@ -572,6 +572,7 @@ MODULE read_namelists_module
        cell_nstepe = 1
        cell_damping = 0.1_DP
        press_conv_thr = 0.5_DP
+       treinit_gvecs = .FALSE.
        !
        RETURN
        !
@@ -726,7 +727,6 @@ MODULE read_namelists_module
        CALL mp_bcast( gdir,          ionode_id, intra_image_comm )
        CALL mp_bcast( nppstr,        ionode_id, intra_image_comm )
        CALL mp_bcast( point_label_type,   ionode_id, intra_image_comm )
-       CALL mp_bcast( lkpoint_dir,   ionode_id, intra_image_comm )
        CALL mp_bcast( wf_collect,    ionode_id, intra_image_comm )
        CALL mp_bcast( lelfield,      ionode_id, intra_image_comm )
        CALL mp_bcast( lorbm,         ionode_id, intra_image_comm )
@@ -977,6 +977,7 @@ MODULE read_namelists_module
        CALL mp_bcast( diagonalization,      ionode_id, intra_image_comm )
        CALL mp_bcast( diago_thr_init,       ionode_id, intra_image_comm )
        CALL mp_bcast( diago_cg_maxiter,     ionode_id, intra_image_comm )
+       CALL mp_bcast( diago_ppcg_maxiter,   ionode_id, intra_image_comm )
        CALL mp_bcast( diago_david_ndim,     ionode_id, intra_image_comm )
        CALL mp_bcast( diago_full_acc,       ionode_id, intra_image_comm )
        CALL mp_bcast( sic,                  ionode_id, intra_image_comm )
@@ -1129,6 +1130,7 @@ MODULE read_namelists_module
        CALL mp_bcast( cell_nstepe,      ionode_id, intra_image_comm )
        CALL mp_bcast( cell_damping,     ionode_id, intra_image_comm )
        CALL mp_bcast( press_conv_thr,   ionode_id, intra_image_comm )
+       CALL mp_bcast( treinit_gvecs,    ionode_id, intra_image_comm )
        !
        RETURN
        !
@@ -1984,21 +1986,28 @@ MODULE read_namelists_module
        INTEGER,INTENT(in) :: ios, unit_loc
        CHARACTER(LEN=*) :: nl_name
        CHARACTER(len=512) :: line
+       INTEGER :: ios2
        !
        IF( ionode ) THEN
-         !READ( unit_loc, control, iostat = ios )
+         ios2=0
          IF (ios /=0) THEN
            BACKSPACE(unit_loc)
-           READ(unit_loc,'(A512)') line
-          END IF
+           READ(unit_loc,'(A512)', iostat=ios2) line
+         END IF
        END IF
+
+       CALL mp_bcast( ios2, ionode_id, intra_image_comm )
+       IF( ios2 /= 0 ) THEN
+          CALL errore( ' read_namelists ', ' could not find namelist &'//TRIM(nl_name), 2)
+       ENDIF
+       !
        CALL mp_bcast( ios, ionode_id, intra_image_comm )
        CALL mp_bcast( line, ionode_id, intra_image_comm )
        IF( ios /= 0 ) THEN
           CALL errore( ' read_namelists ', &
                        ' bad line in namelist &'//TRIM(nl_name)//&
                        ': "'//TRIM(line)//'" (error could be in the previous line)',&
-                       ABS(ios) )
+                       1 )
        END IF
        !
      END SUBROUTINE check_namelist_read

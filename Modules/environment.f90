@@ -22,6 +22,7 @@ MODULE environment
   USE mp_pools,  ONLY: npool
   USE mp_bands,  ONLY: ntask_groups, nproc_bgrp, nbgrp, nyfft
   USE global_version, ONLY: version_number, svn_revision
+  USE fox_init_module, ONLY: fox_init
 #if defined(__HDF5)
   USE qeh5_base_module,   ONLY: initialize_hdf5, finalize_hdf5
 #endif
@@ -125,8 +126,9 @@ CONTAINS
 #else
     CALL serial_info()
 #endif
-#if defined(__HDF5) & !defined(__OLDXML)
-  CALL initialize_hdf5()
+    CALL fox_init()
+#if defined(__HDF5)
+    CALL initialize_hdf5()
 #endif
   END SUBROUTINE environment_start
 
@@ -177,7 +179,6 @@ CONTAINS
          &/9X," URL http://www.quantum-espresso.org"", ", &
          &/5X,"in publications or presentations arising from this work. More details at",&
          &/5x,"http://www.quantum-espresso.org/quote")' )
-
     RETURN
   END SUBROUTINE opening_message
 

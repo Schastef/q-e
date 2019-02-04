@@ -52,7 +52,7 @@ SUBROUTINE addusstress_g (sigmanlc)
   USE ions_base,  ONLY : nat, ntyp => nsp, ityp
   USE cell_base,  ONLY : omega, tpiba
   USE fft_base,   ONLY : dfftp
-  USE gvect,      ONLY : ngm, nl, nlm, gg, g, eigts1, eigts2, eigts3, mill
+  USE gvect,      ONLY : ngm, gg, g, eigts1, eigts2, eigts3, mill
   USE lsda_mod,   ONLY : nspin
   USE scf,        ONLY : v, vltot
   USE uspp,       ONLY : becsum, okvan
@@ -92,9 +92,9 @@ SUBROUTINE addusstress_g (sigmanlc)
      ELSE
         aux(:) = vltot(:) + v%of_r(:,is)
      ENDIF
-     CALL fwfft ('Dense', aux, dfftp)
+     CALL fwfft ('Rho', aux, dfftp)
      DO ig = 1, ngm
-        vg (ig, is) = aux (nl (ig) )
+        vg (ig, is) = aux (dfftp%nl (ig) )
      ENDDO
   ENDDO
   DEALLOCATE ( aux )
@@ -132,8 +132,8 @@ SUBROUTINE addusstress_g (sigmanlc)
            DO ih = 1, nh (nt)
               DO jh = ih, nh (nt)
                  ijh = ijh + 1
-                 CALL dqvan2 (ngm_l, ih, jh, nt, qmod, qgm(1,ijh), ylmk0, &
-                      dylmk0, ipol)
+                 CALL dqvan2 (ih, jh, nt, ipol, ngm_l, g(1,ngm_s), qmod, &
+                      ylmk0, dylmk0, qgm(1,ijh))
               ENDDO
            ENDDO
            !

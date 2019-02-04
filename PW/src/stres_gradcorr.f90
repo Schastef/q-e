@@ -8,8 +8,7 @@
 !
 !----------------------------------------------------------------------------
 subroutine stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
-                           nr1, nr2, nr3, nrxx, nl, &
-                           ngm, g, alat, omega, sigmaxc )
+                           dfft, g, alat, omega, sigmaxc )
   !----------------------------------------------------------------------------
   !
   USE kinds,            ONLY : DP
@@ -19,25 +18,28 @@ subroutine stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
                                tau_xc, tau_xc_spin
   USE mp_bands,         ONLY : intra_bgrp_comm
   USE mp,               ONLY : mp_sum
+  USE fft_types,        ONLY : fft_type_descriptor
   !
   IMPLICIT NONE
   !
-  integer, intent(in) :: nspin, nr1, nr2, nr3, nrxx, ngm, nl (ngm)
-  real(DP), intent(inout):: rho (nrxx, nspin) , kedtau(nrxx, nspin)
+  TYPE(fft_type_descriptor), INTENT(IN):: dfft
+  integer, intent(in) :: nspin
+  real(DP), intent(inout):: rho (dfft%nnr, nspin) , kedtau(dfft%nnr, nspin)
   ! FIXME: should be intent(in)
-  real(dp), intent(in) :: rho_core (nrxx), g(3, ngm), alat, omega
-  complex(DP), intent(inout) :: rhog(ngm, nspin)
+  real(dp), intent(in) :: rho_core (dfft%nnr), g(3,dfft%ngm), alat, omega
+  complex(DP), intent(inout) :: rhog(dfft%ngm, nspin)
   ! FIXME: should be intent(in)
-  complex(DP), intent(in) :: rhog_core(ngm)
-  real(dp), intent(inout) :: sigmaxc (3, 3)
+  complex(DP), intent(in) :: rhog_core(dfft%ngm)
+  real(dp), intent(inout) :: sigmaxc(3, 3)
   !
   integer :: k, l, m, ipol, is, nspin0
+  integer :: nr1, nr2, nr3, nrxx, ngm
   real(DP) , allocatable :: grho (:,:,:)
   real(DP), parameter :: epsr = 1.0d-6, epsg = 1.0d-10, e2 = 2.d0
-  real(DP) :: grh2, grho2 (2), sx, sc, v1x, v2x, v1c, v2c, fac, &
+  real(DP) :: grh2, grho2(2), sgn(2), fac(2), sx, sc, v1x, v2x, v1c, v2c, &
        v1xup, v1xdw, v2xup, v2xdw, v1cup, v1cdw, v2cup, v2cdw, v2cud, &
        zeta, rh, rup, rdw, grhoup, grhodw, grhoud, grup, grdw, &
-       sigma_gradcorr (3, 3)
+       sigma_gradcorr(3, 3)
   logical :: igcc_is_lyp
   !dummy variables for meta-gga
   real(DP) :: v3x,v3c,v3xup,v3xdw,v3cup,v3cdw
@@ -53,21 +55,29 @@ subroutine stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
 
   sigma_gradcorr(:,:) = 0.d0
 
+  nr1 = dfft%nr1
+  nr2 = dfft%nr2
+  nr3 = dfft%nr3
+  nrxx= dfft%nnr
+  ngm = dfft%ngm
+  !
   allocate (grho( 3, nrxx, nspin))    
   nspin0=nspin
   if (nspin==4) nspin0=1
-  fac = 1.d0 / DBLE (nspin0)
+  fac(1) = dble(mod(nspin0,2)+1)  ;   fac(2) = 0.d0
+  sgn(1) = 1.d0                   ;   sgn(2) = -1.d0
   !
   !    calculate the gradient of rho+rhocore in real space
+  !    in LSDA case rho is temporarily converted in (up,down) format
   !
-  DO is = 1, nspin0
+  do is = 1, nspin0
      !
-     rho(:,is)  = fac * rho_core(:)  + rho(:,is)
-     rhog(:,is) = fac * rhog_core(:) + rhog(:,is)
+     rho(:,is)  = ( fac(is)* rho_core(:) +  rho(:,1) + sgn(is)* rho(:,nspin0) )*is/2.d0
+     rhog(:,is) = ( fac(is)*rhog_core(:) + rhog(:,1) + sgn(is)*rhog(:,nspin0) )*is/2.d0
      !
-     CALL gradrho( nrxx, rhog(1,is), ngm, g, nl, grho(1,1,is) )
+     call fft_gradient_g2r( dfft, rhog(1,is), g, grho(1,1,is) )
      !
-  END DO
+  enddo
   !
   if (nspin.eq.1) then
      !
@@ -209,12 +219,13 @@ subroutine stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
   sigmaxc(:,:) = sigmaxc(:,:) + sigma_gradcorr(:,:) / &
                                 (nr1 * nr2 * nr3)
   
-  DO is = 1, nspin0
+  ! rho and rhog are restored to the original values
+  do is = 1, nspin0
      !
-     rho(:,is)  = rho(:,is)  - fac * rho_core(:)
-     rhog(:,is) = rhog(:,is) - fac * rhog_core(:)
+     rho(:,is) =(  rho(:,1) + is*sgn(is)* rho(:,nspin0) )*nspin0/2.d0 - mod(is,2)* rho_core(:)
+     rhog(:,is)=( rhog(:,1) + is*sgn(is)*rhog(:,nspin0) )*nspin0/2.d0 - mod(is,2)*rhog_core(:)
      !
-  END DO
+  enddo
   !
   deallocate(grho)
   return

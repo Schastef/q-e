@@ -81,6 +81,7 @@
 
         INTEGER   :: iforceh(3,3) = 1  ! if iforceh( i, j ) = 0 then h( i, j ) 
                                        ! is not allowed to move
+        LOGICAL   :: enforce_ibrav = .FALSE.! True if ibrav representation is fix
         LOGICAL   :: fix_volume = .FALSE.! True if cell volume is kept fixed
         LOGICAL   :: fix_area = .FALSE.  ! True if area in xy plane is kept constant
         LOGICAL   :: isotropic = .FALSE. ! True if volume option is chosen for cell_dofree 
@@ -696,6 +697,9 @@
 
             CASE ( 'all', 'default' )
               iforceh = 1
+            CASE ( 'ibrav')
+              iforceh = 1
+              enforce_ibrav = .true.
             CASE ( 'shape' )
               iforceh = 1
               fix_volume = .true.
@@ -760,6 +764,26 @@
               iforceh(1,1) = 1
               iforceh(2,2) = 1
               iforceh(3,3) = 1
+! epitaxial constraints (2 axes fixed, one free)
+! added by ulrich.aschauer@dcb.unibe.ch on 2018-02-02
+            CASE ('epitaxial_ab')
+              !fix the a and b axis while allowing c to change
+              iforceh      = 0
+              iforceh(1,3) = 1
+              iforceh(2,3) = 1
+              iforceh(3,3) = 1
+            CASE ('epitaxial_ac')
+              !fix the a and c axis while allowing b to change
+              iforceh      = 0
+              iforceh(1,2) = 1
+              iforceh(2,2) = 1
+              iforceh(3,2) = 1
+            CASE ('epitaxial_bc')
+              !fix the b and c axis while allowing a to change
+              iforceh      = 0
+              iforceh(1,1) = 1
+              iforceh(2,1) = 1
+              iforceh(3,1) = 1
             CASE DEFAULT
               CALL errore(' init_dofree ',' unknown cell_dofree '//TRIM(cell_dofree), 1 )
 

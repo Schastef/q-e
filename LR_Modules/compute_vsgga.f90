@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2016 Quantum ESPRESSO group
+! Copyright (C) 2001-2018 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -12,8 +12,7 @@ SUBROUTINE compute_vsgga( rhoout, grho, vsgga )
   !
   USE constants,            ONLY : e2
   USE kinds,                ONLY : DP
-  USE gvect,                ONLY : nl, ngm, g
-  USE cell_base,            ONLY : alat
+  USE gvect,                ONLY : ngm, g
   USE noncollin_module,     ONLY : noncolin, nspin_gga
   USE funct,                ONLY : gcxc, gcx_spin, gcc_spin, &
                                    gcc_spin_more, dft_is_gradient, get_igcc
@@ -154,7 +153,7 @@ SUBROUTINE compute_vsgga( rhoout, grho, vsgga )
   !
   DO is = 1, nspin_gga
      !
-     CALL grad_dot( dfftp%nnr, h(1,1,is), ngm, g, nl, alat, dh )
+     CALL fft_graddot( dfftp, h(1,1,is), g, dh )
      !
      vaux(:,is) = vaux(:,is) - dh(:)
      !

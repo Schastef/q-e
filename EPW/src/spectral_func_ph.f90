@@ -7,7 +7,7 @@
   ! present distribution, or http://www.gnu.org/copyleft.gpl.txt .             
   !                                                                            
   !-----------------------------------------------------------------------
-  SUBROUTINE spectral_func_ph (iq )
+  SUBROUTINE spectral_func_ph ( iqq, iq, totq )
   !-----------------------------------------------------------------------
   !
   !  Compute the imaginary part of the phonon self energy due to electron-
@@ -26,26 +26,29 @@
   USE io_global, ONLY : stdout
   USE io_epw,    ONLY : iospectral_sup, iospectral
   USE phcom,     ONLY : nmodes
-  USE epwcom,    ONLY : nbndsub, lrepmatf, fsthick, &
+  USE epwcom,    ONLY : nbndsub, fsthick, &
                         eptemp, ngaussw, degaussw, &
                         shortrange, nsmear, delta_smear, eps_acustic, &
                         efermi_read, fermi_energy, wmin_specfun,&
                         wmax_specfun, nw_specfun
   USE pwcom,     ONLY : nelec, ef, isk
-  USE cell_base, ONLY : tpiba2
   USE elph2,     ONLY : epf17, ibndmax, ibndmin, etf, &
-                        wkf, xqf, wqf, nkqf, nqtotf,   &
+                        wkf, xqf, nkqf, &
                         nkf, wf, a_all, &
-                        dmef, gammai_all,gammar_all, efnew
-  USE constants_epw, ONLY : ryd2mev, ryd2ev, two, zero, pi, cone, ci
+                        gammai_all,gammar_all, efnew
+  USE constants_epw, ONLY : ryd2mev, ryd2ev, two, zero, pi, cone, ci, eps8
   USE mp_world,      ONLY : mpime
   USE mp,            ONLY : mp_barrier, mp_sum
-  USE mp_global,     ONLY : me_pool, inter_pool_comm, ionode_id
+  USE mp_global,     ONLY : inter_pool_comm, ionode_id
   !
   implicit none
   !
+  INTEGER, INTENT (in) :: iqq
+  !! Current q-point index from selecq
   INTEGER, INTENT (in) :: iq
   !! Current q-point index 
+  INTEGER, INTENT (in) :: totq
+  !! Total q-points in selecq window
   ! 
   INTEGER :: ik
   !! Counter on the k-point index 
@@ -59,8 +62,6 @@
   !! Counter on bands  
   INTEGER :: imode
   !! Counter on mode
-  INTEGER :: nrec
-  !! Record index for reading the e-f matrix
   INTEGER :: fermicount
   !! Number of states on the Fermi surface
   INTEGER :: ismear
@@ -76,8 +77,6 @@
   !! Phonon frequency on the fine grid
   REAL(kind=DP) :: ef0
   !! Fermi energy level
-  REAL(kind=DP) :: wgq
-  !! Bose occupation factor $n_{q\nu}(T)$
   REAL(kind=DP) :: wgkk
   !! Fermi-Dirac occupation factor $f_{nk}(T)$
   REAL(kind=DP) :: wgkq
@@ -94,10 +93,6 @@
   !! Temperature
   REAL(kind=DP) :: inv_eptemp0
   !! Inverse temperature
-  REAL(kind=DP) :: lambda_tot
-  !! El-ph coupling strength
-  REAL(kind=DP) :: lambda_tr_tot
-  !! Transport el-ph coupling strength
   REAL(kind=DP) :: inv_wq
   !! $frac{1}{2\omega_{q\nu}}$ defined for efficiency reasons  
   REAL(kind=DP) :: g2
@@ -110,16 +105,6 @@
   !! Current frequency
   REAL(kind=DP) :: dw
   !! Frequency intervals 
-  REAL(kind=DP) :: qsquared
-  !! q-point squared
-  REAL(kind=DP) :: eps0
-  !! Dielectric function \varepsilon_\inf
-  REAL(kind=DP) :: RTF
-  !! Resta Thomas-Fermi
-  REAL(kind=DP) :: qTF
-  !! q Thomas-Fermi
-  REAL(kind=DP) :: epsTF
-  !! Thomas-Fermi dielectric function
   REAL(kind=DP), EXTERNAL :: efermig
   !! Function to compute the Fermi energy 
   REAL(kind=DP), external :: dos_ef
@@ -129,8 +114,6 @@
   REAL(kind=DP), external :: w0gauss
   !! This function computes the derivative of the Fermi-Dirac function
   !! It is therefore an approximation for a delta function
-  REAL(kind=DP), PARAMETER :: eps2 = 0.01/ryd2mev
-  !! Tolerence  
   !
   dw = ( wmax_specfun - wmin_specfun ) / dble (nw_specfun-1)
   !
@@ -142,7 +125,7 @@
   !qsquared = (xqf(1,iq)**2 + xqf(2,iq)**2 + xqf(3,iq)**2) * tpiba2
   !epsTF =  (qTF**2 + qsquared) / (qTF**2/eps0 * sin (sqrt(qsquared)*RTF)/(sqrt(qsquared)*RTF)+qsquared)
   !
-  IF ( iq .eq. 1 ) THEN 
+  IF ( iqq == 1 ) THEN 
     WRITE(stdout,'(/5x,a)') repeat('=',67)
     WRITE(stdout,'(5x,"Phonon Spectral Function Self-Energy in the Migdal Approximation (on the fly)")') 
     WRITE(stdout,'(5x,a/)') repeat('=',67)
@@ -153,8 +136,8 @@
     WRITE(stdout, '(/5x,a,f10.6,a)' ) &
          'Golden Rule strictly enforced with T = ',eptemp * ryd2ev, ' eV'
     !
-    IF ( .not. ALLOCATED (gammai_all)  )  ALLOCATE( gammai_all (nmodes,nqtotf,nw_specfun) )
-    IF ( .not. ALLOCATED (gammar_all)  )  ALLOCATE( gammar_all (nmodes,nqtotf,nw_specfun) )
+    IF ( .not. ALLOCATED (gammai_all)  )  ALLOCATE( gammai_all (nmodes, totq, nw_specfun) )
+    IF ( .not. ALLOCATED (gammar_all)  )  ALLOCATE( gammar_all (nmodes, totq, nw_specfun) )
     gammar_all(:,:,:)  = zero
     gammai_all(:,:,:)  = zero
     !
@@ -180,8 +163,7 @@
        !
        ef0 = efermig(etf,nbndsub,nkqf,nelec,wkf,degaussw0,ngaussw,0,isk)
        ! if some bands are skipped (nbndskip.neq.0), nelec has already been
-       ! recalculated 
-       ! in ephwann_shuffle
+       ! recalculated in ephwann_shuffle
        !
      ELSE !SP: This is added for efficiency reason because the efermig routine is slow
        ef0 = efnew
@@ -196,7 +178,7 @@
        WRITE (stdout, 101) dosef / ryd2ev, ef0 * ryd2ev
      ENDIF
      !
-     CALL start_clock('PH SELF-ENERGY')
+     CALL start_clock('PH SPECTRAL-FUNCTIO')
      !
      fermicount = 0
      gamma0(:)  = zero
@@ -207,7 +189,7 @@
        ! 
        ! Here we must have ef, not ef0, to be consistent with ephwann_shuffle
        IF ( ( minval ( abs(etf (:, ikk) - ef) ) .lt. fsthick ) .AND. &
-           ( minval ( abs(etf (:, ikq) - ef) ) .lt. fsthick ) ) THEN
+            ( minval ( abs(etf (:, ikq) - ef) ) .lt. fsthick ) ) THEN
          !
          fermicount = fermicount + 1
          !
@@ -244,11 +226,11 @@
                ! with hbar = 1 and M already contained in the eigenmodes
                ! g2 is Ry^2, wkf must already account for the spin factor
                !
-               IF ( shortrange .AND. ( abs(xqf (1, iq))> eps2 .OR. abs(xqf (2, iq))> eps2 &
-                  .OR. abs(xqf (3, iq))> eps2 )) THEN
+               IF ( shortrange .AND. ( abs(xqf (1, iq))> eps8 .OR. abs(xqf (2, iq))> eps8 &
+                  .OR. abs(xqf (3, iq))> eps8 )) THEN
                  ! SP: The abs has to be removed. Indeed the epf17 can be a pure imaginary 
                  !     number, in which case its square will be a negative number. 
-                 g2 = (epf17 (jbnd, ibnd, imode, ik)**two)*inv_wq*g2_tmp !* epsTF
+                 g2 = REAL( (epf17 (jbnd, ibnd, imode, ik)**two)*inv_wq*g2_tmp ) !* epsTF
                ELSE
                  g2 = (abs(epf17 (jbnd, ibnd, imode, ik))**two)*inv_wq*g2_tmp !* epsTF
                ENDIF
@@ -298,7 +280,7 @@
        !
      ENDDO ! loop on k
      !
-     CALL stop_clock('PH SELF-ENERGY')
+     CALL stop_clock('PH SPECTRAL-FUNCTION')
      !
 #if defined(__MPI)
      !
@@ -314,10 +296,10 @@
 #endif
      !
      WRITE(stdout,'(5x,a)')
-     IF (.not. ALLOCATED (a_all)) ALLOCATE ( a_all(nw_specfun,nqtotf) )
+     IF (.not. ALLOCATED (a_all)) ALLOCATE ( a_all(nw_specfun, totq) )
      a_all(:,:) = zero
      !
-     IF (iq == 1 ) THEN
+     IF (iqq == 1 ) THEN
        IF (mpime.eq.ionode_id) THEN
          OPEN(unit=iospectral,file='specfun.phon')
          OPEN(unit=iospectral_sup,file='specfun_sup.phon')
@@ -338,7 +320,7 @@
        WRITE(stdout,105) imode, ryd2ev * wq, ryd2mev * gammar_all(imode,iq,1), ryd2mev * gammai_all(imode,iq,1)
      ENDDO 
      WRITE( stdout, '(5x,a,i8,a,i8)' ) &
-      'Number of (k,k+q) pairs on the Fermi surface: ',fermicount, ' out of ', nqtotf
+      'Number of (k,k+q) pairs on the Fermi surface: ',fermicount, ' out of ', totq
 
      !
      ! Write to support files
@@ -371,8 +353,8 @@
        !
      ENDDO
      !
-     IF (iq == nqtotf ) THEN
-       IF (mpime.eq.ionode_id) THEN
+     IF (iqq == totq ) THEN
+       IF (mpime == ionode_id) THEN
          CLOSE(iospectral)
          CLOSE(iospectral_sup)
        ENDIF 
@@ -383,8 +365,6 @@
   !
 100 FORMAT(5x,'Gaussian Broadening: ',f10.6,' eV, ngauss=',i4)
 101 FORMAT(5x,'DOS =',f10.6,' states/spin/eV/Unit Cell at Ef=',f10.6,' eV')
-103 FORMAT(5x,'iq = ',i7,'  w = ',f9.4,' eV   A(k,w) = ',e12.5,' meV^-1')
-104 FORMAT(5x,'E( ',i3,' )=',f12.4,' meV   Re[Pi]=',f12.4,' - ', f12.4, ' meV Im[Pi]=',f12.4,' meV Im[Pi-o]=',f12.4,' meV ')
 105 FORMAT(5x,'Omega( ',i3,' )=',f9.4,' eV   Re[Pi]=',f15.6,' meV Im[Pi]=',f15.6,' meV')
   !
   RETURN

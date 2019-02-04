@@ -33,15 +33,14 @@ SUBROUTINE projwave_boxes( filpdos, filproj, n_proj_boxes, irmin, irmax, plotbox
   USE control_flags, ONLY: gamma_only
   USE uspp,      ONLY: okvan
   USE noncollin_module, ONLY: noncolin, npol
-  USE wavefunctions_module, ONLY: evc,    psic
-  USE wavefunctions_module, ONLY: psic_nc
+  USE wavefunctions, ONLY: evc,    psic, psic_nc
   USE io_files,             ONLY : iunwfc, nwordwfc
   USE scf,                  ONLY : rho
   USE projections_ldos,     ONLY : proj
   USE fft_base,             ONLY : dfftp
   USE scatter_mod,          ONLY : scatter_grid
   USE fft_interfaces,       ONLY : invfft
-  USE mp_global,            ONLY : intra_pool_comm
+  USE mp_pools,             ONLY : intra_pool_comm
   USE mp,                   ONLY : mp_sum
 !
   !
@@ -187,9 +186,6 @@ SUBROUTINE projwave_boxes( filpdos, filproj, n_proj_boxes, irmin, irmax, plotbox
      CALL DCOPY (dfftp%nnr, rho%of_r, 1, raux, 1)
   ELSE
      CALL DCOPY (dfftp%nnr, rho%of_r (1, 1), 1, raux, 1)
-     DO is = 2, nspin
-        CALL DAXPY (dfftp%nnr, 1.d0, rho%of_r (1, is), 1, raux, 1)
-     ENDDO
   ENDIF
   !
   ! B2. Integrate the charge
@@ -234,12 +230,12 @@ SUBROUTINE projwave_boxes( filpdos, filproj, n_proj_boxes, irmin, irmax, plotbox
            !
            psic_nc = (0.d0,0.d0)
            DO ig = 1, npw
-              psic_nc(nl(igk_k(ig,ik)),1)=evc(ig     ,ibnd)
-              psic_nc(nl(igk_k(ig,ik)),2)=evc(ig+npwx,ibnd)
+              psic_nc(dfftp%nl(igk_k(ig,ik)),1)=evc(ig     ,ibnd)
+              psic_nc(dfftp%nl(igk_k(ig,ik)),2)=evc(ig+npwx,ibnd)
            ENDDO
            raux=0._DP
            DO ipol=1,npol
-              CALL invfft ('Dense', psic_nc(:,ipol), dfftp)
+              CALL invfft ('Rho', psic_nc(:,ipol), dfftp)
               raux(:) = raux(:)+dble( psic_nc(:,ipol) )**2 &
                              + aimag( psic_nc(:,ipol) )**2
            ENDDO
@@ -248,14 +244,14 @@ SUBROUTINE projwave_boxes( filpdos, filproj, n_proj_boxes, irmin, irmax, plotbox
            !
            caux(1:dfftp%nnr) = (0._DP,0._DP)
            DO ig = 1, npw
-              caux (nl (igk_k (ig,ik) ) ) = evc (ig, ibnd)
+              caux (dfftp%nl (igk_k (ig,ik) ) ) = evc (ig, ibnd)
            ENDDO
            IF (gamma_only) THEN
               DO ig = 1, npw
-                 caux (nlm(igk_k (ig,ik) ) ) = conjg(evc (ig, ibnd))
+                 caux (dfftp%nlm(igk_k (ig,ik) ) ) = conjg(evc (ig, ibnd))
               ENDDO
            ENDIF
-           CALL invfft ('Dense', caux, dfftp)
+           CALL invfft ('Rho', caux, dfftp)
            !
            raux(:) = dble( caux(:) )**2 + aimag( caux(:) )**2
            !

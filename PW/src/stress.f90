@@ -16,7 +16,7 @@ subroutine stress ( sigma )
   USE ions_base,     ONLY : nat, ntyp => nsp, ityp, tau, zv, atm
   USE constants,     ONLY : ry_kbar
   USE ener,          ONLY : etxc, vtxc
-  USE gvect,         ONLY : ngm, gstart, nl, g, gg, gcutm
+  USE gvect,         ONLY : ngm, gstart, g, gg, gcutm
   USE fft_base,      ONLY : dfftp
   USE ldaU,          ONLY : lda_plus_u, U_projection
   USE lsda_mod,      ONLY : nspin
@@ -72,18 +72,10 @@ subroutine stress ( sigma )
   !   contribution from local  potential
   !
   call stres_loc(sigmaloc) ! In ESM, sigmaloc has only short term.
-  IF ( do_comp_esm .and. ( esm_bc .ne. 'pbc' ) ) THEN ! for ESM stress
-     call esm_stres_loclong( sigmaloclong, rho%of_g ) ! long range part
-     sigmaloc(:,:) = sigmaloc(:,:) + sigmaloclong(:,:)
-  END IF
   !
   !  hartree contribution
   !
-  IF ( do_comp_esm .and. ( esm_bc .ne. 'pbc' ) ) THEN ! for ESM stress
-     call esm_stres_har( sigmahar, rho%of_g )
-  ELSE
-     call stres_har (sigmahar)
-  END IF
+  IF (.not.( do_comp_esm .and. ( esm_bc .ne. 'pbc' ) )) call stres_har(sigmahar)
   !
   !  xc contribution (diagonal)
   !
@@ -94,17 +86,25 @@ subroutine stress ( sigma )
   !
   !  xc contribution: add gradient corrections (non diagonal)
   !
-  call stres_gradcorr ( rho%of_r, rho%of_g, rho_core, rhog_core, rho%kin_r, nspin, &
-                        dfftp%nr1, dfftp%nr2, dfftp%nr3, dfftp%nnr, nl, &
-                        ngm, g, alat, omega, sigmaxc)
-  !
-  !  add meta-GGA contribution 
-  !
-  call stres_mgga ( sigmaxc )
+  call stres_gradcorr ( rho%of_r, rho%of_g, rho_core, rhog_core, rho%kin_r, &
+       nspin, dfftp, g, alat, omega, sigmaxc)
   !
   ! core correction contribution
   !
   call stres_cc (sigmaxcc)
+  !
+  IF ( do_comp_esm .and. ( esm_bc .ne. 'pbc' ) ) THEN  ! for ESM stress
+     call esm_stres_loclong( sigmaloclong, rho%of_g(:,1) ) ! long range part
+     sigmaloc(:,:) = sigmaloc(:,:) + sigmaloclong(:,:)
+  END IF
+  !
+  !  hartree contribution - for ESM stress
+  !
+  IF ( do_comp_esm .and. ( esm_bc .ne. 'pbc' ) )  call esm_stres_har( sigmahar, rho%of_g(:,1) )
+  !
+  !  add meta-GGA contribution 
+  !
+  call stres_mgga ( sigmaxc )
   !
   !  ewald contribution
   !
@@ -173,7 +173,7 @@ subroutine stress ( sigma )
   !   DFT-non_local contribution
   !
   sigma_nonloc_dft (:,:) = 0.d0
-  call stres_nonloc_dft(rho%of_r, rho_core, nspin, sigma_nonloc_dft)
+  call stres_nonloc_dft(rho%of_r(:,1), rho_core, nspin, sigma_nonloc_dft)  
   !
   ! SUM
   !

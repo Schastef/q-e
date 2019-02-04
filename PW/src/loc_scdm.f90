@@ -15,7 +15,7 @@ MODULE loc_scdm
   !
   USE kinds,                ONLY : DP
   USE io_global,            ONLY : stdout
-  USE exx,                  ONLY : exx_fft, x_nbnd_occ, locbuff, locmat, nkqs
+  USE exx,                  ONLY : dfftt, locbuff, locmat
 
   IMPLICIT NONE
   SAVE
@@ -35,25 +35,31 @@ SUBROUTINE localize_orbitals( )
   USE noncollin_module,  ONLY : npol
   USE wvfct,             ONLY : nbnd
   USE control_flags,     ONLY : gamma_only
+  USE exx,               ONLY : x_occupation
+  USE exx_base,          ONLY : nkqs
   !   
   implicit none
-  integer :: NGrid
+  integer :: NGrid, ikq, NBands
   character(len=1) :: HowTo
   
   if(.not.gamma_only) CALL errore('localize_orbitals', 'k-points NYI.',1)    
 
-  NGrid = exx_fft%dfftt%nnr * npol
+  NGrid = dfftt%nnr * npol
   HowTo = 'G'  ! How to compute the absolute overlap integrals
 
-  locmat = One
-  CALL measure_localization(HowTo,locbuff(1,1,1),NGrid,x_nbnd_occ,nkqs,locmat(1:x_nbnd_occ,1:x_nbnd_occ))
-  CALL SCDM_PGG(locbuff(1,1,1), NGrid, x_nbnd_occ)
-  locmat = One
-  CALL measure_localization(HowTo,locbuff(1,1,1),NGrid,x_nbnd_occ,nkqs,locmat(1:x_nbnd_occ,1:x_nbnd_occ))
+  DO ikq = 1, nkqs
+    NBands = int(sum(x_occupation(:,ikq)))
+    locmat(:,:,ikq) = One
+    CALL measure_localization(HowTo,NBands,ikq)
+    CALL SCDM_PGG(locbuff(1,1,ikq), NGrid, NBands)
+    locmat(:,:,ikq) = One
+    CALL measure_localization(HowTo,NBands,ikq)
+  END DO
 
 END SUBROUTINE localize_orbitals
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-SUBROUTINE measure_localization(CFlag, orbt, NGrid, NBands, NKK, MatLoc) 
+SUBROUTINE measure_localization(CFlag, NBands, IKK) 
+USE noncollin_module,  ONLY : npol
 USE cell_base,         ONLY : alat, omega, at, bg
 USE exx,               ONLY : compute_density
 USE constants,         ONLY : bohr_radius_angs 
@@ -64,11 +70,9 @@ implicit none
 !              CFlag = 'R' real space integral (exact but slow) 
 !                      'G' via FFT (fast but less accurate) 
 !
-  INTEGER :: NGrid, NBands, jbnd, kbnd, NKK
-  REAL(DP) :: orbt(NGrid, NBands,NKK)
+  INTEGER :: NBands, jbnd, kbnd, IKK
   REAL(DP) :: loc_diag, loc_off, tmp, DistMax
   REAL(DP) :: RDist(3),  SpreadPBC(3), TotSpread
-  REAL(DP), OPTIONAL :: MatLoc(NBands,NBands)
   REAL(DP), ALLOCATABLE :: CenterPBC(:,:), Mat(:,:)
   CHARACTER(LEN=1) :: CFlag
   REAL(DP), PARAMETER :: epss=0.0010d0
@@ -76,9 +80,9 @@ implicit none
   ALLOCATE( Mat(NBands,NBands), CenterPBC(3,NBands) )
 
   IF(CFlag.eq.'R') then 
-    Call AbsOvR(orbt, NGrid, NBands, NKK, Mat) 
+    Call AbsOvR(NBands, IKK, Mat) 
   ELSEIF(CFlag.eq.'G') then 
-    call AbsOvG(orbt, NGrid, NBands, NKK, Mat) 
+    call AbsOvG(NBands, IKK, Mat) 
   ELSE
     call errore('measure_localization','Wrong CFlag',1)
   END IF 
@@ -89,7 +93,9 @@ implicit none
   DistMax   = Zero 
   DO jbnd = 1, NBands
     loc_diag = loc_diag + Mat(jbnd,jbnd) 
-    call compute_density(.false.,.false.,CenterPBC(1,jbnd), SpreadPBC, tmp, orbt(1,jbnd,1), orbt(1,jbnd,1), NGrid, jbnd, jbnd)
+    call compute_density(.false.,.false.,CenterPBC(1,jbnd), SpreadPBC, tmp, &
+                         locbuff(1,jbnd,IKK), locbuff(1,jbnd,IKK), &
+                         dfftt%nnr*npol, jbnd, jbnd)
     TotSpread = TotSpread + SpreadPBC(1) + SpreadPBC(2) + SpreadPBC(3) 
     DO kbnd = 1, jbnd - 1 
       loc_off = loc_off + Mat(jbnd,kbnd) 
@@ -109,12 +115,13 @@ implicit none
   write(stdout,'(7X,A,f12.6,I3)') 'Total Abs. Overlap =', loc_off 
   write(stdout,'(7X,A,f12.6,I3)') 'Total Spread [A**2]   =', TotSpread * bohr_radius_angs**2
   write(stdout,'(7X,A,f12.6,I3)') 'Aver. Spread [A**2]   =', TotSpread * bohr_radius_angs**2/ dble(NBands) 
-  IF(present(MatLoc)) MAtLoc = Mat
+  locmat(1:NBands,1:NBands,IKK) = Mat 
   DEALLOCATE( CenterPBC, Mat ) 
 
 END SUBROUTINE measure_localization
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-SUBROUTINE AbsOvG(orbt, NGrid, NBands, NKK, Mat) 
+SUBROUTINE AbsOvG(NBands, IKK, Mat) 
+USE noncollin_module,  ONLY : npol
 USE fft_interfaces,    ONLY : fwfft
 USE wvfct,             ONLY : npwx
 implicit none
@@ -122,8 +129,8 @@ implicit none
 ! Compute the Absolute Overlap in G-space 
 ! (cutoff might not be accurate for the moduli of the wavefunctions)
 !
-  INTEGER :: NGrid, NBands, jbnd, ig, NKK
-  REAL(DP) :: orbt(NGrid, NBands,NKK), Mat(NBands,NBands), tmp
+  INTEGER :: NBands, jbnd, ig, IKK
+  REAL(DP) :: Mat(NBands,NBands), tmp
   COMPLEX(DP), ALLOCATABLE :: buffer(:), Gorbt(:,:)
 
   call start_clock('measure')
@@ -132,16 +139,16 @@ implicit none
   write(stdout,'(5X,A)') 'Absolute Overlap calculated in G-space'
 
 ! Localized functions to G-space and Overlap matrix onto localized functions
-  allocate( buffer(NGrid), Gorbt(npwx,NBands) )
+  allocate( buffer(dfftt%nnr * npol), Gorbt(npwx,NBands) )
 
   Mat = Zero 
   buffer = (Zero,Zero)
   Gorbt = (Zero,Zero) 
   DO jbnd = 1, NBands 
-    buffer(:) = abs(dble(orbt(:,jbnd,NKK))) + (Zero,One)*Zero  
-    CALL fwfft( 'CustomWave' , buffer, exx_fft%dfftt )
+    buffer(:) = abs(dble(locbuff(:,jbnd, IKK))) + (Zero,One)*Zero  
+    CALL fwfft( 'Wave' , buffer, dfftt )
     DO ig = 1, npwx
-      Gorbt(ig,jbnd) = buffer(exx_fft%nlt(ig))
+      Gorbt(ig,jbnd) = buffer(dfftt%nl(ig))
     ENDDO
   ENDDO
   CALL matcalc('Coeff-',.false.,0,npwx,NBands,NBands,Gorbt,Gorbt,Mat,tmp)
@@ -151,7 +158,7 @@ implicit none
 
 END SUBROUTINE AbsOvG 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-SUBROUTINE AbsOvR(orbt, NGrid, NBands, NKK, Mat) 
+SUBROUTINE AbsOvR(NBands, IKK, Mat) 
 USE mp,                ONLY : mp_sum
 USE mp_bands,          ONLY : intra_bgrp_comm
 implicit none
@@ -159,8 +166,8 @@ implicit none
 ! Compute the Absolute Overlap in R-space 
 ! (Exact but slow)
 !
-  INTEGER :: NGrid, NBands, nxxs, ir, jbnd, kbnd, NKK
-  REAL(DP) :: orbt(NGrid, NBands, NKK), Mat(NBands,NBands)
+  INTEGER :: NBands, nxxs, ir, jbnd, kbnd, IKK
+  REAL(DP) :: Mat(NBands,NBands)
   REAL(DP) ::  cost, tmp
 
   call start_clock('measure')
@@ -168,13 +175,13 @@ implicit none
   write(stdout,'(5X,A)') ' ' 
   write(stdout,'(5X,A)') 'Absolute Overlap calculated in R-space'
 
-  nxxs = exx_fft%dfftt%nr1x *exx_fft%dfftt%nr2x *exx_fft%dfftt%nr3x
+  nxxs = dfftt%nr1x *dfftt%nr2x *dfftt%nr3x
   cost = One/dble(nxxs)
   Mat = Zero 
   DO jbnd = 1, NBands
-    Mat(jbnd,jbnd) = Mat(jbnd,jbnd) + cost * sum( abs(orbt(:,jbnd,NKK)) * abs(orbt(:,jbnd,NKK)))
+    Mat(jbnd,jbnd) = Mat(jbnd,jbnd) + cost * sum( abs(locbuff(:,jbnd,IKK)) * abs(locbuff(:,jbnd,IKK)))
     DO kbnd = 1, jbnd - 1 
-        tmp = cost * sum( abs(orbt(:,jbnd,NKK)) * abs(orbt(:,kbnd,NKK)) )
+        tmp = cost * sum( abs(locbuff(:,jbnd,IKK)) * abs(locbuff(:,kbnd,IKK)) )
         Mat(jbnd,kbnd) = Mat(jbnd,kbnd) + tmp 
         Mat(kbnd,jbnd) = Mat(kbnd,jbnd) + tmp
     ENDDO
@@ -205,7 +212,7 @@ IMPLICIT NONE
   write(stdout,'(5X,A)') ' ' 
   write(stdout,'(5X,A)') 'SCDM localization with prescreening'
 
-  allocate( den(exx_fft%dfftt%nnr), grad_den(3, exx_fft%dfftt%nnr) )
+  allocate( den(dfftt%nnr), grad_den(3, dfftt%nnr) )
 
   Call scdm_thresholds( den, grad_den, ThrDen, ThrGrd )
 
@@ -236,7 +243,9 @@ IMPLICIT NONE
   deallocate( cpu_npt )
 
 ! Cholesky(psi)^(-1) in mat 
-  CALL invchol(NBands,mat)
+! CALL invchol(NBands,mat)
+  CALL MatChol(NBands,mat)
+  CALL MatInv('L',NBands,mat)
   Call MatSymm('U','L',mat, NBands)
 
 ! Phi = Pc * Chol^(-1) = QRbuff * mat
@@ -252,61 +261,71 @@ END SUBROUTINE SCDM_PGG
 SUBROUTINE scdm_thresholds( den, grad_den, ThrDen, ThrGrd )
 USE cell_base,         ONLY : omega
 USE fft_base,          ONLY : dfftp
+USE fft_interfaces,    ONLY : fft_interpolate
 USE scf,               ONLY : rho
 USE lsda_mod,          ONLY : nspin
-USE mp,                ONLY : mp_sum
+USE mp,                ONLY : mp_sum, mp_max
 USE mp_bands,          ONLY : intra_bgrp_comm
+USE exx,               ONLY : gt
 IMPLICIT NONE
-  REAL(DP), INTENT(OUT) :: den(exx_fft%dfftt%nnr), grad_den(3, exx_fft%dfftt%nnr) 
+  REAL(DP), INTENT(OUT) :: den(dfftt%nnr), grad_den(3, dfftt%nnr) 
   REAL(DP), INTENT(OUT) :: ThrDen, ThrGrd 
 
   REAL(DP), ALLOCATABLE :: temp(:) 
-  REAL(DP) :: charge, grad, DenAve, GrdAve
+  REAL(DP) :: charge, grad, DenAve, GrdAve, DenMax, GrdMax
   INTEGER :: ir, ir_end, nxxs, nxtot
 
 ! interpolate density to the exx grid
   allocate( temp(dfftp%nnr))
   temp(:) = rho%of_r(:,1)
-  IF ( nspin == 2 ) temp(:) = temp(:) + rho%of_r(:,2) 
-  Call exx_interpolate(temp, den, -1)
+  Call fft_interpolate(dfftp, temp, dfftt, den)
   deallocate( temp ) 
 
 #if defined (__MPI)
-  ir_end = exx_fft%dfftt%nr1x*exx_fft%dfftt%my_nr2p*exx_fft%dfftt%my_nr3p
+  ir_end = dfftt%nr1x*dfftt%my_nr2p*dfftt%my_nr3p
 #else
-  ir_end = exx_fft%dfftt%nnr
+  ir_end = dfftt%nnr
 #endif
-  nxtot = exx_fft%dfftt%nr1x *exx_fft%dfftt%nr2x *exx_fft%dfftt%nr3x
-  nxxs = exx_fft%dfftt%nnr 
+  nxtot = dfftt%nr1x *dfftt%nr2x *dfftt%nr3x
+  nxxs = dfftt%nnr 
 
   charge = Zero
   DenAve = Zero
+  DenMax = Zero
   do ir = 1, ir_end 
     charge = charge + den(ir) * omega / dble(nxtot) 
     DenAve = DenAve + den(ir)
+    IF(DenMax.lt.den(ir)) DenMax=den(ir)
   end do 
   call mp_sum(DenAve,intra_bgrp_comm)
   call mp_sum(charge,intra_bgrp_comm)
+  call mp_max(DenMax,intra_bgrp_comm)
   DenAve = DenAve / dble(nxtot)
   write(stdout,'(7x,A,f12.6)') 'Charge  = ', charge
   write(stdout,'(7x,A,f12.6)') 'DenAve  = ', DenAve 
-  ThrDen = scdm_den 
+  write(stdout,'(7x,A,f12.6)') 'DenMax  = ', DenMax 
 
 ! gradient on the exx grid 
-  Call exx_gradient( nxxs, den , exx_fft%ngmt, exx_fft%gt, exx_fft%nlt, grad_den )
+  call fft_gradient_r2r ( dfftt, den, gt, grad_den )
   charge  = Zero
   GrdAve = Zero 
+  GrdMax = Zero 
   do ir = 1, ir_end 
     grad  = sqrt( grad_den(1,ir)**2  +  grad_den(2,ir)**2  +  grad_den(3,ir)**2  )
     charge = charge + grad * omega / dble(nxtot)
     GrdAve = GrdAve + grad
+    IF(GrdMax.lt.grad) GrdMax=grad
   end do 
   call mp_sum(GrdAve,intra_bgrp_comm)
   call mp_sum(charge,intra_bgrp_comm)
+  call mp_max(GrdMax,intra_bgrp_comm)
   GrdAve = GrdAve / dble(nxtot)
   write(stdout,'(7X,A,f12.6)') 'GradTot = ', charge
   write(stdout,'(7X,A,f12.6)') 'GrdAve  = ', GrdAve 
-  ThrGrd = scdm_grd 
+  write(stdout,'(7X,A,f12.6)') 'GrdMax  = ', GrdMax 
+
+  ThrDen = scdm_den * DenAve  
+  ThrGrd = scdm_grd * GrdAve  
   write(stdout,'(7x,2(A,f12.6))') 'scdm_den = ', scdm_den, ' scdm_grd = ',scdm_grd
   write(stdout,'(7x,2(A,f12.6))') 'ThrDen   = ', ThrDen,   ' ThrGrd   = ',ThrGrd  
 
@@ -344,16 +363,16 @@ USE mp_bands,          ONLY : intra_bgrp_comm, me_bgrp, nproc_bgrp
 !
 IMPLICIT NONE
   INTEGER, INTENT(OUT) :: cpu_npt(0:nproc_bgrp-1), nptot
-  REAL(DP), INTENT(IN) :: den(exx_fft%dfftt%nnr), grad_den(3, exx_fft%dfftt%nnr) 
+  REAL(DP), INTENT(IN) :: den(dfftt%nnr), grad_den(3, dfftt%nnr) 
   REAL(DP), INTENT(IN) :: ThrDen, ThrGrd 
 
   INTEGER :: npt, ir, ir_end
   REAL(DP) :: grad
 
 #if defined (__MPI)
-  ir_end = exx_fft%dfftt%nr1x*exx_fft%dfftt%my_nr2p*exx_fft%dfftt%my_nr3p
+  ir_end = dfftt%nr1x*dfftt%my_nr2p*dfftt%my_nr3p
 #else
-  ir_end = exx_fft%dfftt%nnr
+  ir_end = dfftt%nnr
 #endif
 
   npt = 0
@@ -372,7 +391,7 @@ IMPLICIT NONE
   if(nptot.le.0) call errore('SCDM_PGG', 'No points prescreened. Loose the thresholds', 1) 
   call mp_sum(cpu_npt,intra_bgrp_comm)
   write(stdout,'(7X,2(A,I8))')  'Max npt = ', maxval(cpu_npt(:)), ' Min npt = ', minval(cpu_npt(:))
-  write(stdout,'(7X,2(A,I10))') 'Reduced matrix, allocate: ', nptot, ' out of ', exx_fft%dfftt%nnr 
+  write(stdout,'(7X,2(A,I10))') 'Reduced matrix, allocate: ', nptot, ' out of ', dfftt%nr1x *dfftt%nr2x *dfftt%nr3x
 
 END SUBROUTINE scdm_points
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -388,7 +407,7 @@ IMPLICIT NONE
   INTEGER, INTENT(IN)  :: cpu_npt(0:nproc_bgrp-1), nptot
   INTEGER, INTENT(IN)  :: NGrid, NBands
   REAL(DP), INTENT(IN) :: psi(NGrid,NBands) 
-  REAL(DP), INTENT(IN) :: den(exx_fft%dfftt%nnr), grad_den(3, exx_fft%dfftt%nnr) 
+  REAL(DP), INTENT(IN) :: den(dfftt%nnr), grad_den(3, dfftt%nnr) 
   REAL(DP), INTENT(IN) :: ThrDen, ThrGrd 
 
   INTEGER :: ir, ir_end, INFO, lwork
@@ -397,9 +416,9 @@ IMPLICIT NONE
   REAL(DP), ALLOCATABLE :: small(:,:), tau(:), work(:)
 
 #if defined (__MPI)
-  ir_end = exx_fft%dfftt%nr1x*exx_fft%dfftt%my_nr2p*exx_fft%dfftt%my_nr3p
+  ir_end = dfftt%nr1x*dfftt%my_nr2p*dfftt%my_nr3p
 #else
-  ir_end = exx_fft%dfftt%nnr
+  ir_end = dfftt%nnr
 #endif
 
 ! find the map of the indeces

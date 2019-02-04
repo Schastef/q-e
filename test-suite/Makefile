@@ -35,19 +35,21 @@ prolog :
 pseudo :
 	@./check_pseudo.sh pw_
 	@./check_pseudo.sh cp_
-
+	@./check_pseudo.sh epw_
 
 run-tests : run-tests-serial
 
-run-tests-serial : run-tests-cp-serial run-tests-pw-serial
+run-tests-serial : run-tests-pw-serial run-tests-cp-serial 
 
-run-tests-parallel : run-tests-cp-parallel run-tests-pw-parallel
+run-tests-parallel : run-tests-pw-parallel run-tests-cp-parallel run-tests-ph-parallel run-tests-epw-parallel
 
 
-run-tests-cp-serial : prolog pseudo 
+run-tests-cp-serial : prolog pseudo
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
 	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=cp_all
 
 run-tests-cp-parallel : prolog pseudo
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
 	env QE_USE_MPI=1 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=cp_all
 
 run-tests-pw-serial : prolog pseudo
@@ -63,7 +65,7 @@ run-tests-ph-parallel : prolog pseudo
 	env QE_USE_MPI=1 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=ph_all
 
 run-tests-epw-serial : prolog pseudo
-	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=epw_all
+	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=epw_partial
 
 run-tests-epw-parallel : prolog pseudo
 	env QE_USE_MPI=1 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=epw_all
@@ -89,7 +91,8 @@ run-tests-xsd-pw-serial : prolog pseudo
 		python ../validate_xsd_pw.py $$file; \
     done ; cd ..
 
-create-reference-cp : pseudo prolog 
+create-reference-cp : pseudo prolog
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
 	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --category=cp_all make-benchmarks
 
 create-reference-pw : pseudo prolog
@@ -114,14 +117,20 @@ compare-epw : prolog
 	${TESTCODE_DIR}/bin/testcode.py --category=epw_all  --verbose compare 2>&1 | tee out.EPW.`date +%Y%m%d_%H%M%S`
 
 clean:
+# output files
 	@for x in `find pw_* -name "test*"`; do rm -rf $$x; done
 	@for x in `find ph_* -name "test*"`; do rm -rf $$x; done
 	@for x in `find cp_* -name "test*"`; do rm -rf $$x; done
 	@for x in `find epw_* -name "test*"`; do rm -rf $$x; done
+# error files
 	@for x in `find pw_* -name "CRASH"`; do rm -rf $$x; done
 	@for x in `find ph_* -name "CRASH*"`; do rm -rf $$x; done
 	@for x in `find cp_* -name "CRASH"`; do rm -rf $$x; done
 	@for x in `find epw_* -name "CRASH"`; do rm -rf $$x; done
+# pwscf data files
+	@rm -rf pw_*/pwscf.* ph_*/pwscf.* epw_*/pwscf.*
+# cp data files
+	@rm -rf cp_si/si_*.* co_o2/o2_*.* cp_h2o/h2o_*.* cp_sio2/sio2_*.*
 # Special case for 'pw_vc-relax' test-case
 	@rm -f pw_vc-relax/ave pw_vc-relax/e pw_vc-relax/tv pw_vc-relax/p pw_vc-relax/eal pw_vc-relax/avec
 # Special case for 'noexe_langevin' test-case
@@ -143,13 +152,21 @@ clean:
 		epw_*/*.chk epw_*/*.phdos_proj epw_*/*..a2f epw_*/*.imag_aniso_gap_FS_25.00 \
 		epw_*/*.epmatwp epw_*/*.phdos epw_*/*.epwane epw_*/*.ephmat \
 		epw_*/*.fmt epw_*/*.H epw_*/*.epb* epw_*/*self epw_*/*.a2f epw_*/*.01 \
-		epw_*/*.kpt epw_*/*.gnu epw_*/*.eig epw_*/*.lambda_FS epw_*/*.sigma_restart1 \
-		epw_*/specfun.phon epw_*/specfun_sup.phon
+		epw_*/*.kpt epw_*/*.gnu epw_*/*.eig epw_*/*.lambda_FS epw_*/*.sigma_restart* \
+		epw_*/specfun.phon epw_*/specfun_sup.phon epw_*/*.tau_restart* \
+                epw_*/*_elcond_* epw_*/fort.* epw_*/decay.* epw_*/scattering_rate* \
+                epw_*/*.fc.* epw_*/*_band.dat epw_*/*F_restart* epw_*/*F_restart_CB* \
+                epw_*/*.mmn epw_*/*.epmatkq* epw_*/*.epmatkqcb* epw_*/sparse* \
+                epw_*/*.Fin_restart* epw_*/*.Fin_restartcb* epw_*/*.acon_iso_* \
+                epw_*/*.imag_aniso* epw_*/*.imag_iso* epw_*/*.pade_* epw_*/*qdos_* \
+                epw_*/epsilon2_indabs.dat epw_*/epsilon2_indabs_lorenz.dat
+                
 # Special cases for EPW
 	@rm -rf epw_base/save epw_super/save
 
 # Special case EPW
 	@rm -rf epw_trev/save	
+	@rm -rf epw_trev_uspp/save	
 	@rm -f userconfig
 
 # Calling 'purge' means remove all reference outputs... be careful!

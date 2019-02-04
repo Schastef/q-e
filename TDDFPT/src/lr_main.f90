@@ -38,20 +38,15 @@ PROGRAM lr_main
                                   & resonance_condition, lr_dump_rho, lr_calc_project
   USE ions_base,             ONLY : tau,nat,atm,ityp
   USE environment,           ONLY : environment_start
-  USE mp_global,             ONLY : nimage, mp_startup, set_bgrp_indices, &
+  USE mp_global,             ONLY : nimage, mp_startup, inter_bgrp_comm, &
                                     ibnd_start, ibnd_end
   USE wvfct,                 ONLY : nbnd
-  USE wavefunctions_module,  ONLY : psic
-  USE control_flags,         ONLY : tddfpt
+  USE wavefunctions,  ONLY : psic
   USE check_stop,            ONLY : check_stop_now, check_stop_init
   USE funct,                 ONLY : dft_is_hybrid
   USE fft_base,              ONLY : dffts
   USE uspp,                  ONLY : okvan
   USE mp_bands,              ONLY : ntask_groups
-#if defined(__ENVIRON)
-  USE plugin_flags,          ONLY : use_environ
-  USE environ_info,          ONLY : environ_summary
-#endif
   !
   IMPLICIT NONE
   !
@@ -77,11 +72,6 @@ PROGRAM lr_main
      WRITE(stdout,'("<lr_main>")')
   ENDIF
   !
-  ! Let the routines of the Environ plugin know that 
-  ! they are doing TDDFPT.
-  !
-  tddfpt = .TRUE.
-  !
   ! Reading input file and PWSCF xml, some initialisation;
   ! Read the input variables for TDDFPT;
   ! Allocate space for all quantities already computed
@@ -90,12 +80,9 @@ PROGRAM lr_main
   !
   CALL lr_readin ( )
   !
-  ! Writing a summary to the standard output 
-  ! about Environ variables
+  ! Writing a summary of plugin variables
   !
-#if defined(__ENVIRON)
-  IF ( use_environ ) CALL environ_summary()
-#endif
+  CALL plugin_summary()
   !
   CALL check_stop_init()
   !
@@ -119,7 +106,7 @@ PROGRAM lr_main
   !
   ! Band groups parallelization (if activated)
   !
-  CALL set_bgrp_indices(nbnd,ibnd_start,ibnd_end)
+  CALL divide(inter_bgrp_comm,nbnd,ibnd_start,ibnd_end)
   !
   ! Set up initial response orbitals (starting Lanczos vectors)
   !
@@ -308,9 +295,6 @@ SUBROUTINE lr_print_preamble()
     USE funct,               ONLY : dft_is_hybrid
     USE martyna_tuckerman,   ONLY : do_comp_mt
     USE control_flags,       ONLY : do_makov_payne
-#if defined(__ENVIRON)
-    USE plugin_flags,        ONLY : use_environ
-#endif    
 
     IMPLICIT NONE
     !
@@ -321,13 +305,6 @@ SUBROUTINE lr_print_preamble()
     WRITE( stdout, '(5x,"and")' )
     WRITE( stdout, '(7x,"X. Ge, S. J. Binnie, D. Rocca, R. Gebauer, and S. Baroni,")')
     WRITE( stdout, '(7x,"Comput. Phys. Commun. 185, 2080 (2014)")')
-#if defined(__ENVIRON)
-    IF ( use_environ ) THEN
-      WRITE( stdout, '(5x,"and the TDDFPT+Environ project as:")' )
-      WRITE( stdout, '(7x,"I. Timrov, O. Andreussi, A. Biancardi, N. Marzari, and S. Baroni,")' )
-      WRITE( stdout, '(7x,"J. Chem. Phys. 142, 034111 (2015)")' )
-    ENDIF
-#endif
     WRITE( stdout, '(5x,"in publications and presentations arising from this work.")' )
     WRITE( stdout, '(/5x,"=-----------------------------------------------------------------=")')
     !

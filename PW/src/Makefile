@@ -3,9 +3,7 @@
 include ../../make.inc
 
 # location of needed modules and included files (if any)
-MODFLAGS= $(MOD_FLAG)../../iotk/src $(MOD_FLAG)../../Modules \
-          $(MOD_FLAG)../../FFTXlib $(MOD_FLAG)../../LAXlib $(MOD_FLAG)../../UtilXlib \
-          $(MOD_FLAG)../../KS_Solvers/Davidson $(MOD_FLAG)../../KS_Solvers/CG \
+MODFLAGS= $(BASEMOD_FLAGS) \
           $(MOD_FLAG)../../dft-d3/
 
 PWOBJS = \
@@ -58,7 +56,6 @@ data_structure.o \
 deriv_drhoc.o \
 divide_class.o \
 divide_class_so.o \
-divide.o \
 divide_et_impera.o \
 dqvan2.o \
 drhoc.o \
@@ -74,6 +71,8 @@ esm.o \
 ewald.o \
 ewald_dipole.o \
 extfield.o \
+exx_base.o \
+exx_band.o \
 exx.o \
 fcp.o \
 find_group.o \
@@ -96,9 +95,9 @@ gk_sort.o \
 gradcorr.o \
 gweights.o \
 g2_kin.o \
+hs_1psi.o \
 h_epsi_her_apply.o \
 h_epsi_her_set.o \
-h_1psi.o \
 h_psi.o \
 h_psi_meta.o \
 hinit0.o \
@@ -113,7 +112,6 @@ init_us_2.o \
 init_at_1.o \
 init_vloc.o \
 input.o \
-interpolate.o \
 io_rho_xml.o \
 irrek.o \
 iweights.o \
@@ -151,6 +149,7 @@ plugin_init_cell.o \
 plugin_init_potential.o \
 plugin_initbase.o \
 plugin_clean.o \
+plugin_check.o \
 plugin_clock.o \
 plugin_summary.o \
 plugin_initialization.o \
@@ -162,7 +161,6 @@ potinit.o \
 print_clock_pw.o \
 print_ks_energies.o \
 punch.o \
-pw_restart.o \
 pw_restart_new.o \
 add_qexsd_step.o \
 pw_init_qexsd_input.o \
@@ -173,7 +171,6 @@ pw2casino_write.o \
 qvan2.o \
 rdiagh.o \
 read_conf_from_file.o \
-read_file.o \
 read_file_new.o \
 realus.o \
 remove_atomic_rho.o \
@@ -246,7 +243,8 @@ wannier_clean.o \
 wannier_occ.o \
 wannier_enrg.o
 
-QEMODS=../../Modules/libqemod.a ../../KS_Solvers/Davidson/libdavid.a ../../KS_Solvers/CG/libcg.a \
+QEMODS=../../Modules/libqemod.a \
+       ../../KS_Solvers/libks_solvers.a \
        ../../FFTXlib/libqefft.a ../../LAXlib/libqela.a ../../UtilXlib/libutil.a ../../dft-d3/libdftd3qe.a
 
 TLDEPS=bindir mods libs liblapack libblas dftd3
@@ -255,7 +253,7 @@ all : tldeps pw.x generate_vdW_kernel_table.x generate_rVV10_kernel_table.x
 
 pw.x : $(PWOBJS) libpw.a $(LIBOBJS) $(QEMODS)
 	$(LD) $(LDFLAGS) -o $@ \
-	   $(PWOBJS) libpw.a $(QEMODS) $(LIBOBJS) $(LIBS)
+	   $(PWOBJS) libpw.a $(QEMODS) $(LIBOBJS) $(QELIBS)
 	- ( cd ../../bin; ln -fs ../PW/src/$@ . ; \
                ln -fs ../PW/src/$@ dist.x ; ln -fs ../PW/src/$@ manypw.x ; )
 # dist.x and manypw.x link the same executable pw.x
@@ -273,12 +271,12 @@ clean :
 
 generate_vdW_kernel_table.x : libpw.a generate_vdW_kernel_table.o
 	$(LD) $(LDFLAGS) -o $@ \
-		generate_vdW_kernel_table.o $(QEMODS) libpw.a $(LIBOBJS) $(LIBS)
+		generate_vdW_kernel_table.o $(QEMODS) libpw.a $(LIBOBJS) $(QELIBS)
 	- ( cd ../../bin; ln -fs ../PW/src/$@ . )
 
 generate_rVV10_kernel_table.x : libpw.a generate_rVV10_kernel_table.o
 	$(LD) $(LDFLAGS) -o $@ \
-		generate_rVV10_kernel_table.o $(QEMODS) libpw.a $(LIBOBJS) $(LIBS)
+		generate_rVV10_kernel_table.o $(QEMODS) libpw.a $(LIBOBJS) $(QELIBS)
 	- ( cd ../../bin; ln -fs ../PW/src/$@ . )
 
 

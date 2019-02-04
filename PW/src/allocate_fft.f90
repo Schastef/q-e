@@ -16,8 +16,8 @@ SUBROUTINE allocate_fft
   !     these dimensions
   !
   USE io_global, ONLY : stdout
-  USE gvect,     ONLY : ngm, g, gg, nl, nlm, mill, igtongl
-  USE gvecs,   ONLY : ngms, nls, nlsm
+  USE gvect,     ONLY : ngm, g, gg, mill, igtongl
+  USE gvecs,   ONLY : ngms
   USE fft_base,   ONLY : dfftp, dffts
   USE ions_base, ONLY : nat
   USE lsda_mod,  ONLY : nspin
@@ -27,7 +27,7 @@ SUBROUTINE allocate_fft
   USE control_flags, ONLY : gamma_only
   USE noncollin_module, ONLY : pointlist, factlist, r_loc, &
       report, i_cons, noncolin, npol
-  USE wavefunctions_module, ONLY : psic, psic_nc
+  USE wavefunctions, ONLY : psic, psic_nc
   USE funct,     ONLY: dft_is_meta
   IMPLICIT NONE
   !

@@ -16,6 +16,9 @@ MODULE qes_types_module
   !
   IMPLICIT NONE
   !
+  PUBLIC 
+  PRIVATE   DP
+
   TYPE :: xml_format_type
     !
     CHARACTER(len=100) :: tagname
@@ -618,13 +621,18 @@ MODULE qes_types_module
     REAL(DP) :: conv_thr
     INTEGER :: mixing_ndim
     INTEGER :: max_nstep
+    LOGICAL  :: real_space_q_ispresent = .FALSE.
     LOGICAL :: real_space_q
+    LOGICAL  :: real_space_beta_ispresent = .FALSE.
+    LOGICAL :: real_space_beta
     LOGICAL :: tq_smoothing
     LOGICAL :: tbeta_smoothing
     REAL(DP) :: diago_thr_init
     LOGICAL :: diago_full_acc
     LOGICAL  :: diago_cg_maxiter_ispresent = .FALSE.
     INTEGER :: diago_cg_maxiter
+    LOGICAL  :: diago_ppcg_maxiter_ispresent = .FALSE.
+    INTEGER :: diago_ppcg_maxiter
     LOGICAL  :: diago_david_ndim_ispresent = .FALSE.
     INTEGER :: diago_david_ndim
     !
@@ -754,31 +762,27 @@ MODULE qes_types_module
     !
   END TYPE spin_constraints_type
   !
-  TYPE :: electric_field_type
+  TYPE :: gate_settings_type
     !
     CHARACTER(len=100) :: tagname
     LOGICAL  :: lwrite = .FALSE.
     LOGICAL  :: lread  = .FALSE.
     !
-    CHARACTER(len=256) :: electric_potential
-    LOGICAL  :: dipole_correction_ispresent = .FALSE.
-    LOGICAL :: dipole_correction
-    LOGICAL  :: electric_field_direction_ispresent = .FALSE.
-    INTEGER :: electric_field_direction
-    LOGICAL  :: potential_max_position_ispresent = .FALSE.
-    REAL(DP) :: potential_max_position
-    LOGICAL  :: potential_decrease_width_ispresent = .FALSE.
-    REAL(DP) :: potential_decrease_width
-    LOGICAL  :: electric_field_amplitude_ispresent = .FALSE.
-    REAL(DP) :: electric_field_amplitude
-    LOGICAL  :: electric_field_vector_ispresent = .FALSE.
-    REAL(DP), DIMENSION(3) :: electric_field_vector
-    LOGICAL  :: nk_per_string_ispresent = .FALSE.
-    INTEGER :: nk_per_string
-    LOGICAL  :: n_berry_cycles_ispresent = .FALSE.
-    INTEGER :: n_berry_cycles
+    LOGICAL :: use_gate
+    LOGICAL  :: zgate_ispresent = .FALSE.
+    REAL(DP) :: zgate
+    LOGICAL  :: relaxz_ispresent = .FALSE.
+    LOGICAL :: relaxz
+    LOGICAL  :: block_ispresent = .FALSE.
+    LOGICAL :: block
+    LOGICAL  :: block_1_ispresent = .FALSE.
+    REAL(DP) :: block_1
+    LOGICAL  :: block_2_ispresent = .FALSE.
+    REAL(DP) :: block_2
+    LOGICAL  :: block_height_ispresent = .FALSE.
+    REAL(DP) :: block_height
     !
-  END TYPE electric_field_type
+  END TYPE gate_settings_type
   !
   TYPE :: atomic_constraint_type
     !
@@ -856,12 +860,26 @@ MODULE qes_types_module
     !
   END TYPE electronicPolarization_type
   !
+  TYPE :: gateInfo_type
+    !
+    CHARACTER(len=100) :: tagname
+    LOGICAL  :: lwrite = .FALSE.
+    LOGICAL  :: lread  = .FALSE.
+    !
+    REAL(DP) :: pot_prefactor
+    REAL(DP) :: gate_zpos
+    REAL(DP) :: gate_gate_term
+    REAL(DP) :: gatefieldEnergy
+    !
+  END TYPE gateInfo_type
+  !
   TYPE :: scf_conv_type
     !
     CHARACTER(len=100) :: tagname
     LOGICAL  :: lwrite = .FALSE.
     LOGICAL  :: lread  = .FALSE.
     !
+    LOGICAL :: convergence_achieved
     INTEGER :: n_scf_steps
     REAL(DP) :: scf_error
     !
@@ -873,6 +891,7 @@ MODULE qes_types_module
     LOGICAL  :: lwrite = .FALSE.
     LOGICAL  :: lread  = .FALSE.
     !
+    LOGICAL :: convergence_achieved
     INTEGER :: n_opt_steps
     REAL(DP) :: grad_norm
     !
@@ -885,6 +904,7 @@ MODULE qes_types_module
     LOGICAL  :: lread  = .FALSE.
     !
     LOGICAL :: real_space_q
+    LOGICAL :: real_space_beta
     LOGICAL :: uspp
     LOGICAL :: paw
     !
@@ -953,6 +973,8 @@ MODULE qes_types_module
     REAL(DP) :: efieldcorr
     LOGICAL  :: potentiostat_contr_ispresent = .FALSE.
     REAL(DP) :: potentiostat_contr
+    LOGICAL  :: gatefield_contr_ispresent = .FALSE.
+    REAL(DP) :: gatefield_contr
     !
   END TYPE total_energy_type
   !
@@ -998,6 +1020,8 @@ MODULE qes_types_module
     TYPE(atomic_positions_type) :: atomic_positions
     LOGICAL  :: wyckoff_positions_ispresent = .FALSE.
     TYPE(wyckoff_positions_type) :: wyckoff_positions
+    LOGICAL  :: crystal_positions_ispresent = .FALSE.
+    TYPE(atomic_positions_type) :: crystal_positions
     TYPE(cell_type) :: cell
     !
   END TYPE atomic_structure_type
@@ -1077,6 +1101,34 @@ MODULE qes_types_module
     REAL(DP) :: fcp_mu
     !
   END TYPE boundary_conditions_type
+  !
+  TYPE :: electric_field_type
+    !
+    CHARACTER(len=100) :: tagname
+    LOGICAL  :: lwrite = .FALSE.
+    LOGICAL  :: lread  = .FALSE.
+    !
+    CHARACTER(len=256) :: electric_potential
+    LOGICAL  :: dipole_correction_ispresent = .FALSE.
+    LOGICAL :: dipole_correction
+    LOGICAL  :: gate_settings_ispresent = .FALSE.
+    TYPE(gate_settings_type) :: gate_settings
+    LOGICAL  :: electric_field_direction_ispresent = .FALSE.
+    INTEGER :: electric_field_direction
+    LOGICAL  :: potential_max_position_ispresent = .FALSE.
+    REAL(DP) :: potential_max_position
+    LOGICAL  :: potential_decrease_width_ispresent = .FALSE.
+    REAL(DP) :: potential_decrease_width
+    LOGICAL  :: electric_field_amplitude_ispresent = .FALSE.
+    REAL(DP) :: electric_field_amplitude
+    LOGICAL  :: electric_field_vector_ispresent = .FALSE.
+    REAL(DP), DIMENSION(3) :: electric_field_vector
+    LOGICAL  :: nk_per_string_ispresent = .FALSE.
+    INTEGER :: nk_per_string
+    LOGICAL  :: n_berry_cycles_ispresent = .FALSE.
+    INTEGER :: n_berry_cycles
+    !
+  END TYPE electric_field_type
   !
   TYPE :: atomic_constraints_type
     !
@@ -1236,6 +1288,8 @@ MODULE qes_types_module
     TYPE(finiteFieldOut_type) :: finiteElectricFieldInfo
     LOGICAL  :: dipoleInfo_ispresent = .FALSE.
     TYPE(dipoleOutput_type) :: dipoleInfo
+    LOGICAL  :: gateInfo_ispresent = .FALSE.
+    TYPE(gateInfo_type) :: gateInfo
     !
   END TYPE outputElectricField_type
   !
@@ -1245,6 +1299,7 @@ MODULE qes_types_module
     LOGICAL  :: lwrite = .FALSE.
     LOGICAL  :: lread  = .FALSE.
     !
+    LOGICAL  :: convergence_info_ispresent = .FALSE.
     TYPE(convergence_info_type) :: convergence_info
     TYPE(algorithmic_info_type) :: algorithmic_info
     TYPE(atomic_species_type) :: atomic_species

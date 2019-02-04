@@ -49,7 +49,7 @@ PROGRAM average
   USE kinds,                ONLY : DP
   USE klist,                ONLY : nks
   USE parameters,           ONLY : ntypx
-  USE constants,            ONLY : pi
+  USE constants,            ONLY : pi, eps8
   USE run_info,             ONLY : title
   USE io_global,            ONLY : stdout, ionode
   USE cell_base,            ONLY : ibrav, alat, omega, celldm, tpiba, &
@@ -62,7 +62,7 @@ PROGRAM average
   USE fft_base,             ONLY : dffts
   USE ions_base,            ONLY : zv, tau, nat, ntyp => nsp, ityp, atm
   USE lsda_mod,             ONLY : nspin
-  USE wavefunctions_module, ONLY : psic
+  USE wavefunctions, ONLY : psic
   USE io_files,             ONLY : iunpun
   USE scf,                  ONLY : rho
   USE mp_global,            ONLY : mp_startup
@@ -173,7 +173,7 @@ PROGRAM average
      END IF
      ALLOCATE(tau (3, nat))
      ALLOCATE(ityp(nat))
-     doublegrid = dual>4.d0
+     doublegrid = ( dual > 4.0_dp + eps8 )
      IF (doublegrid) THEN
         gcutms = 4.d0 * ecutwfc / tpiba2
      ELSE

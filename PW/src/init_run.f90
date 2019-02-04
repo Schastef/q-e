@@ -13,7 +13,9 @@ SUBROUTINE init_run()
   USE symme,              ONLY : sym_rho_init
   USE wvfct,              ONLY : nbnd, et, wg, btype
   USE control_flags,      ONLY : lmd, gamma_only, smallmem, ts_vdw
-  USE gvect,              ONLY : gstart ! to be comunicated to the Solvers if gamma_only
+  USE gvect,              ONLY : g, gg, mill, gcutm, ig_l2g, ngm, ngm_g, &
+       gstart ! to be comunicated to the Solvers if gamma_only
+  USE gvecs,              ONLY : gcutms, ngms
   USE cell_base,          ONLY : at, bg, set_h_ainv
   USE cellmd,             ONLY : lmovecell
   USE dynamics_module,    ONLY : allocate_dyn_vars
@@ -23,23 +25,16 @@ SUBROUTINE init_run()
   USE paw_init,           ONLY : paw_post_init
 #endif
   USE bp,                 ONLY : allocate_bp_efield, bp_global_map
-  USE fft_base,           ONLY : dffts
+  USE fft_base,           ONLY : dfftp, dffts
   USE funct,              ONLY : dft_is_hybrid
-  USE recvec_subs,        ONLY : ggen
+  USE recvec_subs,        ONLY : ggen, ggens
   USE wannier_new,        ONLY : use_wannier    
   USE dfunct,             ONLY : newd
   USE esm,                ONLY : do_comp_esm, esm_init
-  USE mp_bands,           ONLY : intra_bgrp_comm, inter_bgrp_comm, nbgrp, root_bgrp_id
-  USE mp,                 ONLY : mp_bcast
   USE tsvdw_module,       ONLY : tsvdw_initialize
   USE Coul_cut_2D,        ONLY : do_cutoff_2D, cutoff_fact 
-  USE wavefunctions_module, ONLY : evc
-#if defined(__HDF5) && defined(__OLDXML)
-  USE hdf5_qe, ONLY : initialize_hdf5
-#endif
   !
   IMPLICIT NONE
-  !
   !
   CALL start_clock( 'init_run' )
   !
@@ -63,13 +58,16 @@ SUBROUTINE init_run()
   ! ... generate reciprocal-lattice vectors and fft indices
   !
   IF( smallmem ) THEN
-     CALL ggen( gamma_only, at, bg, intra_bgrp_comm, no_global_sort = .TRUE. )
+     CALL ggen( dfftp, gamma_only, at, bg, gcutm, ngm_g, ngm, &
+          g, gg, mill, ig_l2g, gstart, no_global_sort = .TRUE. )
   ELSE
-     CALL ggen( gamma_only, at, bg )
+     CALL ggen( dfftp, gamma_only, at, bg, gcutm, ngm_g, ngm, &
+       g, gg, mill, ig_l2g, gstart )
   END IF
+  CALL ggens( dffts, gamma_only, at, g, gg, mill, gcutms, ngms )
   if (gamma_only) THEN
      ! ... Solvers need to know gstart
-     call export_gstart_2_cg(gstart); call export_gstart_2_davidson(gstart)
+     call export_gstart_2_solvers(gstart)
   END IF
   !
   IF (do_comp_esm) CALL esm_init()
@@ -88,8 +86,8 @@ SUBROUTINE init_run()
   !
   CALL allocate_nlpot()
   IF (okpaw) THEN
-    CALL allocate_paw_internals()
-    CALL paw_init_onecenter()
+     CALL allocate_paw_internals()
+     CALL paw_init_onecenter()
   ENDIF
   CALL allocate_locpot()
   CALL allocate_wfc()
@@ -106,8 +104,8 @@ SUBROUTINE init_run()
   btype(:,:) = 1
   !
   IF (ts_vdw) THEN
-    CALL tsvdw_initialize()
-    CALL set_h_ainv()
+     CALL tsvdw_initialize()
+     CALL set_h_ainv()
   END IF
   !
   CALL openfil()
@@ -117,10 +115,6 @@ SUBROUTINE init_run()
   CALL potinit()
   !
   CALL newd()
-#if defined(__HDF5) && defined(__OLDXML)
-  ! calls h5open_f mandatory in any application using hdf5
-  CALL initialize_hdf5()
-#endif 
   !
   CALL wfcinit()
   !
@@ -132,14 +126,9 @@ SUBROUTINE init_run()
 #endif
   !
   IF ( lmd ) CALL allocate_dyn_vars()
-  IF( nbgrp > 1 ) THEN
-     ! FIXME: this should be in wfcinit, not here
-     CALL mp_bcast( evc, root_bgrp_id, inter_bgrp_comm )
-  ENDIF
   !
   CALL stop_clock( 'init_run' )
   !
-
   RETURN
   !
 END SUBROUTINE init_run

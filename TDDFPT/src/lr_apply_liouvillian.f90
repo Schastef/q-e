@@ -27,15 +27,15 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   ! Modified by Simone Binnie in 2012 (EXX)
   ! Modified by Xiaochuan Ge  in 2013 (Davidson)
   ! Modified by Iurii Timrov  in 2014 (Environ)
+  ! Modified by Oliviero Andreussi in 2018 (Environ-->Plugins)
   !
   USE kinds,                ONLY : DP
   USE ions_base,            ONLY : ityp, nat, ntyp=>nsp
   USE cell_base,            ONLY : tpiba2
   USE fft_base,             ONLY : dffts, dfftp
-  USE fft_interfaces,       ONLY : fwfft
+  USE fft_interfaces,       ONLY : fwfft, fft_interpolate
   USE fft_helper_subroutines
-  USE gvecs,                ONLY : nls, nlsm
-  USE gvect,                ONLY : nl, ngm, gstart, g, gg
+  USE gvect,                ONLY : ngm, gstart, g, gg
   USE io_global,            ONLY : stdout
   USE klist,                ONLY : nks, xk, ngk, igk_k
   USE lr_variables,         ONLY : evc0, sevc0, revc0, rho_1, rho_1c, &
@@ -44,7 +44,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   USE lsda_mod,             ONLY : nspin
   USE uspp,                 ONLY : vkb, nkb, okvan
   USE uspp_param,           ONLY : nhm, nh
-  USE wavefunctions_module, ONLY : psic
+  USE wavefunctions, ONLY : psic
   USE wvfct,                ONLY : nbnd, npwx, g2kin, et
   USE control_flags,        ONLY : gamma_only
   USE realus,               ONLY : real_space, invfft_orbital_gamma,&
@@ -52,7 +52,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
                                    & fwfft_orbital_gamma,&
                                    & calbec_rs_gamma, newq_r, &
                                    & add_vuspsir_gamma, v_loc_psir,   &
-                                   & s_psir_gamma, real_space_debug,  &
+                                   & s_psir_gamma, &
                                    & betasave, box_beta, maxbox_beta
   USE dfunct,               ONLY : newq
   USE control_flags,        ONLY : tqr
@@ -62,11 +62,7 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
   USE becmod,               ONLY : bec_type, becp, calbec
   USE lr_exx_kernel
   USE dv_of_drho_lr
-#if defined(__ENVIRON)
-  USE plugin_flags,         ONLY : use_environ
-  USE scf,                  ONLY : rho
-  USE solvent_tddfpt,       ONLY : calc_vsolvent_tddfpt
-#endif
+  USE funct,                ONLY : start_exx, stop_exx
   !
   IMPLICIT NONE
   !
@@ -82,12 +78,6 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
                            & w1(:), w2(:)
   COMPLEX(DP), ALLOCATABLE :: dvrs_temp(:,:), spsi1(:,:), dvrsc(:,:), &
                               & dvrssc(:), sevc1_new(:,:,:)
-  !
-  ! Environ related arrays
-  !
-  REAL(DP), ALLOCATABLE :: &
-          dv_pol(:), &  ! response polarization potential
-          dv_epsilon(:) ! response dielectric potential
   !
   IF (lr_verbosity > 5) THEN
      WRITE(stdout,'("<lr_apply_liouvillian>")')
@@ -121,8 +111,8 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      ELSE
         ALLOCATE( dvrsc(dfftp%nnr, nspin) )
         ALLOCATE( dvrssc(dffts%nnr) )
-        dvrsc(:,:)=0.0d0
-        dvrssc(:) =0.0d0
+        dvrsc(:,:)=(0.0d0,0.0d0)
+        dvrssc(:) =(0.0d0,0.0d0)
      ENDIF
      !
      ! Calculation of the charge density response
@@ -135,15 +125,15 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
      !
      IF (no_hxc) THEN
         !
-        ! With no_hxc=.true. we recover the independent electron 
+        ! With no_hxc=.true. we recover the independent electron
         ! approximation, so we zero the interation.
         !
         IF (gamma_only) THEN
            dvrs(:,1) = 0.0d0
-           CALL interpolate (dvrs(:,1),dvrss,-1)
+           CALL fft_interpolate (dfftp, dvrs(:,1), dffts, dvrss)
         ELSE
-           dvrsc(:,1) = 0.0d0
-           CALL cinterpolate (dvrsc(:,1),dvrssc,-1)
+           dvrsc(:,1) = (0.0d0,0.0d0)
+           CALL fft_interpolate (dfftp, dvrsc(:,1), dffts, dvrssc)
         ENDIF
         !
      ELSE
@@ -157,45 +147,19 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
            !
            ALLOCATE( dvrs_temp(dfftp%nnr, nspin) )
            !
-           dvrs_temp = CMPLX( dvrs, 0.0d0, kind=DP )         
+           dvrs_temp = CMPLX( dvrs, 0.0d0, kind=DP )
            !
            DEALLOCATE ( dvrs )  ! to save memory
            !
            CALL dv_of_drho(dvrs_temp,.FALSE.)
            !
            ALLOCATE ( dvrs(dfftp%nnr, nspin) )
-           ! 
+           !
            dvrs = DBLE(dvrs_temp)
            !
            DEALLOCATE(dvrs_temp)
            !
-#if defined(__ENVIRON)
-           !
-           IF ( use_environ ) THEN
-              !
-              ALLOCATE( dv_pol(dfftp%nnr) )
-              ALLOCATE( dv_epsilon(dfftp%nnr) )
-              dv_pol(:) = 0.0d0
-              dv_epsilon(:) = 0.0d0
-              !
-              IF (.not.davidson) THEN
-                 WRITE( stdout, '(5x,"ENVIRON: Calculate the response &
-                             & polarization and dielectric potentials")' )
-              ENDIF
-              !
-              CALL calc_vsolvent_tddfpt(dfftp%nnr, nspin, rho%of_r(:,1), &
-                                       & rho_1(:,1), dv_pol, dv_epsilon)
-              !
-              ! Add the response polarization and dielectric potentials
-              ! to the response HXC potential.
-              !
-              dvrs(:,1) = dvrs(:,1) + dv_pol(:) + dv_epsilon(:)
-              !
-              DEALLOCATE( dv_pol )
-              DEALLOCATE( dv_epsilon )
-              !
-           ENDIF
-#endif           
+           CALL plugin_tddfpt_potential(rho_1,dvrs)
            !
         ELSE
            !
@@ -205,16 +169,24 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
            !
         ENDIF
         !
+        ! USPP case: compute the integral of the response HXC potential with
+        ! the Q function
+        !
         IF ( okvan )  THEN
-           IF ( tqr ) THEN
-              CALL newq_r(dvrs,d_deeq,.TRUE.)
+           IF (gamma_only) THEN
+              IF ( tqr ) THEN
+                 CALL newq_r(dvrs,d_deeq,.TRUE.)
+              ELSE
+                 ALLOCATE( psic(dfftp%nnr) )
+                 psic(:) = (0.0d0,0.0d0)
+                 CALL newq(dvrs,d_deeq,.TRUE.)
+                 DEALLOCATE( psic )
+              ENDIF
            ELSE
-              ALLOCATE( psic(dfftp%nnr) )
-              psic(:)=(0.0d0,0.0d0)
-              !
-              CALL newq(dvrs,d_deeq,.TRUE.)
-              !
-              DEALLOCATE( psic )
+              ! IT: Here we need to compute the integral of dvrsc and Q function
+              ! The issue is that newq wants as input an array of type REAL while
+              ! dvrsc is of type COMPLEX.
+              CALL errore( 'lr_apply_liouvillian', 'The integral of Q and dV is not implemented', 1 )
            ENDIF
         ENDIF
         !
@@ -223,9 +195,9 @@ SUBROUTINE lr_apply_liouvillian( evc1, evc1_new, interaction )
         ! Put the interaction on the smooth grid.
         !
         IF (gamma_only) THEN
-           CALL interpolate (dvrs(:,1),dvrss,-1)
+           CALL fft_interpolate (dfftp, dvrs(:,1), dffts, dvrss)
         ELSE
-           CALL cinterpolate (dvrsc(:,1),dvrssc,-1)
+           CALL fft_interpolate (dfftp, dvrsc(:,1), dffts, dvrssc)
         ENDIF
         !
      ENDIF
@@ -418,7 +390,7 @@ CONTAINS
           !end: calculation of becp2
        ENDIF
 
-      IF ( dffts%have_task_groups ) THEN
+      IF ( dffts%has_task_groups ) THEN
          !
          v_siz =  dffts%nnr_tg
          !
@@ -447,7 +419,7 @@ CONTAINS
           ! Product with the potential vrs = (vltot+vr)
           ! revc0 is on smooth grid. psic is used up to smooth grid
           !
-          IF (dffts%have_task_groups) THEN
+          IF (dffts%has_task_groups) THEN
              !
              DO ir=1, dffts%nr1x*dffts%nr2x*dffts%my_nr3p
                 !
@@ -469,7 +441,7 @@ CONTAINS
              CALL lr_exx_apply_revc_int(psic, ibnd, nbnd,1)
           ENDIF
           !
-          IF (real_space_debug > 7 .and. okvan .and. nkb > 0) THEN
+          IF (real_space .and. okvan .and. nkb > 0) THEN
           !THE REAL SPACE PART (modified from s_psi)
                   !fac = sqrt(omega)
                   !
@@ -540,9 +512,9 @@ CONTAINS
 #if defined(__MPI)
        CALL mp_sum( evc1_new(:,:,1), inter_bgrp_comm )
 #endif
-       IF (dffts%have_task_groups) DEALLOCATE (tg_dvrss)
+       IF (dffts%has_task_groups) DEALLOCATE (tg_dvrss)
        !
-       IF( nkb > 0 .and. okvan .and. real_space_debug <= 7) THEN
+       IF( nkb > 0 .and. okvan .and. .not.real_space) THEN
           !The non real_space part
           CALL dgemm( 'N', 'N', 2*ngk(1), nbnd, nkb, 1.d0, vkb, &
                2*npwx, becp2, nkb, 1.d0, evc1_new, 2*npwx )
@@ -558,13 +530,19 @@ CONTAINS
     ! The kinetic energy g2kin was already computed when
     ! calling the routine lr_solve_e.
     !
+    ! vexx is already computed in lr_exx_kernel
+    !
+    IF (lr_exx) CALL stop_exx()
+    !
     ! Compute sevc1_new = H*evc1
     !
     CALL h_psi(npwx,ngk(1),nbnd,evc1(1,1,1),sevc1_new(1,1,1))
     !
+    IF (lr_exx) CALL start_exx()
+    !
     ! Compute spsi1 = S*evc1 
     !
-    IF (real_space_debug > 9 ) THEN
+    IF (real_space) THEN
         DO ibnd = 1,nbnd,2
            CALL invfft_orbital_gamma(evc1(:,:,1),ibnd,nbnd)
            CALL s_psir_gamma(ibnd,nbnd)
@@ -642,7 +620,7 @@ SUBROUTINE lr_apply_liouvillian_k()
              !
              DO ig = 1,ngk(ik)
                 !
-                evc1_new(ig,ibnd,ik) = psic(nls(igk_k(ig,ik)))
+                evc1_new(ig,ibnd,ik) = psic(dffts%nl(igk_k(ig,ik)))
                 !
              ENDDO
              !
