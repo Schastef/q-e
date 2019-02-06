@@ -2924,6 +2924,8 @@ MODULE qes_init_module
     END DO
     ALLOCATE(obj%matrix(length), obj%dims(rank) )
     obj%matrix(1:length) = reshape(mat, [length])
+    obj%rank = rank 
+    obj%dims = dims 
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE
@@ -2954,6 +2956,8 @@ MODULE qes_init_module
     END DO
     ALLOCATE(obj%matrix(length), obj%dims(rank) )
     obj%matrix(1:length) = reshape(mat, [length])
+    obj%rank = rank 
+    obj%dims = dims 
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE

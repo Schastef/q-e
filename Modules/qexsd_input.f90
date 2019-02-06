@@ -63,9 +63,9 @@ MODULE qexsd_input
   END IF
   !
   !
-  CALL qes_init     (obj,tagname,title=title,calculation=calculation,&
-                                  restart_mode=restart_mode,prefix=prefix,        &
-                                  pseudo_dir=pseudo_dir,outdir=outdir,disk_io=disk_io_value,&
+  CALL qes_init (obj,tagname,title=TRIM(title),calculation=TRIM(calculation),&
+                                  restart_mode=TRIM(restart_mode),prefix=TRIM(prefix),        &
+                                  pseudo_dir=TRIM(pseudo_dir),outdir=TRIM(outdir),disk_io=TRIM(disk_io_value),&
                                   verbosity=TRIM(verbosity_value),stress=stress,forces=forces,    &
                                   wf_collect=wf_collect,max_seconds=int_max_seconds,  &
                                   etot_conv_thr=etot_conv_thr,forc_conv_thr=forc_conv_thr, &
@@ -249,7 +249,8 @@ MODULE qexsd_input
    LOGICAL,INTENT(IN)                   :: ibrav_lattice
    !
    CHARACTER(LEN=*),PARAMETER           :: TAGNAME="k_points_IBZ"
-   TYPE(monkhorst_pack_type),POINTER    :: mpack_obj
+   TYPE(monkhorst_pack_type),POINTER    :: mpack_obj_pt => NULL() 
+   TYPE(monkhorst_pack_type),TARGET     :: mpack_obj_ 
    TYPE(k_point_type),ALLOCATABLE       :: kp_obj(:)
    LOGICAL                              :: mpack_ispresent,kp_ispresent
    CHARACTER(LEN=100)                   :: kind_of_grid
@@ -262,13 +263,13 @@ MODULE qexsd_input
   
    IF (TRIM(k_points).EQ."automatic") THEN 
       !
-      ALLOCATE (mpack_obj) 
       IF ((s1+s2+s3).EQ.0) THEN
          kind_of_grid="Monkhorst-Pack"
       ELSE
          kind_of_grid="Uniform grid with offset"
       END IF
-      CALL qes_init (mpack_obj,"monkhorst_pack",nk1,nk2,nk3, s1,s2,s3,kind_of_grid)
+      CALL qes_init (mpack_obj_,"monkhorst_pack",nk1,nk2,nk3, s1,s2,s3,kind_of_grid)
+      mpack_obj_pt => mpack_obj_
    ELSE
       kdim_opt => kdim 
       IF ( ibrav_lattice ) THEN 
@@ -301,10 +302,10 @@ MODULE qexsd_input
           END DO
       END IF
    END IF    
-   CALL qes_init (obj, TAGNAME, MONKHORST_PACK = mpack_obj, NK = kdim_opt , K_POINT = kp_obj) 
-   IF (ASSOCIATED (mpack_obj)) THEN 
-      CALL qes_reset (mpack_obj)
-      DEALLOCATE (mpack_obj)
+   CALL qes_init (obj, TAGNAME, MONKHORST_PACK = mpack_obj_pt, NK = kdim_opt , K_POINT = kp_obj) 
+   IF (ASSOCIATED (mpack_obj_pt)) THEN 
+      CALL qes_reset (mpack_obj_)
+      mpack_obj_pt => NULL() 
    ELSE  IF (ALLOCATED(kp_obj)) THEN 
       DO ik = 1, kdim 
          CALL qes_reset(kp_obj(ik))
@@ -386,10 +387,12 @@ MODULE qexsd_input
                                                    isotropic=.FALSE. 
    INTEGER                                      :: i,j
    TYPE(integerMatrix_type),TARGET              :: free_cell_obj
-   TYPE(integerMatrix_type),POINTER             :: free_cell_ptr 
+   TYPE(integerMatrix_type),POINTER             :: free_cell_ptr => NULL()  
    !
-   free_cell_ptr => free_cell_obj
-   FORALL (i=1:3,j=1:3) my_forceh(i,j) = iforceh(i,j)
+   IF (ANY(iforceh /= 1)) THEN 
+      free_cell_ptr => free_cell_obj
+      FORALL (i=1:3,j=1:3) my_forceh(i,j) = iforceh(i,j)
+   END IF 
    SELECT CASE  (TRIM(cell_dofree))
       CASE ('all') 
          my_forceh = 1 
@@ -399,10 +402,10 @@ MODULE qexsd_input
          fix_area = .TRUE.
       CASE ('volume') 
          isotropic = .TRUE. 
-      CASE ('default') 
-         NULLIFY ( free_cell_ptr) 
+      !CASE default 
+         !NULLIFY ( free_cell_ptr) 
    END SELECT  
-   IF (ASSOCIATED (free_cell_ptr)) CALL  qes_init (free_cell_ptr,"free_cell",[3,3],my_forceh, ORDER = 'F' )
+   IF (ASSOCIATED (free_cell_ptr)) CALL  qes_init (free_cell_obj,"free_cell",[3,3],my_forceh, ORDER = 'F' )
    !
    CALL qes_init (obj,TAGNAME, PRESSURE = pressure, CELL_DYNAMICS=cell_dynamics, WMASS=wmass, CELL_FACTOR=cell_factor,&
                   FIX_VOLUME=fix_volume, FIX_AREA=fix_area, ISOTROPIC=isotropic, FREE_CELL=free_cell_ptr)
@@ -454,7 +457,7 @@ MODULE qexsd_input
    END IF 
    CALL qes_init (obj,TAGNAME,ASSUME_ISOLATED =assume_isolated, FCP_OPT= fcp_opt, FCP_MU = fcp_mu, ESM = esm_obj)
    IF ( esm_ispresent ) THEN
-      CALL qes_reset_esm(esm_obj)
+      CALL qes_reset (esm_obj)
       DEALLOCATE(esm_obj) 
    END IF 
    END SUBROUTINE qexsd_init_boundary_conditions
@@ -519,7 +522,7 @@ MODULE qexsd_input
       xdim=3
       ydim=nat
    END IF
-   CALL qes_init_matrix(obj,TAGNAME,[xdim,ydim],rd_vel )
+   CALL qes_init (obj,TAGNAME,[xdim,ydim],rd_vel )
    END SUBROUTINE qexsd_init_starting_atomic_velocities
    ! 
    !-------------------------------------------------------------------------------------

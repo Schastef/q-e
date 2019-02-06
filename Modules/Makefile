@@ -104,6 +104,7 @@ xc_rVV10.o \
 io_base.o \
 qes_types_module.o \
 qes_libs_module.o  \
+qes_write_module.o \
 qes_read_module.o \
 qes_reset_module.o \
 qes_init_module.o \

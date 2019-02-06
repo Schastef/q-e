@@ -17,7 +17,10 @@ MODULE pw_restart_new
   !
   USE KINDS,        ONLY: DP
   USE qes_types_module
-  USE qes_libs_module, ONLY: qes_write, qes_reset, qes_init 
+  !USE qes_libs_module, ONLY: qes_write, qes_reset, qes_init
+  USE qes_write_module, ONLY: qes_write
+  USE qes_reset_module, ONLY: qes_reset 
+  USE qes_init_module, ONLY: qes_init
   USE qexsd_module, ONLY: qexsd_init_schema, qexsd_openschema, qexsd_closeschema,      &
                           qexsd_init_convergence_info, qexsd_init_algorithmic_info,    & 
                           qexsd_init_atomic_species, qexsd_init_atomic_structure,      &
@@ -164,13 +167,12 @@ MODULE pw_restart_new
       !
       !
       TYPE(output_type) :: output
-      REAL(DP),POINTER    :: degauss_, demet_, efield_corr, potstat_corr, &
-                                 gatefield_corr, bp_el_pol(:), bp_ion_pol(:) 
+      REAL(DP),POINTER    :: degauss_, demet_, efield_corr, potstat_corr,  gatefield_corr  
       LOGICAL, POINTER    :: optimization_has_converged => NULL() 
       LOGICAL, TARGET     :: conv_opt  
       LOGICAL             :: scf_has_converged 
       INTEGER             :: itemp = 1
-      REAL(DP),ALLOCATABLE :: london_c6_(:)
+      REAL(DP),ALLOCATABLE :: london_c6_(:), bp_el_pol(:), bp_ion_pol(:) 
       CHARACTER(LEN=3),ALLOCATABLE :: species_(:)
       CHARACTER(LEN=20),TARGET   :: dft_nonlocc_
       INTEGER,TARGET             :: dftd3_version_
@@ -182,9 +184,9 @@ MODULE pw_restart_new
                                     ts_vdw_econv_thr_pt=>NULL()
       LOGICAL,TARGET             :: dftd3_threebody_, ts_vdw_isolated_
       LOGICAL,POINTER            :: ts_isol_pt=>NULL(), dftd3_threebody_pt=>NULL(), ts_vdw_isolated_pt =>NULL()
-      INTEGER,POINTER            :: dftd3_version_pt
+      INTEGER,POINTER            :: dftd3_version_pt => NULL() 
 
-      NULLIFY( degauss_, demet_, efield_corr, potstat_corr, gatefield_corr, bp_el_pol, bp_ion_pol )
+      NULLIFY( degauss_, demet_, efield_corr, potstat_corr, gatefield_corr )
 
       !
       ! Global PW dimensions need to be properly computed, reducing across MPI tasks
@@ -599,13 +601,9 @@ MODULE pw_restart_new
             gate_info_ptr => gate_info_temp    
          END IF             
          IF ( lelfield ) THEN
-            itemp=itemp+1
-            temp(itemp:itemp+2) = el_pol
-            bp_el_pol => temp(itemp:itemp+2) 
-            itemp = (itemp + 2) + 1
-            temp(itemp:itemp+2)  = ion_pol(1:3)
-            bp_ion_pol => temp(itemp:itemp+2) 
-            itemp = itemp + 2 
+            ALLOCATE (bp_el_pol(2), bp_ion_pol(3) )
+            bp_el_pol = el_pol 
+            bp_ion_pol(1:3) = ion_pol(1:3)
          END IF
          IF ( tefield .AND. dipfield) THEN 
             CALL qexsd_init_dipole_info(dipol_obj, el_dipole, ion_dipole, edir, eamp, &
@@ -617,13 +615,11 @@ MODULE pw_restart_new
             CALL qexsd_init_outputElectricField(output%electric_field, lelfield, tefield, dipfield, &
                  lberry, BP_OBJ = bp_obj_ptr, EL_POL = bp_el_pol, ION_POL = bp_ion_pol,          &
                  GATEINFO = gate_info_ptr, DIPOLE_OBJ =  dipol_ptr) 
-         !
-         temp = 0 
+         ! 
          IF (ASSOCIATED(gate_info_ptr)) THEN 
             CALL qes_reset (gate_info_ptr)
             NULLIFY(gate_info_ptr)
          ENDIF
-         NULLIFY( bp_el_pol, bp_ion_pol)
          IF (ASSOCIATED (dipol_ptr) ) THEN
             CALL qes_reset (dipol_ptr)
             NULLIFY(dipol_ptr)

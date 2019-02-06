@@ -28,7 +28,10 @@ MODULE qexsd_module
   !
   USE constants,        ONLY : e2
   USE qes_types_module
-  USE qes_libs_module
+  !USE qes_libs_module
+  USE qes_write_module, ONLY : qes_write
+  USE qes_reset_module, ONLY:  qes_reset 
+  USE qes_init_module, ONLY:  qes_init 
   !
   USE FoX_wxml,         ONLY : xmlf_t
   !
@@ -168,18 +171,18 @@ CONTAINS
       ! here an error should be issued, instead
       !
       CALL qexsd_init_general_info(general_info, prog(1:2) )
-      CALL qes_write_general_info(qexsd_xf,general_info)
-      CALL qes_reset_general_info(general_info)
+      CALL qes_write (qexsd_xf,general_info)
+      CALL qes_reset (general_info)
       !
       CALL qexsd_init_parallel_info(parallel_info)
-      CALL qes_write_parallel_info(qexsd_xf,parallel_info)
-      CALL qes_reset_parallel_info(parallel_info) 
+      CALL qes_write (qexsd_xf,parallel_info)
+      CALL qes_reset (parallel_info) 
       IF ( check_file_exst(input_xml_schema_file) )  THEN
          CALL xml_addComment( XF = qexsd_xf, &
                               COMMENT= "")
          CALL qexsd_cp_line_by_line(ounit ,input_xml_schema_file, spec_tag="input")
       ELSE IF ( TRIM(qexsd_input_obj%tagname) == "input") THEN 
-         CALL qes_write_input(qexsd_xf, qexsd_input_obj)
+         CALL qes_write (qexsd_xf, qexsd_input_obj)
       END IF
       ! 
       IF (ALLOCATED(steps) ) THEN 
@@ -256,6 +259,7 @@ CONTAINS
     SUBROUTINE qexsd_closeschema()
       !------------------------------------------------------------------------
       USE mytime,    ONLY: nclock, clock_label
+      USE FOX_wxml,  ONLY: xml_NewElement, xml_AddCharacters, xml_EndElement, xml_Close   
       IMPLICIT NONE
       REAL(DP),EXTERNAL    :: get_clock
       !
@@ -270,7 +274,7 @@ CONTAINS
          CALL xml_NewElement (qexsd_xf, "cputime")
          CALL xml_addCharacters(qexsd_xf, MAX(nint(get_clock('PWSCF')),nint(get_clock('CP'))) )
          CALL xml_EndElement ( qexsd_xf, "cputime")
-         CALL qes_write_closed(qexsd_xf, qexsd_closed_element)
+         CALL qes_write (qexsd_xf, qexsd_closed_element)
       END IF
          CALL xml_Close(qexsd_xf) 
       !
@@ -437,7 +441,7 @@ CONTAINS
       CALL qes_init (obj, "atomic_species", nsp, species)
       !
       DO i = 1, nsp
-          CALL qes_reset_species(species(i))
+          CALL qes_reset (species(i))
       ENDDO
       DEALLOCATE(species)
       !
@@ -480,7 +484,7 @@ CONTAINS
       CALL qes_init (atomic_pos, "atomic_positions", atom)
       !
       DO ia = 1, nat
-          CALL qes_reset_atom( atom(ia) )
+          CALL qes_reset ( atom(ia) )
       ENDDO
       DEALLOCATE(atom)
       !
@@ -851,7 +855,18 @@ CONTAINS
             RETURN
             !
          END SUBROUTINE init_Hubbard_ns 
-  
+         
+         SUBROUTINE reset_Hubbard_ns(objs) 
+            IMPLICIT NONE 
+            ! 
+            TYPE(hubbard_ns_type)    :: objs(:) 
+            INTEGER   :: i_ 
+
+            DO i_ = 1, SIZE(objs) 
+               CALL qes_reset(objs(i_)) 
+            END DO 
+         END SUBROUTINE reset_Hubbard_ns
+
          SUBROUTINE reset_starting_ns(obj) 
             IMPLICIT NONE 
             TYPE (starting_ns_type), OPTIONAL  :: obj(:)  
@@ -863,7 +878,7 @@ CONTAINS
          END SUBROUTINE reset_starting_ns 
          !
              
-         END SUBROUTINE qexsd_init_dftU 
+      END SUBROUTINE qexsd_init_dftU 
          ! 
          !
          SUBROUTINE qexsd_init_vdw(obj, non_local_term, vdw_corr, vdw_term, ts_thr, ts_isol,& 
@@ -894,7 +909,6 @@ CONTAINS
                 CALL qes_reset(london_c6_obj(isp))
              END DO 
           END IF
-          DEALLOCATE ( london_c6_obj)
           CONTAINS
           ! 
           SUBROUTINE init_londonc6(c6data, c6objs )
@@ -1270,12 +1284,12 @@ CONTAINS
     step_obj%scf_conv = scf_conv_obj 
     CALL qes_reset(scf_conv_obj)
     ! 
-    CALL qexsd_init(atomic_struct_obj, ntyp, atm, ityp, nat, tau, &
+    CALL qexsd_init_atomic_structure(atomic_struct_obj, ntyp, atm, ityp, nat, tau, &
                                      alat, a1, a2, a3, 0)
     step_obj%atomic_structure=atomic_struct_obj
     CALL qes_reset( atomic_struct_obj )
     ! 
-    CALL qexsd_init (tot_en_obj, etot, eband, ehart, &
+    CALL qexsd_init_total_energy (tot_en_obj, etot, eband, ehart, &
           vtxc, etxc, ewald, degauss, demet, efieldcorr, potstat_contr, gatefield_en)  
     step_obj%total_energy=tot_en_obj
     CALL qes_reset( tot_en_obj )
@@ -1300,7 +1314,7 @@ CONTAINS
     steps(step_counter) = step_obj
     steps(step_counter)%lwrite  = .TRUE.
     steps(step_counter)%lread   = .TRUE. 
-    call qes_reset_step(step_obj)
+    call qes_reset (step_obj)
     END SUBROUTINE qexsd_step_addstep 
     !
     !------------------------------------------------------------------------------------
@@ -1422,7 +1436,7 @@ CONTAINS
     !
     CALL date_and_tim( cdate, time_string ) 
     date_string = cdate(1:2) // ' ' // cdate(3:5) // ' ' // cdate (6:9)
-    CALL qes_init_closed (qexsd_closed_element, "closed", date_string, time_string,&
+    CALL qes_init (qexsd_closed_element, "closed", date_string, time_string,&
                           "")
     END SUBROUTINE qexsd_set_closed 
     

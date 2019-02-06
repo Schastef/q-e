@@ -115,7 +115,7 @@
   CHARACTER(LEN=3),ALLOCATABLE             :: species_(:)
   !
   ! 
-  NULLIFY (gate_ptr, block_ptr, relaxz_ptr, block_1_ptr, block_2_ptr, block_height_ptr, zgate_ptr)
+  NULLIFY (gate_ptr, block_ptr, relaxz_ptr, block_1_ptr, block_2_ptr, block_height_ptr, zgate_ptr, dftU_, vdW_, hybrid_)
 
   obj%tagname=TRIM(obj_tagname)
   IF ( ABS(ip_ibrav)  .GT. 0 ) THEN  
