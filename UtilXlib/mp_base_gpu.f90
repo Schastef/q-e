@@ -14,8 +14,8 @@
 !  crashes when message exceeds a given size, so we need
 !  to break down MPI communications in smaller pieces
 !
-#define __MSGSIZ_MAX 100000
-#define __BCAST_MSGSIZ_MAX 100000
+#define __MSGSIZ_MAX huge(dim)
+#define __BCAST_MSGSIZ_MAX huge(n)
 
 !  Some implementation of MPI (OpenMPI) if it is not well tuned for the given
 !  network hardware (InfiniBand) tend to lose performance or get stuck inside
