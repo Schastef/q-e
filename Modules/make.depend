@@ -258,7 +258,6 @@ qexsd.o : mp_images.o
 qexsd.o : mp_pools.o
 qexsd.o : mp_world.o
 qexsd.o : noncol.o
-qexsd.o : parameters.o
 qexsd.o : qes_libs_module.o
 qexsd.o : qes_types_module.o
 qexsd.o : version.o

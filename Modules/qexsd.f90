@@ -89,7 +89,8 @@ MODULE qexsd_module
             qexsd_init_magnetization, qexsd_init_band_structure, & 
             qexsd_init_total_energy, qexsd_init_forces, qexsd_init_stress, &
             qexsd_init_dipole_info, qexsd_init_outputElectricField,   &
-            qexsd_init_outputPBC, qexsd_init_gate_info, qexsd_init_hybrid, qexsd_init_dftU
+            qexsd_init_outputPBC, qexsd_init_gate_info, qexsd_init_hybrid, qexsd_init_dftU,&
+            qexsd_init_vdw
   !
   PUBLIC :: qexsd_step_addstep, qexsd_set_status, qexsd_reset_steps    
   ! 
@@ -778,8 +779,8 @@ CONTAINS
             IF ( .NOT. PRESENT(starting_ns)) RETURN
             
             IF (noncolin_) THEN
-               llmax = SIZE(Hub_ns_nc,1) 
-               nspin = SIZE(Hub_ns_nc,3)
+               llmax = SIZE(starting_ns,1)
+               nspin = 1
                ALLOCATE(objs(nsp))
                DO i = 1, nsp
                   IF (.NOT. ANY(starting_ns(1:2*llmax,1,i)>0.d0)) CYCLE
@@ -789,8 +790,8 @@ CONTAINS
                END DO 
                RETURN 
             ELSE
-               llmax = SIZE (Hub_ns, 1) 
-               nspin = SIZE(Hub_ns, 3)
+               llmax = SIZE (starting_ns, 1)
+               nspin = SIZE(starting_ns, 2)
                ALLOCATE(objs(nspin*nsp))
                ind = 0 
                DO is = 1, nspin
@@ -833,7 +834,7 @@ CONTAINS
                                LABEL = TRIM(labs(ityp(i))), SPIN =1, INDEX = i,ORDER ='F',Hubbard_NS = Hubb_occ_aux) 
                END DO
                RETURN 
-            ELSE 
+            ELSE IF (PRESENT (Hub_ns)) THEN
                llmax = SIZE ( Hub_ns,1) 
                nat = size(Hub_ns,4)
                nspin = size(Hub_ns,3)
@@ -846,8 +847,8 @@ CONTAINS
                         ORDER = 'F', INDEX = ind, LABEL = TRIM(labs(ityp(i))), Hubbard_NS = Hub_ns(:,:,is,i))
                   END DO
                END DO
-               RETURN 
             END IF
+            RETURN
             !
          END SUBROUTINE init_Hubbard_ns 
   

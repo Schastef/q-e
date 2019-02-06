@@ -27,7 +27,8 @@ MODULE pw_restart_new
                           qexsd_init_forces,qexsd_init_stress, qexsd_xf,               &
                           qexsd_init_outputElectricField,                              &
                           qexsd_input_obj, qexsd_occ_obj, qexsd_smear_obj,             &
-                          qexsd_init_outputPBC, qexsd_init_gate_info  
+                          qexsd_init_outputPBC, qexsd_init_gate_info, qexsd_init_hybrid,&
+                          qexsd_init_dftU, qexsd_init_vdw
   USE io_global, ONLY : ionode, ionode_id
   USE io_files,  ONLY : iunpun, xmlpun_schema, prefix, tmp_dir, postfix
   !
@@ -116,7 +117,8 @@ MODULE pw_restart_new
       USE tsvdw_module,         ONLY : vdw_isolated, vdw_econv_thr
       USE input_parameters,     ONLY : verbosity, calculation, ion_dynamics, starting_ns_eigenvalue, &
                                        vdw_corr, london, k_points, assume_isolated, &  
-                                       input_parameters_occupations => occupations                                        
+                                       input_parameters_occupations => occupations, dftd3_threebody, &
+                                       dftd3_version
       USE bp,                   ONLY : lelfield, lberry, el_pol, ion_pol
       !
       USE rap_point_group,      ONLY : elem, nelem, name_class
@@ -127,7 +129,7 @@ MODULE pw_restart_new
               qexsd_init_occupations, qexsd_init_smearing
       USE fcp_variables,        ONLY : lfcpopt, lfcpdyn, fcp_mu  
       USE io_files,             ONLY : pseudo_dir
-      USE control_flags,        ONLY : conv_elec, conv_ions
+      USE control_flags,        ONLY : conv_elec, conv_ions, ldftd3
       USE input_parameters,     ONLY :  ts_vdw_econv_thr, ts_vdw_isolated
       !
       IMPLICIT NONE
@@ -164,12 +166,26 @@ MODULE pw_restart_new
       TYPE(output_type) :: output
       REAL(DP),POINTER    :: degauss_, demet_, efield_corr, potstat_corr, &
                                  gatefield_corr, bp_el_pol(:), bp_ion_pol(:) 
-      REAL(DP),TARGET     :: temp(20)
       LOGICAL, POINTER    :: optimization_has_converged => NULL() 
       LOGICAL, TARGET     :: conv_opt  
       LOGICAL             :: scf_has_converged 
       INTEGER             :: itemp = 1
-      NULLIFY( degauss_, demet_, efield_corr, potstat_corr, gatefield_corr, bp_el_pol, bp_ion_pol)
+      REAL(DP),ALLOCATABLE :: london_c6_(:)
+      CHARACTER(LEN=3),ALLOCATABLE :: species_(:)
+      CHARACTER(LEN=20),TARGET   :: dft_nonlocc_
+      INTEGER,TARGET             :: dftd3_version_
+      CHARACTER(LEN=20),TARGET   :: vdw_corr_
+      CHARACTER(LEN=20),POINTER  :: non_local_term_pt =>NULL(), vdw_corr_pt=>NULL()
+      REAL(DP),TARGET            :: temp(20), lond_rcut_, lond_s6_, ts_vdw_econv_thr_, xdm_a1_, xdm_a2_
+      REAL(DP),POINTER           :: vdw_term_pt =>NULL(), ts_thr_pt=>NULL(), london_s6_pt=>NULL(),&
+                                    london_rcut_pt=>NULL(), xdm_a1_pt=>NULL(), xdm_a2_pt=>NULL(), &
+                                    ts_vdw_econv_thr_pt=>NULL()
+      LOGICAL,TARGET             :: dftd3_threebody_, ts_vdw_isolated_
+      LOGICAL,POINTER            :: ts_isol_pt=>NULL(), dftd3_threebody_pt=>NULL(), ts_vdw_isolated_pt =>NULL()
+      INTEGER,POINTER            :: dftd3_version_pt
+
+      NULLIFY( degauss_, demet_, efield_corr, potstat_corr, gatefield_corr, bp_el_pol, bp_ion_pol )
+
       !
       ! Global PW dimensions need to be properly computed, reducing across MPI tasks
       ! If local PW dimensions are not available, set to 0
@@ -341,19 +357,49 @@ MODULE pw_restart_new
          IF ( dft_is_vdw .OR. empirical_vdw ) THEN 
             ALLOCATE (vdw_obj)
             IF ( empirical_vdw) THEN
-                ALLOCATE ( dispersion_energy_term)
+                vdw_term_pt => dispersion_energy_term
+                vdw_corr_ = TRIM(vdw_corr)
+                vdw_corr_pt => vdw_corr_
                 IF (llondon ) THEN
                     dispersion_energy_term = elondon/e2
+                    lond_s6_ = scal6
+                    london_s6_pt => lond_s6_
+                    lond_rcut_ = lon_rcut
+                    london_rcut_pt => lond_rcut_
+                    IF (ANY( c6_i(1:nsp) .NE. -1._DP )) THEN
+                       ALLOCATE (london_c6_(nsp), species_(nsp))
+                       london_c6_(1:nsp) = c6_i(1:nsp)
+                       species_(1:nsp)  = atm(1:nsp)
+                   END IF
+                   !
                 ELSE IF ( lxdm ) THEN
                     dispersion_energy_term = exdm/e2
+                    xdm_a1_ = xdm_a1
+                    xdm_a1_pt => xdm_a1_
+                    xdm_a2_ = xdm_a2
+                    xdm_a2_pt => xdm_a2_
+                    !
                 ELSE IF ( ldftd3) THEN
                     dispersion_energy_term = edftd3/e2
+                    dftd3_version_ = dftd3_version
+                    dftd3_version_pt => dftd3_version_
+                    dftd3_threebody_ = dftd3_threebody
+                    dftd3_threebody_pt => dftd3_threebody_
                 ELSE IF ( ts_vdw ) THEN
                     dispersion_energy_term = 2._DP * EtsvdW/e2
+                    ts_vdw_isolated_ = ts_vdw_isolated
+                    ts_vdw_isolated_pt => ts_vdw_isolated_
+                    ts_vdw_econv_thr_ = ts_vdw_econv_thr
+                    ts_vdw_econv_thr_pt => ts_vdw_econv_thr_
                 END IF
             END IF 
-            CALL qexsd_init_vdw(vdw_obj, get_nonlocc_name, vdw_corr, dispersion_energy_term, &
-                                ts_vdw_econv_thr, ts_vdw_isolated, scal6, c6_i, lon_rcut, xdm_a1, xdm_a2 )
+            IF (dft_is_vdw) THEN
+                dft_nonlocc_ = TRIM(get_nonlocc_name())
+                non_local_term_pt => dft_nonlocc_
+            END IF
+            CALL qexsd_init_vdw(vdw_obj, non_local_term_pt, vdw_corr_pt, vdw_term_pt, &
+                                ts_thr_pt, ts_isol_pt, london_s6_pt, LONDON_C6 = london_c6_, &
+                                LONDON_RCUT =   london_rcut_pt, XDM_A1 = xdm_a1_pt, XDM_A2 = xdm_a2_pt )
          END IF 
          IF ( lda_plus_u) THEN 
             ALLOCATE (dftU_obj)  
@@ -925,7 +971,6 @@ MODULE pw_restart_new
     SUBROUTINE init_vars_from_schema( what, ierr, output_obj, par_info, gen_info, input_obj )
       !------------------------------------------------------------------------
       !
-      USE control_flags,        ONLY : twfcollect
       USE io_rho_xml,           ONLY : read_scf
       USE scf,                  ONLY : rho
       USE lsda_mod,             ONLY : nspin
@@ -991,10 +1036,6 @@ MODULE pw_restart_new
       CASE( 'header' )
          !
          lheader = .TRUE.
-         !
-      CASE ( 'wf_collect' ) 
-         ! 
-         twfcollect = output_obj%band_structure%wf_collected 
          !
       CASE( 'dim' )
          !
@@ -1090,7 +1131,6 @@ MODULE pw_restart_new
       END IF
       !
       IF ( lpw ) THEN
-         twfcollect = output_obj%band_structure%wf_collected
          CALL readschema_planewaves( output_obj%basis_set) 
       END IF
       IF ( lions ) THEN
@@ -1118,7 +1158,6 @@ MODULE pw_restart_new
       END IF
       IF ( lwfc ) THEN
          !
-         twfcollect = output_obj%band_structure%wf_collected
          IF (output_obj%band_structure%wf_collected)  CALL read_collected_to_evc(dirname ) 
       END IF
       IF ( lsymm ) THEN
@@ -1974,7 +2013,6 @@ MODULE pw_restart_new
     SUBROUTINE readschema_band_structure( band_struct_obj )
       !------------------------------------------------------------------------
       !
-      USE control_flags, ONLY : lkpoint_dir
       USE constants,     ONLY : e2
       USE basis,    ONLY : natomwfc
       USE lsda_mod, ONLY : lsda, isk
@@ -1987,7 +2025,6 @@ MODULE pw_restart_new
       TYPE ( band_structure_type)         :: band_struct_obj
       INTEGER                             :: ik, nbnd_, nbnd_up_, nbnd_dw_
       ! 
-      lkpoint_dir = .FALSE.
       !! left here to write bw compatible xml
       lsda = band_struct_obj%lsda
       nbnd  = band_struct_obj%nbnd 

@@ -969,7 +969,7 @@ io_dyn_mat.o : ../../Modules/io_global.o
 io_dyn_mat.o : ../../Modules/kind.o
 io_dyn_mat.o : ../../Modules/mp_images.o
 io_dyn_mat.o : ../../UtilXlib/mp.o
-io_dyn_mat.o : ../../iotk/src/iotk_module.o
+io_dyn_mat.o : @iotk_module@
 io_dyn_mat_old.o : ../../Modules/cell_base.o
 io_dyn_mat_old.o : ../../Modules/constants.o
 io_dyn_mat_old.o : ../../Modules/io_global.o
@@ -1061,7 +1061,7 @@ ph_restart.o : ../../Modules/version.o
 ph_restart.o : ../../PW/src/pwcom.o
 ph_restart.o : ../../PW/src/start_k.o
 ph_restart.o : ../../UtilXlib/mp.o
-ph_restart.o : ../../iotk/src/iotk_module.o
+ph_restart.o : @iotk_module@
 ph_restart.o : elph.o
 ph_restart.o : phcom.o
 ph_restart.o : ramanm.o
@@ -1328,7 +1328,7 @@ q2trans.o : ../../Modules/kind.o
 q2trans.o : ../../Modules/mp_global.o
 q2trans.o : ../../Modules/mp_world.o
 q2trans.o : ../../UtilXlib/mp.o
-q2trans.o : ../../iotk/src/iotk_module.o
+q2trans.o : @iotk_module@
 q2trans.o : io_dyn_mat.o
 q2trans.o : io_dyn_mat_old.o
 q2trans.o : rigid.o
@@ -1339,7 +1339,7 @@ q2trans_fd.o : ../../Modules/kind.o
 q2trans_fd.o : ../../Modules/mp_global.o
 q2trans_fd.o : ../../Modules/mp_world.o
 q2trans_fd.o : ../../UtilXlib/mp.o
-q2trans_fd.o : ../../iotk/src/iotk_module.o
+q2trans_fd.o : @iotk_module@
 q2trans_fd.o : io_dyn_mat.o
 q2trans_fd.o : io_dyn_mat_old.o
 q_points.o : ../../Modules/cell_base.o

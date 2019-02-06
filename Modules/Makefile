@@ -105,7 +105,10 @@ io_base.o \
 qes_types_module.o \
 qes_libs_module.o  \
 qes_read_module.o \
-bcast_qes_module.o \
+qes_reset_module.o \
+qes_init_module.o \
+qes_read_module.o \
+qes_bcast_module.o \
 qexsd.o   \
 qexsd_input.o \
 hdf5_qe.o\
