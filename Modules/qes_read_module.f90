@@ -20,11 +20,14 @@ MODULE qes_read_module
   PUBLIC qes_read
   !
   INTERFACE qes_read
+    MODULE PROCEDURE qes_read_espresso
     MODULE PROCEDURE qes_read_general_info
     MODULE PROCEDURE qes_read_parallel_info
     MODULE PROCEDURE qes_read_input
     MODULE PROCEDURE qes_read_step
     MODULE PROCEDURE qes_read_output
+    MODULE PROCEDURE qes_read_timing
+    MODULE PROCEDURE qes_read_clock
     MODULE PROCEDURE qes_read_control_variables
     MODULE PROCEDURE qes_read_xml_format
     MODULE PROCEDURE qes_read_creator
@@ -102,6 +105,218 @@ MODULE qes_read_module
   END INTERFACE qes_read
   !
   CONTAINS
+  !
+  !
+  SUBROUTINE qes_read_espresso(xml_node, obj, ierr )
+    !
+    IMPLICIT NONE
+    !
+    TYPE(Node), INTENT(IN), POINTER                 :: xml_node
+    TYPE(espresso_type), INTENT(OUT) :: obj
+    INTEGER, OPTIONAL, INTENT(OUT)                  :: ierr
+    !
+    TYPE(Node), POINTER :: tmp_node
+    TYPE(NodeList), POINTER :: tmp_node_list
+    INTEGER :: tmp_node_list_size, index, iostat_
+    !
+    obj%tagname = getTagName(xml_node)
+    !
+
+    IF (hasAttribute(xml_node, "Units")) THEN
+      CALL extractDataAttribute(xml_node, "Units", obj%Units)
+      obj%Units_ispresent = .TRUE.
+    ELSE
+      obj%Units_ispresent = .FALSE.
+    END IF
+    !
+
+
+
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "general_info")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","general_info: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","general_info: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%general_info_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_general_info(tmp_node, obj%general_info, ierr )
+    ELSE
+       obj%general_info_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "parallel_info")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","parallel_info: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","parallel_info: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%parallel_info_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_parallel_info(tmp_node, obj%parallel_info, ierr )
+    ELSE
+       obj%parallel_info_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "input")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","input: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","input: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL qes_read_input(tmp_node, obj%input, ierr )
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "step")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%step_ispresent = .TRUE.
+    ELSE
+      obj%step_ispresent = .FALSE.
+    END IF
+    obj%ndim_step = tmp_node_list_size
+    ALLOCATE(obj%step(tmp_node_list_size))
+    DO index=1,tmp_node_list_size
+        tmp_node => item( tmp_node_list, index-1 )
+        CALL qes_read_step(tmp_node, obj%step(index), ierr )
+    END DO
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "output")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","output: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","output: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%output_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_output(tmp_node, obj%output, ierr )
+    ELSE
+       obj%output_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "status")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","status: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","status: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%status_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%status , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:espressoType","error reading status")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:espressoType","error reading status",10)
+         END IF
+      END IF
+    ELSE
+       obj%status_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "cputime")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","cputime: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","cputime: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%cputime, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:espressoType","error reading cputime")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:espressoType","error reading cputime",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "timining_info")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","timining_info: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","timining_info: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL qes_read_timing(tmp_node, obj%timining_info, ierr )
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "closed")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:espressoType","closed: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:espressoType","closed: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%closed_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_closed(tmp_node, obj%closed, ierr )
+    ELSE
+       obj%closed_ispresent = .FALSE.
+    END IF
+    !
+    !
+    obj%lwrite = .TRUE.
+    !
+  END SUBROUTINE qes_read_espresso
   !
   !
   SUBROUTINE qes_read_general_info(xml_node, obj, ierr )
@@ -1256,6 +1471,156 @@ MODULE qes_read_module
     obj%lwrite = .TRUE.
     !
   END SUBROUTINE qes_read_output
+  !
+  !
+  SUBROUTINE qes_read_timing(xml_node, obj, ierr )
+    !
+    IMPLICIT NONE
+    !
+    TYPE(Node), INTENT(IN), POINTER                 :: xml_node
+    TYPE(timing_type), INTENT(OUT) :: obj
+    INTEGER, OPTIONAL, INTENT(OUT)                  :: ierr
+    !
+    TYPE(Node), POINTER :: tmp_node
+    TYPE(NodeList), POINTER :: tmp_node_list
+    INTEGER :: tmp_node_list_size, index, iostat_
+    !
+    obj%tagname = getTagName(xml_node)
+    !
+
+
+
+
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "total")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:timingType","total: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:timingType","total: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL qes_read_clock(tmp_node, obj%total, ierr )
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "partial")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%partial_ispresent = .TRUE.
+    ELSE
+      obj%partial_ispresent = .FALSE.
+    END IF
+    obj%ndim_partial = tmp_node_list_size
+    ALLOCATE(obj%partial(tmp_node_list_size))
+    DO index=1,tmp_node_list_size
+        tmp_node => item( tmp_node_list, index-1 )
+        CALL qes_read_clock(tmp_node, obj%partial(index), ierr )
+    END DO
+    !
+    !
+    obj%lwrite = .TRUE.
+    !
+  END SUBROUTINE qes_read_timing
+  !
+  !
+  SUBROUTINE qes_read_clock(xml_node, obj, ierr )
+    !
+    IMPLICIT NONE
+    !
+    TYPE(Node), INTENT(IN), POINTER                 :: xml_node
+    TYPE(clock_type), INTENT(OUT) :: obj
+    INTEGER, OPTIONAL, INTENT(OUT)                  :: ierr
+    !
+    TYPE(Node), POINTER :: tmp_node
+    TYPE(NodeList), POINTER :: tmp_node_list
+    INTEGER :: tmp_node_list_size, index, iostat_
+    !
+    obj%tagname = getTagName(xml_node)
+    !
+
+    IF (hasAttribute(xml_node, "label")) THEN
+      CALL extractDataAttribute(xml_node, "label", obj%label)
+    ELSE
+      IF ( PRESENT(ierr) ) THEN
+         CALL infomsg ( "qes_read: clockType",&
+                        "required attribute label not found" )
+         ierr = ierr + 1
+      ELSE
+         CALL errore ("qes_read: clockType",&
+                      "required attribute label not found", 10 )
+      END IF
+    END IF
+    !
+    IF (hasAttribute(xml_node, "calls")) THEN
+      CALL extractDataAttribute(xml_node, "calls", obj%calls)
+      obj%calls_ispresent = .TRUE.
+    ELSE
+      obj%calls_ispresent = .FALSE.
+    END IF
+    !
+
+
+
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "cpu")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:clockType","cpu: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:clockType","cpu: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%cpu, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:clockType","error reading cpu")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:clockType","error reading cpu",10)
+       END IF
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "wall")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size /= 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:clockType","wall: wrong number of occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:clockType","wall: wrong number of occurrences",10)
+        END IF
+    END IF
+    !
+    tmp_node => item(tmp_node_list, 0)
+    IF (ASSOCIATED(tmp_node))&
+       CALL extractDataContent(tmp_node, obj%wall, IOSTAT = iostat_ )
+    IF ( iostat_ /= 0 ) THEN
+       IF ( PRESENT (ierr ) ) THEN 
+          CALL infomsg("qes_read:clockType","error reading wall")
+          ierr = ierr + 1
+       ELSE 
+          CALL errore ("qes_read:clockType","error reading wall",10)
+       END IF
+    END IF
+    !
+    !
+    obj%lwrite = .TRUE.
+    !
+  END SUBROUTINE qes_read_clock
   !
   !
   SUBROUTINE qes_read_control_variables(xml_node, obj, ierr )
@@ -2626,145 +2991,169 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "ecutfock")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","ecutfock: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","ecutfock: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","ecutfock: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","ecutfock: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%ecutfock, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:hybridType","error reading ecutfock")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:hybridType","error reading ecutfock",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%ecutfock_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%ecutfock , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:hybridType","error reading ecutfock")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:hybridType","error reading ecutfock",10)
+         END IF
+      END IF
+    ELSE
+       obj%ecutfock_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "exx_fraction")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","exx_fraction: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","exx_fraction: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","exx_fraction: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","exx_fraction: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%exx_fraction, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:hybridType","error reading exx_fraction")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:hybridType","error reading exx_fraction",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%exx_fraction_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%exx_fraction , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:hybridType","error reading exx_fraction")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:hybridType","error reading exx_fraction",10)
+         END IF
+      END IF
+    ELSE
+       obj%exx_fraction_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "screening_parameter")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","screening_parameter: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","screening_parameter: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","screening_parameter: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","screening_parameter: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%screening_parameter, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:hybridType","error reading screening_parameter")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:hybridType","error reading screening_parameter",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%screening_parameter_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%screening_parameter , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:hybridType","error reading screening_parameter")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:hybridType","error reading screening_parameter",10)
+         END IF
+      END IF
+    ELSE
+       obj%screening_parameter_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "exxdiv_treatment")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","exxdiv_treatment: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","exxdiv_treatment: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","exxdiv_treatment: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","exxdiv_treatment: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%exxdiv_treatment, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:hybridType","error reading exxdiv_treatment")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:hybridType","error reading exxdiv_treatment",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%exxdiv_treatment_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%exxdiv_treatment , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:hybridType","error reading exxdiv_treatment")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:hybridType","error reading exxdiv_treatment",10)
+         END IF
+      END IF
+    ELSE
+       obj%exxdiv_treatment_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "x_gamma_extrapolation")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","x_gamma_extrapolation: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","x_gamma_extrapolation: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","x_gamma_extrapolation: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","x_gamma_extrapolation: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%x_gamma_extrapolation, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:hybridType","error reading x_gamma_extrapolation")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:hybridType","error reading x_gamma_extrapolation",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%x_gamma_extrapolation_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%x_gamma_extrapolation , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:hybridType","error reading x_gamma_extrapolation")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:hybridType","error reading x_gamma_extrapolation",10)
+         END IF
+      END IF
+    ELSE
+       obj%x_gamma_extrapolation_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "ecutvcut")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","ecutvcut: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","ecutvcut: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","ecutvcut: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","ecutvcut: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%ecutvcut, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:hybridType","error reading ecutvcut")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:hybridType","error reading ecutvcut",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%ecutvcut_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%ecutvcut , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:hybridType","error reading ecutvcut")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:hybridType","error reading ecutvcut",10)
+         END IF
+      END IF
+    ELSE
+       obj%ecutvcut_ispresent = .FALSE.
     END IF
     !
     !
@@ -3353,6 +3742,62 @@ MODULE qes_read_module
       END IF
     ELSE
        obj%vdw_corr_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "dftd3_version")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:vdWType","dftd3_version: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:vdWType","dftd3_version: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%dftd3_version_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%dftd3_version , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:vdWType","error reading dftd3_version")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:vdWType","error reading dftd3_version",10)
+         END IF
+      END IF
+    ELSE
+       obj%dftd3_version_ispresent = .FALSE.
+    END IF
+    !
+    tmp_node_list => getElementsByTagname(xml_node, "dftd3_threebody")
+    tmp_node_list_size = getLength(tmp_node_list)
+    !
+    IF (tmp_node_list_size > 1) THEN
+        IF (PRESENT(ierr) ) THEN 
+           CALL infomsg("qes_read:vdWType","dftd3_threebody: too many occurrences")
+           ierr = ierr + 1 
+        ELSE 
+           CALL errore("qes_read:vdWType","dftd3_threebody: too many occurrences",10)
+        END IF
+    END IF
+    !
+    IF (tmp_node_list_size>0) THEN
+      obj%dftd3_threebody_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%dftd3_threebody , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:vdWType","error reading dftd3_threebody")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:vdWType","error reading dftd3_threebody",10)
+         END IF
+      END IF
+    ELSE
+       obj%dftd3_threebody_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "non_local_term")
@@ -8497,25 +8942,29 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "real_space_beta")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:algorithmic_infoType","real_space_beta: wrong number of occurrences")
+           CALL infomsg("qes_read:algorithmic_infoType","real_space_beta: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:algorithmic_infoType","real_space_beta: wrong number of occurrences",10)
+           CALL errore("qes_read:algorithmic_infoType","real_space_beta: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%real_space_beta, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:algorithmic_infoType","error reading real_space_beta")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:algorithmic_infoType","error reading real_space_beta",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%real_space_beta_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%real_space_beta , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:algorithmic_infoType","error reading real_space_beta")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:algorithmic_infoType","error reading real_space_beta",10)
+         END IF
+      END IF
+    ELSE
+       obj%real_space_beta_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "uspp")
@@ -9537,25 +9986,29 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "nbnd")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:band_structureType","nbnd: wrong number of occurrences")
+           CALL infomsg("qes_read:band_structureType","nbnd: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:band_structureType","nbnd: wrong number of occurrences",10)
+           CALL errore("qes_read:band_structureType","nbnd: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%nbnd, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:band_structureType","error reading nbnd")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:band_structureType","error reading nbnd",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%nbnd_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%nbnd , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:band_structureType","error reading nbnd")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:band_structureType","error reading nbnd",10)
+         END IF
+      END IF
+    ELSE
+       obj%nbnd_ispresent = .FALSE.
     END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "nbnd_up")

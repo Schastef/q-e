@@ -542,7 +542,7 @@ MODULE qexsd_input
    ! 
    IF (PRESENT(fixed_magnetization)) target_magnetization=fixed_magnetization
    CALL  qes_init (obj,TAGNAME,SPIN_CONSTRAINTS=TRIM(constrained_magnetization),&
-                                   TARGET_MAGNETIZATION=target_magnetization,LAGRANGE_MULTIPLIER=lambda)
+                                   TARGET_MAGNETIZATION=fixed_magnetization ,LAGRANGE_MULTIPLIER=lambda)
    END SUBROUTINE qexsd_init_spin_constraints
    !
    ! 

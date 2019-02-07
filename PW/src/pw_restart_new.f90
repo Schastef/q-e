@@ -158,9 +158,8 @@ MODULE pw_restart_new
       TYPE(BerryPhaseOutput_type),  POINTER :: bp_obj_ptr => NULL()
       TYPE(hybrid_type), POINTER            :: hybrid_obj => NULL()
       TYPE(vdW_type), POINTER               :: vdw_obj => NULL()
-      TYPE(dftU_type), POINTER              :: dftU_obj => NULL()
-      REAL(DP), POINTER                     :: dispersion_energy_term => NULL()
-      REAL(DP), TARGET                      :: lumo_tmp, ef_targ
+      TYPE(dftU_type), POINTER              :: dftU_obj => NULL() 
+      REAL(DP), TARGET                      :: lumo_tmp, ef_targ, dispersion_energy_term 
       REAL(DP), POINTER                     :: lumo_energy => NULL(), ef_point => NULL()
       REAL(DP), ALLOCATABLE                 :: ef_updw(:)
       !
@@ -172,16 +171,18 @@ MODULE pw_restart_new
       LOGICAL, TARGET     :: conv_opt  
       LOGICAL             :: scf_has_converged 
       INTEGER             :: itemp = 1
-      REAL(DP),ALLOCATABLE :: london_c6_(:), bp_el_pol(:), bp_ion_pol(:) 
+      REAL(DP),ALLOCATABLE :: london_c6_(:), bp_el_pol(:), bp_ion_pol(:), U_opt(:), J0_opt(:), alpha_opt(:), &
+                              J_opt(:,:), beta_opt(:) 
       CHARACTER(LEN=3),ALLOCATABLE :: species_(:)
       CHARACTER(LEN=20),TARGET   :: dft_nonlocc_
       INTEGER,TARGET             :: dftd3_version_
       CHARACTER(LEN=20),TARGET   :: vdw_corr_
       CHARACTER(LEN=20),POINTER  :: non_local_term_pt =>NULL(), vdw_corr_pt=>NULL()
-      REAL(DP),TARGET            :: temp(20), lond_rcut_, lond_s6_, ts_vdw_econv_thr_, xdm_a1_, xdm_a2_
+      REAL(DP),TARGET            :: temp(20), lond_rcut_, lond_s6_, ts_vdw_econv_thr_, xdm_a1_, xdm_a2_, ectuvcut_,&
+                                    scr_par_ 
       REAL(DP),POINTER           :: vdw_term_pt =>NULL(), ts_thr_pt=>NULL(), london_s6_pt=>NULL(),&
                                     london_rcut_pt=>NULL(), xdm_a1_pt=>NULL(), xdm_a2_pt=>NULL(), &
-                                    ts_vdw_econv_thr_pt=>NULL()
+                                    ts_vdw_econv_thr_pt=>NULL(), ectuvcut_opt=>NULL(), scr_par_opt=>NULL()
       LOGICAL,TARGET             :: dftd3_threebody_, ts_vdw_isolated_
       LOGICAL,POINTER            :: ts_isol_pt=>NULL(), dftd3_threebody_pt=>NULL(), ts_vdw_isolated_pt =>NULL()
       INTEGER,POINTER            :: dftd3_version_pt => NULL() 
@@ -312,7 +313,7 @@ MODULE pw_restart_new
                            EXIT symmetries_so_loop
                         END IF
                      END DO elements_so_loop 
-                  END DO classes_so_loop
+                     END DO classes_so_loop
                END DO symmetries_so_loop
             !
             ELSE
@@ -347,11 +348,19 @@ MODULE pw_restart_new
 !-------------------------------------------------------------------------------
          !
          IF (dft_is_hybrid() ) THEN 
-            ALLOCATE ( hybrid_obj) 
+            ALLOCATE ( hybrid_obj)
+            IF (get_screening_parameter() > 0.0_DP) THEN
+               scr_par_ = get_screening_parameter() 
+               scr_par_opt=> scr_par_ 
+            END IF 
+            IF (ecutvcut > 0.0_DP) THEN 
+               ectuvcut_ = ecutvcut/e2 
+               ectuvcut_opt => ectuvcut_
+            END IF 
             CALL qexsd_init_hybrid(hybrid_obj, DFT_IS_HYBRID = .TRUE., NQ1 = nq1 , NQ2 = nq2, NQ3 =nq3, ECUTFOCK = ecutfock/e2, &
-                                   EXX_FRACTION = get_exx_fraction(), SCREENING_PARAMETER = get_screening_parameter(),&
+                                   EXX_FRACTION = get_exx_fraction(), SCREENING_PARAMETER = scr_par_opt, &
                                    EXXDIV_TREATMENT = exxdiv_treatment, X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation,&
-                                   ECUTVCUT = ecutvcut/e2 )
+                                   ECUTVCUT = ectuvcut_opt )
          END IF 
 
          empirical_vdw = (llondon .OR. ldftd3 .OR. lxdm .OR. ts_vdw )
@@ -405,22 +414,23 @@ MODULE pw_restart_new
          END IF 
          IF ( lda_plus_u) THEN 
             ALLOCATE (dftU_obj)  
-            CALL qexsd_init_dftU (dftU_obj, NSP = nsp, SPECIES = atm(1:nsp), ITYP = ityp(1:nat),&
-                                  IS_HUBBARD = is_hubbard, PSD = upf(1:nsp)%psd, U = Hubbard_U, &
-                                  LDA_PLUS_U_KIND = lda_plus_u_kind, U_PROJECTION_TYPE = U_projection, &
-                                  J0 = Hubbard_J0, alpha = Hubbard_alpha, beta = Hubbard_beta, J = Hubbard_J, &
-                                   starting_ns = starting_ns_eigenvalue, Hub_ns = rho%ns, Hub_ns_nc = rho%ns_nc )
+            CALL check_and_allocate(U_opt, Hubbard_U)
+            CALL check_and_allocate(J0_opt, Hubbard_J0) 
+            CALL check_and_allocate(alpha_opt, Hubbard_alpha) 
+            CALL check_and_allocate(beta_opt, Hubbard_beta) 
+            IF ( ANY(Hubbard_J(:,1:nsp) /= 0.0_DP)) THEN
+               ALLOCATE (J_opt(3,nsp)) 
+               J_opt(:, 1:nsp) = Hubbard_J(:, 1:nsp) 
+            END IF 
+            CALL qexsd_init_dftU (dftU_obj, NSP = nsp, SPECIES = atm(1:nsp), ITYP = ityp(1:nat),                     &
+                                  IS_HUBBARD = is_hubbard, PSD = upf(1:nsp)%psd, NONCOLIN = noncolin, U =U_opt, &
+                                  LDA_PLUS_U_KIND = lda_plus_u_kind, U_PROJECTION_TYPE = U_projection,               &
+                                  J0 = J0_opt, alpha = alpha_opt, beta = beta_opt, J = J_opt,        & 
+                                  starting_ns = starting_ns_eigenvalue, Hub_ns = rho%ns, Hub_ns_nc = rho%ns_nc ) 
          END IF 
          dft_name = get_dft_short()
          inlc = get_inlc()
          !
-         IF (llondon .OR. ldftd3 .OR. lxdm .OR. ts_vdw ) THEN
-            ALLOCATE (dispersion_energy_term) 
-            IF (llondon)  dispersion_energy_term = elondon/e2 
-            IF (ldftd3)   dispersion_energy_term = edftd3/e2 
-            IF (lxdm)     dispersion_energy_term = exdm/e2 
-            IF (ts_vdw)   dispersion_energy_term = 2._DP* Etsvdw/e2 
-         END IF 
          CALL qexsd_init_dft  (output%dft, dft_name, hybrid_obj, vdw_obj, dftU_obj)
             ! variables for hybrid functionals 
          !nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), get_screening_parameter(), &
@@ -521,7 +531,7 @@ MODULE pw_restart_new
             CALL  qexsd_init_band_structure(output%band_structure,lsda, noncolin,lspinorb, nelec, natomwfc, &
                                 et, wg, nkstot, xk, ngk_g, wk, &
                                 STARTING_KPOINTS =  qexsd_start_k_obj, OCCUPATIONS_KIND = qexsd_occ_obj,&
-                                WF_COLLECTED = wf_collect, NBND = nbnd, HOMO = h_energy, LUMO = lumo_energy )
+                                WF_COLLECTED = .TRUE. , NBND = nbnd, HOMO = h_energy, LUMO = lumo_energy )
          END IF 
          CALL qes_reset (qexsd_start_k_obj)
          CALL qes_reset (qexsd_occ_obj)
@@ -644,6 +654,17 @@ MODULE pw_restart_new
       !
       RETURN
        !
+    CONTAINS
+       SUBROUTINE check_and_allocate(alloc, mydata)
+          IMPLICIT NONE
+          REAL(DP),ALLOCATABLE  :: alloc(:) 
+          REAL(DP)              :: mydata(:)  
+          IF ( ANY(mydata(1:nsp) /= 0.0_DP)) THEN 
+             ALLOCATE(alloc(nsp)) 
+             alloc(1:nsp) = mydata(1:nsp) 
+          END IF 
+          RETURN
+       END SUBROUTINE check_and_allocate 
     END SUBROUTINE pw_write_schema
     !
     !------------------------------------------------------------------------

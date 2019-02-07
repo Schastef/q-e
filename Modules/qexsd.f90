@@ -430,9 +430,15 @@ CONTAINS
           IF ( PRESENT(amass) ) THEN 
              IF (amass(i) .GT. 0._DP) amass_=>amass(i)
           END IF 
-          IF ( PRESENT(starting_magnetization) ) start_mag_=starting_magnetization(i)
-          IF ( PRESENT( angle1 ) )  spin_teta => angle1(i)
-          IF ( PRESENT( angle2 ) )  spin_phi  => angle2(i)
+          IF ( PRESENT(starting_magnetization) ) THEN
+             IF (ANY( starting_magnetization(1:nsp) /= 0.0_DP)) start_mag_ => starting_magnetization(i)
+          END IF 
+          IF ( PRESENT( angle1 ) ) THEN 
+             IF (ANY ( angle1(1:nsp) /= 0.0_DP))    spin_teta => angle1(i)
+          END IF 
+          IF ( PRESENT( angle2 ) )  THEN 
+             IF (ANY(angle2(1:nsp) /= 0.0_DP)) spin_phi  => angle2(i)
+          END IF 
           !
           CALL qes_init ( species(i), "species", NAME = TRIM(atm(i)), PSEUDO_FILE = TRIM(psfile(i)), MASS = amass_, &
                                STARTING_MAGNETIZATION = start_mag_, SPIN_TETA = spin_teta, SPIN_PHI = spin_phi )
@@ -645,9 +651,9 @@ CONTAINS
          TYPE (hybrid_type),INTENT(INOUT)        :: obj 
          LOGICAL,INTENT(IN)                      :: dft_is_hybrid 
          INTEGER,INTENT(IN)                      :: nq1, nq2, nq3 
-         REAL(DP),INTENT(IN)                     :: ecutfock, exx_fraction, screening_parameter, ecutvcut 
+         REAL(DP),OPTIONAL,INTENT(IN)                     :: ecutfock, exx_fraction, screening_parameter, ecutvcut 
          CHARACTER(LEN=*), INTENT(IN)            :: exxdiv_treatment 
-         LOGICAL,INTENT(IN)                      :: x_gamma_extrapolation 
+         LOGICAL,OPTIONAL,INTENT(IN)                      :: x_gamma_extrapolation 
          ! 
          TYPE (qpoint_grid_type) :: qpoint_grid 
          !
@@ -662,7 +668,7 @@ CONTAINS
       END SUBROUTINE qexsd_init_hybrid 
          !
       SUBROUTINE qexsd_init_dftU (obj, nsp, psd, species, ityp, is_hubbard, lda_plus_u_kind, U_projection_type, &
-                                   U, J0, alpha, beta, J, starting_ns, Hub_ns, Hub_ns_nc )
+                                   U, J0, alpha, beta, J, noncolin, starting_ns, Hub_ns, Hub_ns_nc )
          IMPLICIT NONE 
          TYPE(dftU_type),INTENT(INOUT)  :: obj 
          INTEGER,INTENT(IN)             :: nsp
@@ -672,6 +678,7 @@ CONTAINS
          LOGICAL,INTENT(IN)             :: is_hubbard(nsp)
          INTEGER,INTENT(IN)             :: lda_plus_u_kind
          CHARACTER(LEN=*),INTENT(IN)    :: U_projection_type
+         LOGICAL,OPTIONAL,INTENT(IN)    :: noncolin 
          REAL(DP),OPTIONAL,INTENT(IN)   :: U(:), J0(:), alpha(:), beta(:), J(:,:)
          REAL(DP),OPTIONAL,INTENT(IN)   :: starting_ns(:,:,:), Hub_ns(:,:,:,:)
          COMPLEX(DP),OPTIONAL,INTENT(IN) :: Hub_ns_nc(:,:,:,:)
@@ -684,9 +691,8 @@ CONTAINS
          LOGICAL                               :: noncolin_ =.FALSE.
          !
          CALL set_labels ()
-         noncolin_ = PRESENT( Hub_ns_nc)
-         IF ( (.NOT. noncolin_) .AND. (.NOT. PRESENT(Hub_ns))) &
-               CALL errore("qexsd_init_dftU:",  "ns and ns_nc are both nonpresent",1)
+         IF ( PRESENT(noncolin)) noncolin_ = noncolin 
+         !
          IF (PRESENT(U))   CALL init_hubbard_commons(U, U_, label, "Hubbard_U") 
          IF (PRESENT(J0))  CALL init_hubbard_commons(J0, J0_, label, "Hubbard_J0" ) 
          IF (PRESENT(alpha)) CALL init_hubbard_commons(alpha, alpha_,label, "Hubbard_alpha") 
@@ -735,6 +741,7 @@ CONTAINS
             ALLOCATE (objs(nsp)) 
             DO i = 1, nsp 
                CALL qes_init( objs(i), TRIM(tag), TRIM(species(i)), dati(i), TRIM(labs(i)))
+               IF (TRIM(labs(i)) =='no Hubbard') objs(i)%lwrite = .FALSE. 
             END DO 
          END SUBROUTINE init_hubbard_commons 
          !
@@ -749,6 +756,7 @@ CONTAINS
             ALLOCATE (objs(nsp)) 
             DO i = 1, nsp 
                CALL qes_init( objs(i), TRIM(tag), TRIM(species(i)), HubbardJ = dati(1:3,i), LABEL = TRIM(labs(i)))
+               IF (TRIM(labs(i)) =='no Hubbard') objs(i)%lwrite = .FALSE. 
             END DO 
          END SUBROUTINE init_hubbard_J
          !
@@ -801,6 +809,7 @@ CONTAINS
                DO is = 1, nspin
                   DO i = 1, nsp 
                      IF (.NOT. ANY (starting_ns(1:llmax,is,i) > 0.d0)) CYCLE 
+                     ind = ind + 1 
                      CALL qes_init(objs(ind), "starting_ns", TRIM(species(i)), TRIM (labs(i)), & 
                                     is,MAX(starting_ns(1:llmax,is,i),0._DP))
                   END DO 
@@ -836,6 +845,7 @@ CONTAINS
                   END DO
                   CALL qes_init (objs(i), TAGNAME = "Hubbard_ns_mod", SPECIE = TRIM(species(ityp(i))), &
                                LABEL = TRIM(labs(ityp(i))), SPIN =1, INDEX = i,ORDER ='F',Hubbard_NS = Hubb_occ_aux) 
+                  IF (TRIM(labs(ityp(i))) == 'no Hubbard') objs(i)%lwrite = .FALSE. 
                END DO
                RETURN 
             ELSE IF (PRESENT (Hub_ns)) THEN
@@ -849,6 +859,7 @@ CONTAINS
                      ind = ind+1
                      CALL qes_init(objs(ind),"Hubbard_ns", SPECIE = TRIM(species(ityp(i))), SPIN = is, &
                         ORDER = 'F', INDEX = ind, LABEL = TRIM(labs(ityp(i))), Hubbard_NS = Hub_ns(:,:,is,i))
+                        IF (TRIM(labs(ityp(i))) =='no Hubbard' )  objs(ind)%lwrite=.FALSE. 
                   END DO
                END DO
             END IF
@@ -859,9 +870,10 @@ CONTAINS
          SUBROUTINE reset_Hubbard_ns(objs) 
             IMPLICIT NONE 
             ! 
-            TYPE(hubbard_ns_type)    :: objs(:) 
+            TYPE(hubbard_ns_type),OPTIONAL    :: objs(:) 
             INTEGER   :: i_ 
 
+            IF ( .NOT. PRESENT (objs)) RETURN 
             DO i_ = 1, SIZE(objs) 
                CALL qes_reset(objs(i_)) 
             END DO 
@@ -989,7 +1001,9 @@ CONTAINS
     LOGICAL,INTENT(IN)                      :: wf_collected                    
     ! 
     LOGICAL                                 :: n_wfc_at_ispresent = .TRUE.  
-    INTEGER                                 :: ndim_ks_energies, nbnd_, ik
+    INTEGER                                 :: ndim_ks_energies, ik
+    INTEGER,TARGET                          :: nbnd_, nbnd_up_, nbnd_dw_
+    INTEGER,POINTER                         :: nbnd_opt => NULL(), nbnd_up_opt => NULL(), nbnd_dw_opt => NULL() 
     TYPE(k_point_type)                      :: kp_obj
     TYPE(ks_energies_type),ALLOCATABLE      :: ks_objs(:)
     TYPE (k_points_IBZ_type)                :: starting_k_points_ 
@@ -999,12 +1013,19 @@ CONTAINS
     !
     ndim_ks_energies=nks   
     !
+    
     IF ( lsda ) THEN 
        ndim_ks_energies=ndim_ks_energies/2
+       nbnd_up_opt => nbnd_up_
+       nbnd_dw_opt => nbnd_dw_ 
        IF ( PRESENT(nbnd_up) .AND. PRESENT(nbnd_dw) ) THEN
             nbnd_ = nbnd_up+nbnd_dw
+            nbnd_up_ = nbnd_up 
+            nbnd_dw_ = nbnd_dw 
        ELSE IF ( PRESENT (nbnd) ) THEN
             nbnd_ = 2*nbnd
+            nbnd_up_ = nbnd
+            nbnd_dw_  = nbnd
        ELSE
             CALL errore ( "qexsd:qexsd_init_band_structure: ", &
                           "in case of lsda nbnd_up+nbnd_dw or nbnd must be givens as arguments", 10)
@@ -1013,36 +1034,37 @@ CONTAINS
        IF (.NOT. PRESENT(nbnd) ) &
           CALL errore ("qexsd:qexsd_init_band_structure:", "lsda is false but needed nbnd argument is missing", 10)
        nbnd_=nbnd
+       nbnd_opt => nbnd_ 
     END IF  
     !
     !   
-    ALLOCATE(eigenvalues(nbnd),occupations(nbnd))
+    ALLOCATE(eigenvalues(nbnd_),occupations(nbnd_))
     ALLOCATE(ks_objs(ndim_ks_energies))
     !  
     ks_objs%tagname="ks_energies"
     DO ik=1,ndim_ks_energies
        CALL qes_init(kp_obj,"k_point",WEIGHT = wk(ik), K_POINT = xk(:,ik))
        IF ( lsda ) THEN 
-          eigenvalues(1:nbnd_up)=et(1:nbnd_up,ik)/e2
-          eigenvalues(nbnd_up+1:nbnd)=et(1:nbnd_dw,ndim_ks_energies+ik)/e2
+          eigenvalues(1:nbnd_up_)=et(1:nbnd_up_,ik)/e2
+          eigenvalues(nbnd_up_+1:nbnd_)=et(1:nbnd_dw_,ndim_ks_energies+ik)/e2
        ELSE 
-          eigenvalues(1:nbnd)= et(1:nbnd,ik)/e2
+          eigenvalues(1:nbnd_)= et(1:nbnd_,ik)/e2
        END IF
        !
        !
        IF (lsda) THEN 
           IF ( ABS(wk(ik)).GT.1.d-10) THEN 
-             occupations(1:nbnd_up)=wg(1:nbnd_up,ik)/wk(ik)
-             occupations(nbnd_up+1:nbnd)=wg(1:nbnd_dw,ndim_ks_energies+ik)/wk(ndim_ks_energies+ik)
+             occupations(1:nbnd_up_)=wg(1:nbnd_up_,ik)/wk(ik)
+             occupations(nbnd_up_+1:nbnd_)=wg(1:nbnd_dw_,ndim_ks_energies+ik)/wk(ndim_ks_energies+ik)
           ELSE 
-             occupations(1:nbnd_up)=wg(1:nbnd_up,ik)
-             occupations(nbnd_up+1:nbnd)=wg(1:nbnd_dw,ik) 
+             occupations(1:nbnd_up_)=wg(1:nbnd_up_,ik)
+             occupations(nbnd_up_+1:nbnd)=wg(1:nbnd_dw_,ik) 
           END IF            
        ELSE 
           IF (ABS(wk(ik)).GT.1.d-10) THEN
-              occupations(1:nbnd)=wg(1:nbnd,ik)/wk(ik)
+              occupations(1:nbnd_)=wg(1:nbnd_,ik)/wk(ik)
           ELSE
-              occupations(1:nbnd)=wg(1:nbnd,ik)
+              occupations(1:nbnd_)=wg(1:nbnd_,ik)
           END IF
        END IF
        !
@@ -1065,11 +1087,12 @@ CONTAINS
     starting_k_points_%tagname = "starting_k_points"
 !
 ! 
-   CALL qes_init  (obj, TAGNAME, LSDA = lsda, NONCOLIN = noncolin, SPINORBIT = lspinorb, NBND = nbnd_, NELEC = nelec,&
-                   WF_COLLECTED = wf_collected, STARTING_K_POINTS = starting_k_points_, NKS = ndim_ks_energies,       &
-                   OCCUPATIONS_KIND = occupations_kind, KS_ENERGIES = ks_objs, NBND_UP = nbnd_up, NBND_DW = nbnd_dw, &
-                   NUM_OF_ATOMIC_WFC = n_wfc_at, FERMI_ENERGY = fermi_energy, HIGHESTOCCUPIEDLEVEL = homo, &
-                   TWO_FERMI_ENERGIES = ef_updw, SMEARING = smearing)
+   CALL qes_init  (obj, TAGNAME, LSDA = lsda, NONCOLIN = noncolin, SPINORBIT = lspinorb, NBND = nbnd_opt,   &
+                   NELEC = nelec, WF_COLLECTED = wf_collected, STARTING_K_POINTS = starting_k_points_,      & 
+                   NKS = ndim_ks_energies, OCCUPATIONS_KIND = occupations_kind, KS_ENERGIES = ks_objs,      &
+                   NBND_UP = nbnd_up_opt, NBND_DW = nbnd_dw_opt, NUM_OF_ATOMIC_WFC = n_wfc_at,              &
+                   FERMI_ENERGY = fermi_energy, HIGHESTOCCUPIEDLEVEL = homo,  TWO_FERMI_ENERGIES = ef_updw, & 
+                   SMEARING = smearing)
     DO ik=1,ndim_ks_energies
        CALL qes_reset(ks_objs(ik))
     END DO

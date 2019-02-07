@@ -23,11 +23,14 @@ MODULE qes_init_module
   !
   INTERFACE qes_init
     !
+    MODULE PROCEDURE qes_init_espresso
     MODULE PROCEDURE qes_init_general_info
     MODULE PROCEDURE qes_init_parallel_info
     MODULE PROCEDURE qes_init_input
     MODULE PROCEDURE qes_init_step
     MODULE PROCEDURE qes_init_output
+    MODULE PROCEDURE qes_init_timing
+    MODULE PROCEDURE qes_init_clock
     MODULE PROCEDURE qes_init_control_variables
     MODULE PROCEDURE qes_init_xml_format
     MODULE PROCEDURE qes_init_creator
@@ -106,6 +109,79 @@ MODULE qes_init_module
   END INTERFACE qes_init
   !
   CONTAINS
+  !
+  !
+  SUBROUTINE qes_init_espresso(obj, tagname, input, cputime, timining_info, Units, general_info,&
+                              parallel_info, step, output, status, closed)
+    !
+    IMPLICIT NONE
+    !
+    TYPE(espresso_type), INTENT(OUT) :: obj
+    CHARACTER(LEN=*), INTENT(IN) :: tagname
+    CHARACTER(LEN=*), OPTIONAL, INTENT(IN) :: Units
+    TYPE(general_info_type),OPTIONAL,INTENT(IN) :: general_info
+    TYPE(parallel_info_type),OPTIONAL,INTENT(IN) :: parallel_info
+    TYPE(input_type),INTENT(IN) :: input
+    TYPE(step_type),OPTIONAL,DIMENSION(:),INTENT(IN) :: step
+    TYPE(output_type),OPTIONAL,INTENT(IN) :: output
+    INTEGER,OPTIONAL,INTENT(IN) :: status
+    INTEGER,INTENT(IN) :: cputime
+    TYPE(timing_type),INTENT(IN) :: timining_info
+    TYPE(closed_type),OPTIONAL,INTENT(IN) :: closed
+    !
+    obj%tagname = TRIM(tagname) 
+    obj%lwrite = .TRUE.
+    obj%lread = .TRUE.
+    IF (PRESENT(Units)) THEN
+      obj%Units_ispresent = .TRUE.
+      obj%Units = Units
+    ELSE 
+      obj%Units_ispresent = .FALSE.
+    END IF
+    !
+    IF ( PRESENT(general_info)) THEN 
+      obj%general_info_ispresent = .TRUE. 
+      obj%general_info = general_info
+    ELSE 
+      obj%general_info_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(parallel_info)) THEN 
+      obj%parallel_info_ispresent = .TRUE. 
+      obj%parallel_info = parallel_info
+    ELSE 
+      obj%parallel_info_ispresent = .FALSE.
+    END IF
+    obj%input = input
+    IF ( PRESENT(step)) THEN 
+      obj%step_ispresent = .TRUE.
+      ALLOCATE(obj%step(SIZE(step)))
+      obj%ndim_step = SIZE(step) 
+      obj%step = step
+    ELSE 
+      obj%step_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(output)) THEN 
+      obj%output_ispresent = .TRUE. 
+      obj%output = output
+    ELSE 
+      obj%output_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(status)) THEN 
+      obj%status_ispresent = .TRUE. 
+      obj%status = status
+    ELSE 
+      obj%status_ispresent = .FALSE.
+    END IF
+    obj%cputime = cputime
+    obj%timining_info = timining_info
+    IF ( PRESENT(closed)) THEN 
+      obj%closed_ispresent = .TRUE. 
+      obj%closed = closed
+    ELSE 
+      obj%closed_ispresent = .FALSE.
+    END IF
+    !
+  END SUBROUTINE qes_init_espresso 
   !
   !
   SUBROUTINE qes_init_general_info(obj, tagname, xml_format, creator, created, job)
@@ -397,6 +473,60 @@ MODULE qes_init_module
     END IF
     !
   END SUBROUTINE qes_init_output 
+  !
+  !
+  SUBROUTINE qes_init_timing(obj, tagname, total, partial)
+    !
+    IMPLICIT NONE
+    !
+    TYPE(timing_type), INTENT(OUT) :: obj
+    CHARACTER(LEN=*), INTENT(IN) :: tagname
+    TYPE(clock_type),INTENT(IN) :: total
+    TYPE(clock_type),OPTIONAL,DIMENSION(:),INTENT(IN) :: partial
+    !
+    obj%tagname = TRIM(tagname) 
+    obj%lwrite = .TRUE.
+    obj%lread = .TRUE.
+    !
+    obj%total = total
+    IF ( PRESENT(partial)) THEN 
+      obj%partial_ispresent = .TRUE.
+      ALLOCATE(obj%partial(SIZE(partial)))
+      obj%ndim_partial = SIZE(partial) 
+      obj%partial = partial
+    ELSE 
+      obj%partial_ispresent = .FALSE.
+    END IF
+    !
+  END SUBROUTINE qes_init_timing 
+  !
+  !
+  SUBROUTINE qes_init_clock(obj, tagname, label, cpu, wall, calls)
+    !
+    IMPLICIT NONE
+    !
+    TYPE(clock_type), INTENT(OUT) :: obj
+    CHARACTER(LEN=*), INTENT(IN) :: tagname
+    CHARACTER(LEN=*), INTENT(IN) :: label
+    INTEGER, OPTIONAL, INTENT(IN) :: calls
+    INTEGER,INTENT(IN) :: cpu
+    INTEGER,INTENT(IN) :: wall
+    !
+    obj%tagname = TRIM(tagname) 
+    obj%lwrite = .TRUE.
+    obj%lread = .TRUE.
+    obj%label = label
+    IF (PRESENT(calls)) THEN
+      obj%calls_ispresent = .TRUE.
+      obj%calls = calls
+    ELSE 
+      obj%calls_ispresent = .FALSE.
+    END IF
+    !
+    obj%cpu = cpu
+    obj%wall = wall
+    !
+  END SUBROUTINE qes_init_clock 
   !
   !
   SUBROUTINE qes_init_control_variables(obj, tagname, title, calculation, restart_mode, prefix,&
@@ -797,24 +927,54 @@ MODULE qes_init_module
     TYPE(hybrid_type), INTENT(OUT) :: obj
     CHARACTER(LEN=*), INTENT(IN) :: tagname
     TYPE(qpoint_grid_type),INTENT(IN) :: qpoint_grid
-    REAL(DP),INTENT(IN) :: ecutfock
-    REAL(DP),INTENT(IN) :: exx_fraction
-    REAL(DP),INTENT(IN) :: screening_parameter
-    CHARACTER(LEN=*),INTENT(IN) :: exxdiv_treatment
-    LOGICAL,INTENT(IN) :: x_gamma_extrapolation
-    REAL(DP),INTENT(IN) :: ecutvcut
+    REAL(DP),OPTIONAL,INTENT(IN) :: ecutfock
+    REAL(DP),OPTIONAL,INTENT(IN) :: exx_fraction
+    REAL(DP),OPTIONAL,INTENT(IN) :: screening_parameter
+    CHARACTER(LEN=*),OPTIONAL,INTENT(IN) :: exxdiv_treatment
+    LOGICAL,OPTIONAL,INTENT(IN) :: x_gamma_extrapolation
+    REAL(DP),OPTIONAL,INTENT(IN) :: ecutvcut
     !
     obj%tagname = TRIM(tagname) 
     obj%lwrite = .TRUE.
     obj%lread = .TRUE.
     !
     obj%qpoint_grid = qpoint_grid
-    obj%ecutfock = ecutfock
-    obj%exx_fraction = exx_fraction
-    obj%screening_parameter = screening_parameter
-    obj%exxdiv_treatment = exxdiv_treatment
-    obj%x_gamma_extrapolation = x_gamma_extrapolation
-    obj%ecutvcut = ecutvcut
+    IF ( PRESENT(ecutfock)) THEN 
+      obj%ecutfock_ispresent = .TRUE. 
+      obj%ecutfock = ecutfock
+    ELSE 
+      obj%ecutfock_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(exx_fraction)) THEN 
+      obj%exx_fraction_ispresent = .TRUE. 
+      obj%exx_fraction = exx_fraction
+    ELSE 
+      obj%exx_fraction_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(screening_parameter)) THEN 
+      obj%screening_parameter_ispresent = .TRUE. 
+      obj%screening_parameter = screening_parameter
+    ELSE 
+      obj%screening_parameter_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(exxdiv_treatment)) THEN 
+      obj%exxdiv_treatment_ispresent = .TRUE. 
+      obj%exxdiv_treatment = exxdiv_treatment
+    ELSE 
+      obj%exxdiv_treatment_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(x_gamma_extrapolation)) THEN 
+      obj%x_gamma_extrapolation_ispresent = .TRUE. 
+      obj%x_gamma_extrapolation = x_gamma_extrapolation
+    ELSE 
+      obj%x_gamma_extrapolation_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(ecutvcut)) THEN 
+      obj%ecutvcut_ispresent = .TRUE. 
+      obj%ecutvcut = ecutvcut
+    ELSE 
+      obj%ecutvcut_ispresent = .FALSE.
+    END IF
     !
   END SUBROUTINE qes_init_hybrid 
   !
@@ -1041,21 +1201,23 @@ MODULE qes_init_module
     DO i = 1, obj%rank
       length = length * obj%dims(i)
     END DO
-    ALLOCATE(obj%Hubbard_ns(length), obj%dims(obj%rank) )
+    ALLOCATE(obj%Hubbard_ns(length))
     obj%Hubbard_ns(1:length) = reshape(Hubbard_ns, [length])
     !
   END SUBROUTINE qes_init_Hubbard_ns
   !
   !
-  SUBROUTINE qes_init_vdW(obj, tagname, vdw_corr, non_local_term, functional, total_energy_term,&
-                         london_s6, ts_vdw_econv_thr, ts_vdw_isolated, london_rcut, xdm_a1, xdm_a2,&
-                         london_c6)
+  SUBROUTINE qes_init_vdW(obj, tagname, vdw_corr, dftd3_version, dftd3_threebody, non_local_term,&
+                         functional, total_energy_term, london_s6, ts_vdw_econv_thr, ts_vdw_isolated,&
+                         london_rcut, xdm_a1, xdm_a2, london_c6)
     !
     IMPLICIT NONE
     !
     TYPE(vdW_type), INTENT(OUT) :: obj
     CHARACTER(LEN=*), INTENT(IN) :: tagname
     CHARACTER(LEN=*),OPTIONAL,INTENT(IN) :: vdw_corr
+    INTEGER,OPTIONAL,INTENT(IN) :: dftd3_version
+    LOGICAL,OPTIONAL,INTENT(IN) :: dftd3_threebody
     CHARACTER(LEN=*),OPTIONAL,INTENT(IN) :: non_local_term
     CHARACTER(LEN=*),OPTIONAL,INTENT(IN) :: functional
     REAL(DP),OPTIONAL,INTENT(IN) :: total_energy_term
@@ -1076,6 +1238,18 @@ MODULE qes_init_module
       obj%vdw_corr = vdw_corr
     ELSE 
       obj%vdw_corr_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(dftd3_version)) THEN 
+      obj%dftd3_version_ispresent = .TRUE. 
+      obj%dftd3_version = dftd3_version
+    ELSE 
+      obj%dftd3_version_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(dftd3_threebody)) THEN 
+      obj%dftd3_threebody_ispresent = .TRUE. 
+      obj%dftd3_threebody = dftd3_threebody
+    ELSE 
+      obj%dftd3_threebody_ispresent = .FALSE.
     END IF
     IF ( PRESENT(non_local_term)) THEN 
       obj%non_local_term_ispresent = .TRUE. 
@@ -2428,14 +2602,14 @@ MODULE qes_init_module
   END SUBROUTINE qes_init_opt_conv 
   !
   !
-  SUBROUTINE qes_init_algorithmic_info(obj, tagname, real_space_q, real_space_beta, uspp, paw)
+  SUBROUTINE qes_init_algorithmic_info(obj, tagname, real_space_q, uspp, paw, real_space_beta)
     !
     IMPLICIT NONE
     !
     TYPE(algorithmic_info_type), INTENT(OUT) :: obj
     CHARACTER(LEN=*), INTENT(IN) :: tagname
     LOGICAL,INTENT(IN) :: real_space_q
-    LOGICAL,INTENT(IN) :: real_space_beta
+    LOGICAL,OPTIONAL,INTENT(IN) :: real_space_beta
     LOGICAL,INTENT(IN) :: uspp
     LOGICAL,INTENT(IN) :: paw
     !
@@ -2444,7 +2618,12 @@ MODULE qes_init_module
     obj%lread = .TRUE.
     !
     obj%real_space_q = real_space_q
-    obj%real_space_beta = real_space_beta
+    IF ( PRESENT(real_space_beta)) THEN 
+      obj%real_space_beta_ispresent = .TRUE. 
+      obj%real_space_beta = real_space_beta
+    ELSE 
+      obj%real_space_beta_ispresent = .FALSE.
+    END IF
     obj%uspp = uspp
     obj%paw = paw
     !
@@ -2701,9 +2880,9 @@ MODULE qes_init_module
   END SUBROUTINE qes_init_total_energy 
   !
   !
-  SUBROUTINE qes_init_band_structure(obj, tagname, lsda, noncolin, spinorbit, nbnd, nelec, wf_collected,&
-                                    starting_k_points, nks, occupations_kind, ks_energies, nbnd_up,&
-                                    nbnd_dw, num_of_atomic_wfc, fermi_energy, highestOccupiedLevel,&
+  SUBROUTINE qes_init_band_structure(obj, tagname, lsda, noncolin, spinorbit, nelec, wf_collected,&
+                                    starting_k_points, nks, occupations_kind, ks_energies, nbnd,&
+                                    nbnd_up, nbnd_dw, num_of_atomic_wfc, fermi_energy, highestOccupiedLevel,&
                                     two_fermi_energies, smearing)
     !
     IMPLICIT NONE
@@ -2713,7 +2892,7 @@ MODULE qes_init_module
     LOGICAL,INTENT(IN) :: lsda
     LOGICAL,INTENT(IN) :: noncolin
     LOGICAL,INTENT(IN) :: spinorbit
-    INTEGER,INTENT(IN) :: nbnd
+    INTEGER,OPTIONAL,INTENT(IN) :: nbnd
     INTEGER,OPTIONAL,INTENT(IN) :: nbnd_up
     INTEGER,OPTIONAL,INTENT(IN) :: nbnd_dw
     REAL(DP),INTENT(IN) :: nelec
@@ -2735,7 +2914,12 @@ MODULE qes_init_module
     obj%lsda = lsda
     obj%noncolin = noncolin
     obj%spinorbit = spinorbit
-    obj%nbnd = nbnd
+    IF ( PRESENT(nbnd)) THEN 
+      obj%nbnd_ispresent = .TRUE. 
+      obj%nbnd = nbnd
+    ELSE 
+      obj%nbnd_ispresent = .FALSE.
+    END IF
     IF ( PRESENT(nbnd_up)) THEN 
       obj%nbnd_up_ispresent = .TRUE. 
       obj%nbnd_up = nbnd_up
@@ -2892,8 +3076,10 @@ MODULE qes_init_module
     DO i = 1, rank
       length = length * dims(i)
     END DO
+    obj%rank = rank
     ALLOCATE(obj%matrix(length), obj%dims(rank) )
     obj%matrix(1:length) = mat(1:length)
+    obj%dims = dims
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE
@@ -2922,10 +3108,10 @@ MODULE qes_init_module
     DO i = 1, rank
       length = length * dims(i)
     END DO
+    obj%rank = rank
     ALLOCATE(obj%matrix(length), obj%dims(rank) )
     obj%matrix(1:length) = reshape(mat, [length])
-    obj%rank = rank 
-    obj%dims = dims 
+    obj%dims = dims
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE
@@ -2954,10 +3140,10 @@ MODULE qes_init_module
     DO i = 1, rank
       length = length * dims(i)
     END DO
+    obj%rank = rank
     ALLOCATE(obj%matrix(length), obj%dims(rank) )
     obj%matrix(1:length) = reshape(mat, [length])
-    obj%rank = rank 
-    obj%dims = dims 
+    obj%dims = dims
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE
@@ -2987,8 +3173,10 @@ MODULE qes_init_module
     DO i = 1, rank
       length = length * dims(i)
     END DO
+    obj%rank = rank
     ALLOCATE(obj%integerMatrix(length), obj%dims(rank) )
     obj%integerMatrix(1:length) = mat(1:length)
+    obj%dims = dims
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE
@@ -3017,8 +3205,10 @@ MODULE qes_init_module
     DO i = 1, rank
       length = length * dims(i)
     END DO
+    obj%rank = rank
     ALLOCATE(obj%integerMatrix(length), obj%dims(rank) )
     obj%integerMatrix(1:length) = reshape(mat, [length])
+    obj%dims = dims
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE
@@ -3047,8 +3237,10 @@ MODULE qes_init_module
     DO i = 1, rank
       length = length * dims(i)
     END DO
+    obj%rank = rank
     ALLOCATE(obj%integerMatrix(length), obj%dims(rank) )
     obj%integerMatrix(1:length) = reshape(mat, [length])
+    obj%dims = dims
     IF (PRESENT(order)) THEN
       obj%order = TRIM(order)
     ELSE

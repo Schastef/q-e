@@ -21,11 +21,14 @@ MODULE qes_reset_module
   PUBLIC qes_reset
   !
   INTERFACE qes_reset
+    MODULE PROCEDURE qes_reset_espresso
     MODULE PROCEDURE qes_reset_general_info
     MODULE PROCEDURE qes_reset_parallel_info
     MODULE PROCEDURE qes_reset_input
     MODULE PROCEDURE qes_reset_step
     MODULE PROCEDURE qes_reset_output
+    MODULE PROCEDURE qes_reset_timing
+    MODULE PROCEDURE qes_reset_clock
     MODULE PROCEDURE qes_reset_control_variables
     MODULE PROCEDURE qes_reset_xml_format
     MODULE PROCEDURE qes_reset_creator
@@ -103,6 +106,46 @@ MODULE qes_reset_module
   END INTERFACE qes_reset
   !
   CONTAINS
+  !
+  !
+  SUBROUTINE qes_reset_espresso(obj)
+    !
+    IMPLICIT NONE
+    TYPE(espresso_type),INTENT(INOUT)    :: obj
+    INTEGER :: i
+    !
+    obj%tagname = ""
+    obj%lwrite  = .FALSE.
+    obj%lread  = .FALSE.
+    !
+    IF (obj%general_info_ispresent) &
+      CALL qes_reset_general_info(obj%general_info)
+    obj%general_info_ispresent = .FALSE.
+    IF (obj%parallel_info_ispresent) &
+      CALL qes_reset_parallel_info(obj%parallel_info)
+    obj%parallel_info_ispresent = .FALSE.
+    CALL qes_reset_input(obj%input)
+    IF (obj%step_ispresent) THEN
+      IF (ALLOCATED(obj%step)) THEN
+        DO i=1, SIZE(obj%step)
+          CALL qes_reset_step(obj%step(i))
+        ENDDO
+        DEALLOCATE(obj%step)
+      ENDIF
+      obj%ndim_step = 0
+      obj%step_ispresent = .FALSE.
+    ENDIF
+    IF (obj%output_ispresent) &
+      CALL qes_reset_output(obj%output)
+    obj%output_ispresent = .FALSE.
+    obj%status_ispresent = .FALSE.
+    CALL qes_reset_timing(obj%timining_info)
+    IF (obj%closed_ispresent) &
+      CALL qes_reset_closed(obj%closed)
+    obj%closed_ispresent = .FALSE.
+    obj%Units_ispresent = .FALSE.
+    !
+  END SUBROUTINE qes_reset_espresso
   !
   !
   SUBROUTINE qes_reset_general_info(obj)
@@ -246,6 +289,45 @@ MODULE qes_reset_module
     obj%FCP_tot_charge_ispresent = .FALSE.
     !
   END SUBROUTINE qes_reset_output
+  !
+  !
+  SUBROUTINE qes_reset_timing(obj)
+    !
+    IMPLICIT NONE
+    TYPE(timing_type),INTENT(INOUT)    :: obj
+    INTEGER :: i
+    !
+    obj%tagname = ""
+    obj%lwrite  = .FALSE.
+    obj%lread  = .FALSE.
+    !
+    CALL qes_reset_clock(obj%total)
+    IF (obj%partial_ispresent) THEN
+      IF (ALLOCATED(obj%partial)) THEN
+        DO i=1, SIZE(obj%partial)
+          CALL qes_reset_clock(obj%partial(i))
+        ENDDO
+        DEALLOCATE(obj%partial)
+      ENDIF
+      obj%ndim_partial = 0
+      obj%partial_ispresent = .FALSE.
+    ENDIF
+    !
+  END SUBROUTINE qes_reset_timing
+  !
+  !
+  SUBROUTINE qes_reset_clock(obj)
+    !
+    IMPLICIT NONE
+    TYPE(clock_type),INTENT(INOUT)    :: obj
+    !
+    obj%tagname = ""
+    obj%lwrite  = .FALSE.
+    obj%lread  = .FALSE.
+    !
+    obj%calls_ispresent = .FALSE.
+    !
+  END SUBROUTINE qes_reset_clock
   !
   !
   SUBROUTINE qes_reset_control_variables(obj)
@@ -468,6 +550,12 @@ MODULE qes_reset_module
     obj%lread  = .FALSE.
     !
     CALL qes_reset_qpoint_grid(obj%qpoint_grid)
+    obj%ecutfock_ispresent = .FALSE.
+    obj%exx_fraction_ispresent = .FALSE.
+    obj%screening_parameter_ispresent = .FALSE.
+    obj%exxdiv_treatment_ispresent = .FALSE.
+    obj%x_gamma_extrapolation_ispresent = .FALSE.
+    obj%ecutvcut_ispresent = .FALSE.
     !
   END SUBROUTINE qes_reset_hybrid
   !
@@ -647,6 +735,8 @@ MODULE qes_reset_module
     obj%lread  = .FALSE.
     !
     obj%vdw_corr_ispresent = .FALSE.
+    obj%dftd3_version_ispresent = .FALSE.
+    obj%dftd3_threebody_ispresent = .FALSE.
     obj%non_local_term_ispresent = .FALSE.
     obj%functional_ispresent = .FALSE.
     obj%total_energy_term_ispresent = .FALSE.
@@ -1336,6 +1426,7 @@ MODULE qes_reset_module
     obj%lwrite  = .FALSE.
     obj%lread  = .FALSE.
     !
+    obj%real_space_beta_ispresent = .FALSE.
     !
   END SUBROUTINE qes_reset_algorithmic_info
   !
@@ -1472,6 +1563,7 @@ MODULE qes_reset_module
     obj%lwrite  = .FALSE.
     obj%lread  = .FALSE.
     !
+    obj%nbnd_ispresent = .FALSE.
     obj%nbnd_up_ispresent = .FALSE.
     obj%nbnd_dw_ispresent = .FALSE.
     obj%num_of_atomic_wfc_ispresent = .FALSE.

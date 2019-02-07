@@ -103,16 +103,20 @@
   TYPE(hybrid_type),POINTER                ::  hybrid_
   TYPE(dftU_type),POINTER                  ::  dftU_
   TYPE(vdW_type),POINTER                   ::  vdW_
-  REAL(DP),TARGET                          ::  xdm_a1_, xdm_a2_, lond_s6_, lond_rcut_, ts_vdw_econv_thr_
+  REAL(DP),TARGET                          ::  xdm_a1_, xdm_a2_, lond_s6_, lond_rcut_, ts_vdw_econv_thr_,&
+                                               scr_par_, exx_frc_, ecutvcut_, ecut_fock_    
   REAL(DP),POINTER                         ::  xdm_a1_pt=>NULL(), xdm_a2_pt=>NULL(), lond_s6_pt=>NULL(), &
-                                               lond_rcut_pt=>NULL(), ts_vdw_econv_thr_pt=>NULL()
+                                               lond_rcut_pt=>NULL(), ts_vdw_econv_thr_pt=>NULL(),& 
+                                               ecut_fock_opt=>NULL(), scr_par_opt=>NULL(), exx_frc_opt=>NULL(), &
+                                               ecutvcut_opt=>NULL() 
   LOGICAL,TARGET                           ::  empirical_vdw, ts_vdw_isolated_, dftd3_threebody_
   LOGICAL,POINTER                          ::  ts_vdw_isolated_pt=>NULL(), dftd3_threebody_pt=>NULL()
-  INTEGER,TARGET                           :: dftd3_version_, spin_ns
-  INTEGER,POINTER                          :: dftd3_version_pt=>NULL()
+  INTEGER,TARGET                           :: dftd3_version_, spin_ns, nbnd_tg
+  INTEGER,POINTER                          :: dftd3_version_pt=>NULL(), nbnd_pt => NULL() 
   REAL(DP),ALLOCATABLE                     :: london_c6_(:), hubbard_U_(:), hubbard_alpha_(:), hubbard_J_(:,:),&
                                               hubbard_J0_(:), hubbard_beta_(:),starting_ns_(:,:,:)
   CHARACTER(LEN=3),ALLOCATABLE             :: species_(:)
+
   !
   ! 
   NULLIFY (gate_ptr, block_ptr, relaxz_ptr, block_1_ptr, block_2_ptr, block_height_ptr, zgate_ptr, dftU_, vdW_, hybrid_)
@@ -174,11 +178,26 @@
   dft_is_hybrid=get_dft_is_hybrid()
   IF ( dft_is_hybrid) THEN
      ALLOCATE(hybrid_)
-
+     IF (screening_parameter > 0.0_DP) THEN 
+        scr_par_ = screening_parameter 
+        scr_par_opt => scr_par_ 
+     END IF 
+     IF ( exx_fraction > 0.0_DP) THEN 
+        exx_frc_ = exx_fraction 
+        exx_frc_opt => exx_frc_ 
+     END IF 
+     IF ( ip_ecutfock > 0.0_DP) THEN 
+        ecut_fock_ = ip_ecutvcut/e2 
+        ecut_fock_opt => ecut_fock_
+     END IF 
+     IF ( ip_ecutvcut > 0.0_DP) THEN 
+        ecutvcut_ = ip_ecutvcut/e2 
+        ecutvcut_opt => ecutvcut_ 
+     END IF 
      CALL qexsd_init_hybrid(hybrid_, dft_is_hybrid, NQ1 = ip_nqx1, NQ2= ip_nqx2, NQ3=ip_nqx3,&
-                            ECUTFOCK = ip_ecutfock/e2, EXX_FRACTION = exx_fraction,          &
-                            SCREENING_PARAMETER = screening_parameter,  EXXDIV_TREATMENT = exxdiv_treatment,&
-                            X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation, ECUTVCUT = ip_ecutvcut/e2)
+                            ECUTFOCK = ecut_fock_opt, EXX_FRACTION = exx_frc_opt,          &
+                            SCREENING_PARAMETER = scr_par_opt,  EXXDIV_TREATMENT = exxdiv_treatment,&
+                            X_GAMMA_EXTRAPOLATION = x_gamma_extrapolation, ECUTVCUT = ecutvcut_opt)
   END IF
   dft_is_nonlocc=get_dft_is_nonlocc()
   vdw_corr_ = vdw_corr
@@ -271,9 +290,10 @@
          starting_ns_          (1:2*hublmax+1, 1:spin_ns, 1:ntyp) = &
          starting_ns_eigenvalue(1:2*hublmax+1, 1:spin_ns, 1:ntyp)
       END IF
-      CALL qexsd_init_dftU(dftU_, ntyp, upf(1:ntyp)%psd, atm(1:ntyp), ip_ityp(1:ntyp), is_hubbard(1:ntyp), &
-                        ip_lda_plus_u_kind, u_projection_type, hubbard_U_, hubbard_J0_, hubbard_alpha_, &
-                        hubbard_beta_, hubbard_J_, starting_ns_)
+      CALL qexsd_init_dftU(dftU_, NSP = ntyp, PSD = upf(1:ntyp)%psd, SPECIES = atm(1:ntyp), ITYP = ip_ityp(1:ntyp), &
+                           IS_HUBBARD = is_hubbard(1:ntyp), LDA_PLUS_U_KIND = ip_lda_plus_u_kind,                   &
+                           U_PROJECTION_TYPE=u_projection_type, U=hubbard_U_, J0=hubbard_J0_, NONCOLIN=ip_noncolin, &
+                           ALPHA = hubbard_alpha_, BETA = hubbard_beta_, J = hubbard_J_, STARTING_NS = starting_ns_ )
   END IF
   CALL qexsd_init_dft(obj%dft, TRIM(dft_name), hybrid_, vdW_, dftU_)
   IF (ASSOCIATED(hybrid_)) THEN
@@ -302,20 +322,24 @@
   !-------------------------------------------------------------------------------------------------------------------------
   !                                                    BANDS ELEMENT
   !-------------------------------------------------------------------------------------------------------------------------
+  IF (nbnd /= 0) THEN
+     nbnd_tg = nbnd 
+     nbnd_pt => nbnd_tg
+  END IF 
   IF (tf_inp) THEN
      SELECT CASE (ip_nspin) 
         CASE (2)  
-           CALL qexsd_init_bands(obj%bands, nbnd, smearing, degauss, ip_occupations, tot_charge, ip_nspin, &
+           CALL qexsd_init_bands(obj%bands, nbnd_pt, smearing, degauss, ip_occupations, tot_charge, ip_nspin, &
                                           input_occupations=f_inp(:,1),input_occupations_minority=f_inp(:,2))
         CASE default
-           CALL qexsd_init_bands(obj%bands, nbnd, smearing, degauss, ip_occupations, tot_charge, ip_nspin, &
+           CALL qexsd_init_bands(obj%bands, nbnd_pt, smearing, degauss, ip_occupations, tot_charge, ip_nspin, &
                                                                                 input_occupations=f_inp(:,1) )
      END SELECT    
   ELSE 
      IF ( tot_magnetization .LT. 0 ) THEN 
-        CALL qexsd_init_bands(obj%bands, nbnd, smearing, degauss, ip_occupations, tot_charge, ip_nspin)
+        CALL qexsd_init_bands(obj%bands, nbnd_pt, smearing, degauss, ip_occupations, tot_charge, ip_nspin)
      ELSE
-        CALL qexsd_init_bands(obj%bands, nbnd, smearing, degauss, ip_occupations, tot_charge, ip_nspin, &
+        CALL qexsd_init_bands(obj%bands, nbnd_pt, smearing, degauss, ip_occupations, tot_charge, ip_nspin, &
                               TOT_MAG  = tot_magnetization)
      END IF
   END IF 
