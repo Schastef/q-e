@@ -650,23 +650,27 @@ CONTAINS
          IMPLICIT NONE 
          TYPE (hybrid_type),INTENT(INOUT)        :: obj 
          LOGICAL,INTENT(IN)                      :: dft_is_hybrid 
-         INTEGER,INTENT(IN)                      :: nq1, nq2, nq3 
-         REAL(DP),OPTIONAL,INTENT(IN)                     :: ecutfock, exx_fraction, screening_parameter, ecutvcut 
+         INTEGER,OPTIONAL, INTENT(IN)            :: nq1, nq2, nq3 
+         REAL(DP),OPTIONAL,INTENT(IN)            :: ecutfock, exx_fraction, screening_parameter, ecutvcut 
          CHARACTER(LEN=*), INTENT(IN)            :: exxdiv_treatment 
-         LOGICAL,OPTIONAL,INTENT(IN)                      :: x_gamma_extrapolation 
+         LOGICAL,OPTIONAL,INTENT(IN)             :: x_gamma_extrapolation 
          ! 
-         TYPE (qpoint_grid_type) :: qpoint_grid 
+         TYPE (qpoint_grid_type),TARGET          :: qpoint_grid 
+         TYPE (qpoint_grid_type),POINTER         :: qpoint_grid_opt => NULL()
          !
          IF (.NOT. dft_is_hybrid) RETURN 
-         CALL qes_init (qpoint_grid, "qpoint_grid", nq1, nq2, nq3, "")
-            !
-         CALL qes_init ( obj, "hybrid", qpoint_grid, ecutfock, exx_fraction, &
+         IF (PRESENT(nq1) .AND. PRESENT(nq2) .AND. PRESENT(nq3) ) THEN
+            qpoint_grid_opt => qpoint_grid           
+            CALL qes_init (qpoint_grid, "qpoint_grid", nq1, nq2, nq3, "")
+         END IF 
+         !
+         CALL qes_init ( obj, "hybrid", qpoint_grid_opt, ecutfock, exx_fraction, &
                         screening_parameter, exxdiv_treatment, x_gamma_extrapolation, ecutvcut)
          !
-         CALL qes_reset (qpoint_grid)
+         IF (ASSOCIATED (qpoint_grid_opt)) CALL qes_reset (qpoint_grid_opt)
          !
       END SUBROUTINE qexsd_init_hybrid 
-         !
+      !
       SUBROUTINE qexsd_init_dftU (obj, nsp, psd, species, ityp, is_hubbard, lda_plus_u_kind, U_projection_type, &
                                    U, J0, alpha, beta, J, noncolin, starting_ns, Hub_ns, Hub_ns_nc )
          IMPLICIT NONE 

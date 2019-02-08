@@ -549,7 +549,9 @@ MODULE qes_reset_module
     obj%lwrite  = .FALSE.
     obj%lread  = .FALSE.
     !
-    CALL qes_reset_qpoint_grid(obj%qpoint_grid)
+    IF (obj%qpoint_grid_ispresent) &
+      CALL qes_reset_qpoint_grid(obj%qpoint_grid)
+    obj%qpoint_grid_ispresent = .FALSE.
     obj%ecutfock_ispresent = .FALSE.
     obj%exx_fraction_ispresent = .FALSE.
     obj%screening_parameter_ispresent = .FALSE.

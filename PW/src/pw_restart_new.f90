@@ -432,32 +432,18 @@ MODULE pw_restart_new
          inlc = get_inlc()
          !
          CALL qexsd_init_dft  (output%dft, dft_name, hybrid_obj, vdw_obj, dftU_obj)
-            ! variables for hybrid functionals 
-         !nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), get_screening_parameter(), &
-         !exxdiv_treatment, x_gamma_extrapolation, ecutvcut,        &
-         !   ! variables for vdW corrections
-         !dft_is_vdW = dft_is_nonlocc(), vdw_corr=TRIM(vdw_corr), DISPERSION_ENERGY_TERM = dispersion_energy_term,&
-         !NONLOCAL_TERM = TRIM(get_nonlocc_name()), london_s6 scal6, london_c6 = c6_i, &
-         !london_rcut = lon_rcut, xdm_a1 = xdm_a1, xdm_a2 = xdm_a2 ,ts_vdw_econv_thr, ts_vdw_isolated, non_local_term, &
-         !dft_is_lda_plus_U, lda_plus_U_kind, llmax, noncolin, nspin, nsp, &
-         !nat, species, ityp, Hubbard_U, Hubbard_J0, Hubbard_alpha,  &
-         !Hubbard_beta, Hubbard_J, starting_ns, U_projection_type, is_hubbard, &
-         !psd,  Hubbard_ns, Hubbard_ns_nc )
-
-         
-         
-         
-              !(output%dft, dft_name, .TRUE., dft_is_hybrid(), &
-              !nq1, nq2, nq3, ecutfock/e2, get_exx_fraction(), &
-              !get_screening_parameter(), exxdiv_treatment, &
-              !x_gamma_extrapolation, ecutvcut/e2, &
-              !dft_is_nonlocc(), TRIM(vdw_corr), TRIM ( get_nonlocc_name()), &
-              !scal6, c6_i, lon_rcut, xdm_a1, xdm_a2, vdw_econv_thr, &
-              !vdw_isolated,&
-              !lda_plus_u, lda_plus_u_kind, 2*Hubbard_lmax+1, noncolin, nspin, &
-              !nsp, nat, atm, ityp, Hubbard_U, Hubbard_J0,  &
-              !Hubbard_alpha, Hubbard_beta, Hubbard_J, starting_ns_eigenvalue, &
-              !U_projection, is_hubbard, upf(1:nsp)%psd, rho%ns, rho%ns_nc )
+         IF (ASSOCIATED (hybrid_obj)) THEN
+            CALL qes_reset(hybrid_obj) 
+            DEALLOCATE (hybrid_obj) 
+         END IF 
+         IF (ASSOCIATED (vdw_obj)) THEN
+            CALL qes_reset(vdw_obj) 
+            DEALLOCATE (vdw_obj) 
+         END IF 
+         IF (ASSOCIATED (dftU_obj)) THEN 
+            CALL qes_reset( dftU_obj) 
+            DEALLOCATE (dftU_obj) 
+         END IF 
          !
 !-------------------------------------------------------------------------------
 ! ... PERIODIC BOUNDARY CONDITIONS 

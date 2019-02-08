@@ -664,7 +664,9 @@ MODULE qes_bcast_module
     CALL mp_bcast(obj%lwrite, ionode_id, comm)
     CALL mp_bcast(obj%lread, ionode_id, comm)
     !
-    CALL qes_bcast_qpoint_grid(obj%qpoint_grid, ionode_id, comm)
+    CALL mp_bcast(obj%qpoint_grid_ispresent, ionode_id, comm)
+    IF (obj%qpoint_grid_ispresent) &
+      CALL qes_bcast_qpoint_grid(obj%qpoint_grid, ionode_id, comm)
     CALL mp_bcast(obj%ecutfock_ispresent, ionode_id, comm)
     IF (obj%ecutfock_ispresent) &
       CALL mp_bcast(obj%ecutfock, ionode_id, comm)

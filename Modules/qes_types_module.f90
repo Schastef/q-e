@@ -485,6 +485,7 @@ MODULE qes_types_module
     LOGICAL  :: lwrite = .FALSE.
     LOGICAL  :: lread  = .FALSE.
     !
+    LOGICAL  :: qpoint_grid_ispresent = .FALSE.
     TYPE(qpoint_grid_type) :: qpoint_grid
     LOGICAL  :: ecutfock_ispresent = .FALSE.
     REAL(DP) :: ecutfock

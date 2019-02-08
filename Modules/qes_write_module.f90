@@ -692,7 +692,9 @@ MODULE qes_write_module
      IF ( .NOT. obj%lwrite ) RETURN 
      ! 
      CALL xml_NewElement(xp, TRIM(obj%tagname))
-     CALL qes_write_qpoint_grid (xp, obj%qpoint_grid)
+     IF (obj%qpoint_grid_ispresent) THEN
+        CALL qes_write_qpoint_grid (xp, obj%qpoint_grid)
+     END IF
      IF (obj%ecutfock_ispresent) THEN
         CALL xml_NewElement(xp, "ecutfock")
            CALL xml_addCharacters(xp, obj%ecutfock, fmt='s16')

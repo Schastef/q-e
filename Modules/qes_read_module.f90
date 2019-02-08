@@ -2975,18 +2975,22 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "qpoint_grid")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:hybridType","qpoint_grid: wrong number of occurrences")
+           CALL infomsg("qes_read:hybridType","qpoint_grid: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:hybridType","qpoint_grid: wrong number of occurrences",10)
+           CALL errore("qes_read:hybridType","qpoint_grid: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL qes_read_qpoint_grid(tmp_node, obj%qpoint_grid, ierr )
+    IF (tmp_node_list_size>0) THEN
+      obj%qpoint_grid_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_qpoint_grid(tmp_node, obj%qpoint_grid, ierr )
+    ELSE
+       obj%qpoint_grid_ispresent = .FALSE.
+    END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "ecutfock")
     tmp_node_list_size = getLength(tmp_node_list)

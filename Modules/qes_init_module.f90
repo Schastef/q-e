@@ -926,7 +926,7 @@ MODULE qes_init_module
     !
     TYPE(hybrid_type), INTENT(OUT) :: obj
     CHARACTER(LEN=*), INTENT(IN) :: tagname
-    TYPE(qpoint_grid_type),INTENT(IN) :: qpoint_grid
+    TYPE(qpoint_grid_type),OPTIONAL,INTENT(IN) :: qpoint_grid
     REAL(DP),OPTIONAL,INTENT(IN) :: ecutfock
     REAL(DP),OPTIONAL,INTENT(IN) :: exx_fraction
     REAL(DP),OPTIONAL,INTENT(IN) :: screening_parameter
@@ -938,7 +938,12 @@ MODULE qes_init_module
     obj%lwrite = .TRUE.
     obj%lread = .TRUE.
     !
-    obj%qpoint_grid = qpoint_grid
+    IF ( PRESENT(qpoint_grid)) THEN 
+      obj%qpoint_grid_ispresent = .TRUE. 
+      obj%qpoint_grid = qpoint_grid
+    ELSE 
+      obj%qpoint_grid_ispresent = .FALSE.
+    END IF
     IF ( PRESENT(ecutfock)) THEN 
       obj%ecutfock_ispresent = .TRUE. 
       obj%ecutfock = ecutfock
