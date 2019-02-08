@@ -198,7 +198,7 @@ elphon_shuffle_wrap.o : ../../PW/src/pwcom.o
 elphon_shuffle_wrap.o : ../../PW/src/start_k.o
 elphon_shuffle_wrap.o : ../../PW/src/symm_base.o
 elphon_shuffle_wrap.o : ../../UtilXlib/mp.o
-elphon_shuffle_wrap.o : @iotk_module@
+elphon_shuffle_wrap.o : ../../iotk/src/iotk_module.o
 elphon_shuffle_wrap.o : constants_epw.o
 elphon_shuffle_wrap.o : division.o
 elphon_shuffle_wrap.o : elph2.o
@@ -369,7 +369,7 @@ indabs.o : transportcom.o
 io_dyn_mat2.o : ../../Modules/io_global.o
 io_dyn_mat2.o : ../../Modules/kind.o
 io_dyn_mat2.o : ../../Modules/mp_images.o
-io_dyn_mat2.o : @iotk_module@
+io_dyn_mat2.o : ../../iotk/src/iotk_module.o
 io_eliashberg.o : ../../Modules/cell_base.o
 io_eliashberg.o : ../../Modules/control_flags.o
 io_eliashberg.o : ../../Modules/io_files.o

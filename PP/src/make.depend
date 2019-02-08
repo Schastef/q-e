@@ -225,7 +225,7 @@ fermi_proj.o : ../../PW/src/atomic_wfc_mod.o
 fermi_proj.o : ../../PW/src/pwcom.o
 fermi_proj.o : ../../PW/src/start_k.o
 fermi_proj.o : ../../UtilXlib/mp.o
-fermi_proj.o : @iotk_module@
+fermi_proj.o : ../../iotk/src/iotk_module.o
 fermi_proj.o : fermisurfer_common.o
 fermi_velocity.o : ../../Modules/cell_base.o
 fermi_velocity.o : ../../Modules/command_line_options.o
@@ -323,7 +323,7 @@ molecularpdos.o : ../../Modules/kind.o
 molecularpdos.o : ../../Modules/mp_global.o
 molecularpdos.o : ../../Modules/mp_world.o
 molecularpdos.o : ../../UtilXlib/mp.o
-molecularpdos.o : @iotk_module@
+molecularpdos.o : ../../iotk/src/iotk_module.o
 open_grid.o : ../../FFTXlib/fft_interfaces.o
 open_grid.o : ../../Modules/cell_base.o
 open_grid.o : ../../Modules/control_flags.o
@@ -524,7 +524,7 @@ projwfc.o : ../../PW/src/start_k.o
 projwfc.o : ../../PW/src/symm_base.o
 projwfc.o : ../../PW/src/tetra.o
 projwfc.o : ../../UtilXlib/mp.o
-projwfc.o : @iotk_module@
+projwfc.o : ../../iotk/src/iotk_module.o
 projwfc.o : projections_mod.o
 projwfc_box.o : ../../FFTXlib/fft_interfaces.o
 projwfc_box.o : ../../FFTXlib/scatter_mod.o
@@ -683,7 +683,7 @@ pw_export.o : ../../PW/src/pwcom.o
 pw_export.o : ../../PW/src/start_k.o
 pw_export.o : ../../PW/src/symm_base.o
 pw_export.o : ../../UtilXlib/mp.o
-pw_export.o : @iotk_module@
+pw_export.o : ../../iotk/src/iotk_module.o
 smallgk.o : ../../Modules/kind.o
 stm.o : ../../FFTXlib/fft_interfaces.o
 stm.o : ../../FFTXlib/scatter_mod.o
@@ -893,7 +893,7 @@ write_proj.o : ../../Modules/kind.o
 write_proj.o : ../../Modules/noncol.o
 write_proj.o : ../../PW/src/atomic_wfc_mod.o
 write_proj.o : ../../PW/src/pwcom.o
-write_proj.o : @iotk_module@
+write_proj.o : ../../iotk/src/iotk_module.o
 xc_vdW_scale_mod.o : ../../FFTXlib/fft_interfaces.o
 xc_vdW_scale_mod.o : ../../Modules/cell_base.o
 xc_vdW_scale_mod.o : ../../Modules/constants.o

@@ -353,7 +353,7 @@ SUBROUTINE read_xml_file ( wfc_is_collected )
   CALL qes_reset  ( output_obj )
   CALL qes_reset  ( geninfo_obj )
   CALL qes_reset  ( parinfo_obj )
-  IF ( TRIM(input_obj%tagname) == "input") CALL qes_reset_input ( input_obj) 
+  IF ( TRIM(input_obj%tagname) == "input") CALL qes_reset ( input_obj) 
   ! 
   RETURN
   !
