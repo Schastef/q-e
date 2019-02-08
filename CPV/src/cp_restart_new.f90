@@ -396,7 +396,7 @@ MODULE cp_restart_new
          END IF
          CALL qexsd_init_k_points_ibz( k_points_ibz, 'Gamma', &
               'CP',1,1,1,0,0,0,1,xk,wk_,alat,a1,.false.) 
-         bands_occu%tagname="occupations"
+         bands_occu%tagname="occupations_kind"
          bands_occu%lread=.false.
          bands_occu%lwrite=.true.
          bands_occu%spin_ispresent=lsda
