@@ -111,15 +111,18 @@
                                                ecutvcut_opt=>NULL() 
   LOGICAL,TARGET                           ::  empirical_vdw, ts_vdw_isolated_, dftd3_threebody_
   LOGICAL,POINTER                          ::  ts_vdw_isolated_pt=>NULL(), dftd3_threebody_pt=>NULL()
-  INTEGER,TARGET                           :: dftd3_version_, spin_ns, nbnd_tg
-  INTEGER,POINTER                          :: dftd3_version_pt=>NULL(), nbnd_pt => NULL() 
+  INTEGER,TARGET                           :: dftd3_version_, spin_ns, nbnd_tg, nq1_tg, nq2_tg, nq3_tg  
+  INTEGER,POINTER                          :: dftd3_version_pt=>NULL(), nbnd_pt => NULL(), nq1_pt=>NULL(),&
+                                              nq2_pt=>NULL(), nq3_pt=>NULL()  
   REAL(DP),ALLOCATABLE                     :: london_c6_(:), hubbard_U_(:), hubbard_alpha_(:), hubbard_J_(:,:),&
                                               hubbard_J0_(:), hubbard_beta_(:),starting_ns_(:,:,:)
   CHARACTER(LEN=3),ALLOCATABLE             :: species_(:)
-
+  INTEGER, POINTER                         :: nr_1,nr_2, nr_3, nrs_1, nrs_2, nrs_3, nrb_1, nrb_2, nrb_3 
+  INTEGER,ALLOCATABLE                      :: nr_(:), nrs_(:), nrb_(:) 
   !
   ! 
   NULLIFY (gate_ptr, block_ptr, relaxz_ptr, block_1_ptr, block_2_ptr, block_height_ptr, zgate_ptr, dftU_, vdW_, hybrid_)
+  NULLIFY (nr_1,nr_2,nr_3, nrs_1, nrs_2, nrs_3, nrb_1, nrb_2, nrb_3) 
 
   obj%tagname=TRIM(obj_tagname)
   IF ( ABS(ip_ibrav)  .GT. 0 ) THEN  
@@ -193,6 +196,14 @@
      IF ( ip_ecutvcut > 0.0_DP) THEN 
         ecutvcut_ = ip_ecutvcut/e2 
         ecutvcut_opt => ecutvcut_ 
+     END IF 
+     IF (ANY([ip_nqx1, ip_nqx2, ip_nqx3] /= 0)) THEN 
+        nq1_tg = ip_nqx1 
+        nq2_tg = ip_nqx2 
+        nq3_tg = ip_nqx3
+        nq1_pt => nq1_tg
+        nq2_pt => nq2_tg
+        nq3_pt => nq3_tg
      END IF 
      CALL qexsd_init_hybrid(hybrid_, dft_is_hybrid, NQ1 = ip_nqx1, NQ2= ip_nqx2, NQ3=ip_nqx3,&
                             ECUTFOCK = ecut_fock_opt, EXX_FRACTION = exx_frc_opt,          &
@@ -346,8 +357,20 @@
   !----------------------------------------------------------------------------------------------------------------------------
   !                                                    BASIS ELEMENT
   !---------------------------------------------------------------------------------------------------------------------------
-  CALL qexsd_init_basis(obj%basis, ip_k_points, ecutwfc/e2, ip_ecutrho/e2, ip_nr1, ip_nr2, ip_nr3, ip_nr1s, ip_nr2s,  & 
-                                                                                     ip_nr3s, ip_nr1b, ip_nr2b,ip_nr3b) 
+  IF (ANY([ip_nr1,ip_nr2,ip_nr3] /=0)) THEN 
+     ALLOCATE (nr_(3)) 
+     nr_ = [ip_nr1,ip_nr2,ip_nr3]
+  END IF 
+  IF (ANY([ip_nr1s,ip_nr2s,ip_nr3s] /=0)) THEN 
+     ALLOCATE (nrs_(3))
+     nrs_ = [ip_nr1s,ip_nr2s,ip_nr3s]
+  END IF 
+  IF (ANY([ip_nr1b,ip_nr2b,ip_nr3b] /=0)) THEN 
+     ALLOCATE(nrb_(3)) 
+     nrb_ = [ip_nr1b,ip_nr2b,ip_nr3b]
+  END IF 
+
+  CALL qexsd_init_basis(obj%basis, ip_k_points, ecutwfc/e2, ip_ecutrho/e2, nr_ , nrs_, nrb_ ) 
   !-----------------------------------------------------------------------------------------------------------------------------
   !                                                    ELECTRON CONTROL
   !------------------------------------------------------------------------------------------------------------------------------

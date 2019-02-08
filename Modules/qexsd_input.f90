@@ -164,7 +164,7 @@ MODULE qexsd_input
   !
   !
   !--------------------------------------------------------------------------------------------------------------------
-  SUBROUTINE qexsd_init_basis(obj,k_points,ecutwfc,ecutrho,nr1,nr2,nr3,nr1s,nr2s,nr3s,nr1b,nr2b,nr3b)
+  SUBROUTINE qexsd_init_basis(obj,k_points,ecutwfc,ecutrho,nr,nrs,nrb)
   !--------------------------------------------------------------------------------------------------------------------
   !
   IMPLICIT NONE
@@ -173,25 +173,25 @@ MODULE qexsd_input
   CHARACTER(LEN=*),INTENT(IN)       :: k_points
   REAL(DP),INTENT(IN)               :: ecutwfc 
   REAL(DP),OPTIONAL,INTENT(IN)      :: ecutrho
-  INTEGER,OPTIONAL,INTENT(IN)       :: nr1,nr2,nr3,nr1s,nr2s,nr3s,nr1b,nr2b,nr3b
+  INTEGER,OPTIONAL,INTENT(IN)       :: nr(:), nrs(:), nrb(:) 
   ! 
   TYPE(basisSetItem_type),POINTER   :: grid_obj => NULL(), smooth_grid_obj => NULL(), box_obj => NULL()
   CHARACTER(LEN=*),PARAMETER        :: TAGNAME="basis",FFT_GRID="fft_grid",FFT_SMOOTH="fft_smooth", FFT_BOX="fft_box"
   LOGICAL                           :: gamma_only=.FALSE. 
   !
-  IF ( PRESENT(nr1) .AND. PRESENT(nr2) .AND. PRESENT(nr3)) THEN
+  IF ( PRESENT(nr)) THEN
     ALLOCATE(grid_obj) 
-    CALL qes_init (grid_obj,FFT_GRID,nr1,nr2,nr3,"grid set in input")
+    CALL qes_init (grid_obj,FFT_GRID,nr(1),nr(2),nr(3),"grid set in input")
   END IF
   ! 
-  IF( PRESENT(nr1s) .AND. PRESENT(nr2s) .AND. PRESENT( nr3s)) THEN
+  IF( PRESENT(nrs)) THEN
     ALLOCATE(smooth_grid_obj)
-    CALL qes_init (smooth_grid_obj,FFT_SMOOTH,nr1s,nr2s,nr3s,"grid set in input")
+    CALL qes_init (smooth_grid_obj,FFT_SMOOTH,nrs(1),nrs(2),nrs(3),"grid set in input")
   END IF
   ! 
-  IF( PRESENT(nr1b) .AND. PRESENT(nr2b) .AND. PRESENT(nr3b)) THEN
+  IF( PRESENT(nrb)) THEN
     ALLOCATE(box_obj) 
-    CALL qes_init (box_obj,FFT_BOX,nr1b,nr2b,nr3b,"grid set in input")
+    CALL qes_init (box_obj,FFT_BOX,nrb(1),nrb(2),nrb(3),"grid set in input")
   END IF
   ! 
   IF (TRIM(k_points) .EQ. "gamma" ) gamma_only=.TRUE.
