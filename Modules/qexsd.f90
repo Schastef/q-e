@@ -898,14 +898,16 @@ CONTAINS
          ! 
          !
          SUBROUTINE qexsd_init_vdw(obj, non_local_term, vdw_corr, vdw_term, ts_thr, ts_isol,& 
-                                   london_s6, london_c6, london_rcut, species, xdm_a1, xdm_a2 )
+                                   london_s6, london_c6, london_rcut, species, xdm_a1, xdm_a2,&
+                                   dftd3_version, dftd3_threebody )
             IMPLICIT NONE 
             TYPE(vdW_type)  :: obj 
             CHARACTER(LEN=*),OPTIONAL,INTENT(IN)            :: non_local_term, vdw_corr
             REAL(DP),OPTIONAL,INTENT(IN)           :: vdw_term, london_c6(:), london_rcut,  xdm_a1, xdm_a2, ts_thr,&
                                                       london_s6
+            INTEGER,INTENT(IN)                     :: dftd3_version           
             CHARACTER(LEN=*),OPTIONAL              :: species(:)
-            LOGICAL,OPTIONAL,INTENT(IN)            :: ts_isol 
+            LOGICAL,OPTIONAL,INTENT(IN)            :: ts_isol, dftd3_threebody 
             !
             LOGICAL         :: empirical_vdw = .FALSE. , dft_is_vdw  = .FALSE. 
             TYPE(HubbardCommon_type),ALLOCATABLE :: london_c6_obj(:)  
@@ -918,7 +920,8 @@ CONTAINS
             CALL qes_init (obj, "vdW", VDW_CORR = vdw_corr, NON_LOCAL_TERM = non_local_term,&
                            TOTAL_ENERGY_TERM = vdw_term, LONDON_S6  = london_s6,& 
                             TS_VDW_ECONV_THR = ts_thr,  TS_VDW_ISOLATED  = ts_isol, LONDON_RCUT = london_rcut, &
-                            XDM_A1 = xdm_a1, XDM_A2  = xdm_a2, LONDON_C6 = london_c6_obj)
+                            XDM_A1 = xdm_a1, XDM_A2  = xdm_a2, LONDON_C6 = london_c6_obj, &
+                            DFTD3_VERSION = dftd3_version, DFTD3_THREEBODY = dftd3_threebody)
           !
           IF (ALLOCATED(london_c6_obj))   THEN
              DO isp=1, SIZE(london_c6_obj,1) 
@@ -1062,7 +1065,7 @@ CONTAINS
              occupations(nbnd_up_+1:nbnd_)=wg(1:nbnd_dw_,ndim_ks_energies+ik)/wk(ndim_ks_energies+ik)
           ELSE 
              occupations(1:nbnd_up_)=wg(1:nbnd_up_,ik)
-             occupations(nbnd_up_+1:nbnd)=wg(1:nbnd_dw_,ik) 
+             occupations(nbnd_up_+1:nbnd_)=wg(1:nbnd_dw_,ik) 
           END IF            
        ELSE 
           IF (ABS(wk(ik)).GT.1.d-10) THEN

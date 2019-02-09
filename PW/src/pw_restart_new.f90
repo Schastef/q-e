@@ -410,7 +410,8 @@ MODULE pw_restart_new
             END IF
             CALL qexsd_init_vdw(vdw_obj, non_local_term_pt, vdw_corr_pt, vdw_term_pt, &
                                 ts_thr_pt, ts_isol_pt, london_s6_pt, LONDON_C6 = london_c6_, &
-                                LONDON_RCUT =   london_rcut_pt, XDM_A1 = xdm_a1_pt, XDM_A2 = xdm_a2_pt )
+                                LONDON_RCUT =   london_rcut_pt, XDM_A1 = xdm_a1_pt, XDM_A2 = xdm_a2_pt,&
+                                 DFTD3_VERSION = dftd3_version_pt, DFTD3_THREEBODY = dftd3_threebody_pt)
          END IF 
          IF ( lda_plus_u) THEN 
             ALLOCATE (dftU_obj)  
@@ -503,9 +504,9 @@ MODULE pw_restart_new
             !  
             IF ( two_fermi_energies ) THEN
                 ALLOCATE ( ef_updw (2) )
-                ef_updw = [ef_up, ef_dw]
+                ef_updw = [ef_up/e2, ef_dw/e2]
             ELSE
-                ef_targ = ef
+                ef_targ = ef/e2
                 ef_point => ef_targ
             END IF
             CALL qexsd_init_band_structure(  output%band_structure,lsda,noncolin,lspinorb, nelec, natomwfc, &
@@ -559,7 +560,7 @@ MODULE pw_restart_new
 
          CALL  qexsd_init_total_energy(output%total_energy, etot/e2, eband/e2, ehart/e2, vtxc/e2, &
                                        etxc/e2, ewld/e2, degauss_, demet_, efield_corr, potstat_corr,&
-                                       gatefield_corr) 
+                                       gatefield_corr, DISPERSION_CONTRIBUTION = vdw_term_pt) 
          !
          NULLIFY(degauss_, demet_, efield_corr, potstat_corr, gatefield_corr)
          itemp = 0
@@ -1287,7 +1288,14 @@ MODULE pw_restart_new
     noncolin = band_structure%noncolin
     nelec =    band_structure%nelec
     nkstot =   band_structure%nks  
-    nbnd = band_structure%nbnd 
+    IF (band_structure%nbnd_ispresent) THEN
+       nbnd = band_structure%nbnd
+    ELSE IF ( band_structure%nbnd_up_ispresent .AND. band_structure%nbnd_dw_ispresent) THEN
+       nbnd = ( band_structure%nbnd_up + band_structure%nbnd_dw )
+    ELSE 
+       CALL errore('init_vars_from_schema: check xml file !!', &
+                   'nbnd or nbnd_up+nbnd_dw are missing in band_structure element', 1)
+    END IF     
     IF ( lsda ) THEN
        nkstot = nkstot * 2 
        nbnd   = nbnd / 2
@@ -2030,10 +2038,15 @@ MODULE pw_restart_new
       ! 
       !! left here to write bw compatible xml
       lsda = band_struct_obj%lsda
-      nbnd  = band_struct_obj%nbnd 
       nkstot = band_struct_obj%nks 
       IF ( lsda) THEN 
-         nbnd  = nbnd / 2
+         IF (band_struct_obj%nbnd_ispresent) THEN 
+            nbnd  = band_struct_obj%nbnd / 2
+         ELSE IF ( band_struct_obj%nbnd_up_ispresent .AND. band_struct_obj%nbnd_dw_ispresent ) THEN 
+            nbnd = (band_struct_obj%nbnd_up + band_struct_obj%nbnd_dw)/2 
+         ELSE 
+            CALL errore ('init_vars_from_schema: ','band_structure xml element nbnd and nbnd_up+nbnd_dw missing', 1)  
+         END IF 
          nkstot = nkstot * 2 
          isk(1:nkstot/2) = 1
          isk(nkstot/2+1:nkstot) = 2 

@@ -137,7 +137,7 @@
   CALL qexsd_init_control_variables(obj%control_variables,title=title,calculation=calculation,                         &
                                     restart_mode=restart_mode,prefix=prefix,pseudo_dir=pseudo_dir,outdir=outdir,       &
                                     stress=tstress,forces=tprnfor, wf_collect=wf_collect,disk_io=disk_io,              &
-                                    max_seconds=max_seconds,etot_conv_thr=etot_conv_thr,forc_conv_thr=forc_conv_thr,   &
+                                    max_seconds=max_seconds,etot_conv_thr=etot_conv_thr/e2,forc_conv_thr=forc_conv_thr/e2,   &
                                     press_conv_thr=press_conv_thr,verbosity=verbosity,iprint=iprint, NSTEP = cf_nstep )
   !------------------------------------------------------------------------------------------------------------------------
   !                                                 ATOMIC SPECIES                                                      
@@ -255,7 +255,8 @@
      CALL qexsd_init_vdw(vdW_, NON_LOCAL_TERM = vdw_nonlocc_pt, VDW_CORR = vdw_corr_pointer, &
                              TS_THR = ts_vdw_econv_thr_pt, TS_ISOL = ts_vdw_isolated_pt, &
                              LONDON_S6 = lond_s6_pt, LONDON_RCUT = lond_rcut_pt, SPECIES = species_, &
-                             XDM_A1 = xdm_a1_pt, XDM_A2 = xdm_a2_pt )
+                             XDM_A1 = xdm_a1_pt, XDM_A2 = xdm_a2_pt, DFTD3_VERSION = dftd3_version_pt, &
+                             DFTD3_THREEBODY = dftd3_threebody_pt)
   END IF
   !
   IF (ip_lda_plus_u) THEN
@@ -379,7 +380,7 @@
   ELSE 
     diagonalization = ip_diagonalization
   END IF
-  CALL qexsd_init_electron_control(obj%electron_control, diagonalization, mixing_mode, mixing_beta, conv_thr,         &
+  CALL qexsd_init_electron_control(obj%electron_control, diagonalization, mixing_mode, mixing_beta, conv_thr/e2,         &
                                    mixing_ndim, electron_maxstep, tqr, real_space, tq_smoothing, tbeta_smoothing, diago_thr_init, &
                                    diago_full_acc, diago_cg_maxiter,  diago_ppcg_maxiter, diago_david_ndim )
   !--------------------------------------------------------------------------------------------------------------------------------
