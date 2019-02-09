@@ -905,7 +905,7 @@ CONTAINS
             CHARACTER(LEN=*),OPTIONAL,INTENT(IN)            :: non_local_term, vdw_corr
             REAL(DP),OPTIONAL,INTENT(IN)           :: vdw_term, london_c6(:), london_rcut,  xdm_a1, xdm_a2, ts_thr,&
                                                       london_s6
-            INTEGER,INTENT(IN)                     :: dftd3_version           
+            INTEGER,OPTIONAL,INTENT(IN)                     :: dftd3_version           
             CHARACTER(LEN=*),OPTIONAL              :: species(:)
             LOGICAL,OPTIONAL,INTENT(IN)            :: ts_isol, dftd3_threebody 
             !

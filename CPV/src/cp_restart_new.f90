@@ -286,7 +286,7 @@ MODULE cp_restart_new
 !-------------------------------------------------------------------------------
 ! ... CONVERGENCE_INFO - TO BE VERIFIED   
 !-------------------------------------------------------------------------------
-!! @note set lwrite to false for the element P. Delugas 
+!! @note set lwrite to false for this  element P. Delugas 
          CALL qexsd_init_convergence_info(output_obj%convergence_info, &
               scf_has_converged = .FALSE., n_scf_steps=0, scf_error=0.0_dp, &
               n_opt_steps=0, grad_norm=0.0_dp )
@@ -325,6 +325,7 @@ MODULE cp_restart_new
 !-------------------------------------------------------------------------------
         dft_name = get_dft_name()
         IF ( lda_plus_U) THEN
+           ALLOCATE (dftU_) 
            is_hubbard(:) = (Hubbard_U(:) > 0.0_dp)
            CALL qexsd_init_dftU(OBJ = dftU_, NSP = nsp, PSD = upf(1:nsp)%psd, SPECIES = atm(1:nsp), &
                                 ITYP = ityp, IS_HUBBARD  = is_hubbard, LDA_PLUS_U_KIND = 0,         &
@@ -371,7 +372,19 @@ MODULE cp_restart_new
                                   SPECIES = species_ )
         END IF    
 
-           CALL qexsd_init_dft(output_obj%dft, dft_name, hybrid_, vdW_, dftU_)  
+        CALL qexsd_init_dft(output_obj%dft, dft_name, hybrid_, vdW_, dftU_)
+        IF (ASSOCIATED(dftU_)) THEN
+           CALL qes_reset(dftU_) 
+           DEALLOCATE(dftU_) 
+        END IF 
+        IF (ASSOCIATED(vdW_) ) THEN 
+           CALL qes_reset(vdW_) 
+           DEALLOCATE(vdW_) 
+        END IF 
+        IF ( ASSOCIATED(hybrid_)) THEN 
+           CALL qes_reset(hybrid_) 
+           DEALLOCATE(hybrid_) 
+        END IF 
 
 !-------------------------------------------------------------------------------
 ! ... MAGNETIZATION
@@ -412,13 +425,6 @@ MODULE cp_restart_new
                     LSPINORB=.FALSE., NELEC = nelec, N_WFC_AT = natomwfc,  ET=et, WG = ftmp , NKS = nspin ,&
                     XK = xk , NGK=[ngw_g], WK=wk_, STARTING_KPOINTS= k_points_IBZ, OCCUPATIONS_KIND= bands_occu,& 
                     WF_COLLECTED = .TRUE., NBND = nbnd_pt, NBND_UP = nbnd_up_pt, NBND_DW = nbnd_dw_pt )
-
-         !CALL  qexsd_init_band_structure(output_obj%band_structure,lsda, .false., &
-         !     .false., nupdwn(1), nupdwn(2), nelec, natomwfc, .true., 0.0_dp, &
-         !     .false., [0.0_dp,0.0_dp], et, ftmp, nspin, xk, [ngw_g], wk_,&
-         !     STARTING_KPOINTS = input_obj%k_points_IBZ, &
-         !     OCCUPATION_KIND = input_obj%bands%occupations, &
-         !     WF_COLLECTED = .true. )
          CALL qes_reset (bands_occu)
          CALL qes_reset (k_points_IBZ)
 !-------------------------------------------------------------------------------
