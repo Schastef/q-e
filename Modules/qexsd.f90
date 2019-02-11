@@ -93,11 +93,11 @@ MODULE qexsd_module
             qexsd_init_total_energy, qexsd_init_forces, qexsd_init_stress, &
             qexsd_init_dipole_info, qexsd_init_outputElectricField,   &
             qexsd_init_outputPBC, qexsd_init_gate_info, qexsd_init_hybrid, qexsd_init_dftU,&
-            qexsd_init_vdw
+            qexsd_init_vdw, qexsd_init_clocks 
   !
   PUBLIC :: qexsd_step_addstep, qexsd_set_status, qexsd_reset_steps    
   ! 
-  PUBLIC :: qexsd_init_berryPhaseOutput, qexsd_bp_obj
+  PUBLIC :: qexsd_init_berryPhaseOutput, qexsd_bp_obj  
 CONTAINS
 !
 !-------------------------------------------
@@ -261,7 +261,8 @@ CONTAINS
       USE mytime,    ONLY: nclock, clock_label
       USE FOX_wxml,  ONLY: xml_NewElement, xml_AddCharacters, xml_EndElement, xml_Close   
       IMPLICIT NONE
-      REAL(DP),EXTERNAL    :: get_clock
+      REAL(DP),EXTERNAL     :: get_clock
+      TYPE(timing_type) :: qexsd_timing_  
       !
       CHARACTER(len=17) :: subname = 'qexsd_closeschema'
       INTEGER :: ierr
@@ -271,9 +272,16 @@ CONTAINS
          CALL xml_AddCharacters(qexsd_xf, exit_status)
          CALL xml_EndElement(qexsd_xf, "status")          
          CALL qexsd_set_closed()
-         CALL xml_NewElement (qexsd_xf, "cputime")
-         CALL xml_addCharacters(qexsd_xf, MAX(nint(get_clock('PWSCF')),nint(get_clock('CP'))) )
-         CALL xml_EndElement ( qexsd_xf, "cputime")
+         IF (get_clock('PWSCF') > get_clock('CP'))  THEN 
+            CALL qexsd_init_clocks (qexsd_timing_, 'PWSCF       ' , ['electrons   '])
+         ELSE 
+            CALL qexsd_init_clocks (qexsd_timing_, 'CP          ') 
+         END IF 
+         CALL qes_write ( qexsd_xf, qexsd_timing_) 
+         CALL qes_reset(qexsd_timing_) 
+         !CALL xml_NewElement (qexsd_xf, "cputime")
+         !CALL xml_addCharacters(qexsd_xf, MAX(nint(get_clock('PWSCF')),nint(get_clock('CP'))) )
+         !CALL xml_EndElement ( qexsd_xf, "cputime")
          CALL qes_write (qexsd_xf, qexsd_closed_element)
       END IF
          CALL xml_Close(qexsd_xf) 
@@ -1494,6 +1502,71 @@ SUBROUTINE qexsd_init_gate_info(obj, tagname, gatefield_en, zgate_, nelec_, alat
    ! 
 END SUBROUTINE qexsd_init_gate_info 
 
+SUBROUTINE qexsd_init_clocks (timing_, total_clock, partial_clocks)
+      USE mytime,  ONLY: nclock, clock_label, cputime, walltime, called
+      USE qes_libs_module, ONLY: qes_init, qes_reset 
+      IMPLICIT NONE
+      TYPE(timing_type),INTENT(INOUT)          :: timing_ 
+      CHARACTER(LEN=12),INTENT(IN)             :: total_clock 
+      CHARACTER(LEN=12),OPTIONAL,INTENT(IN)    :: partial_clocks(:) 
+      ! 
+      TYPE (clock_type)                 :: total_
+      TYPE(clock_type),ALLOCATABLE      :: partial_(:)  
+      LOGICAL,ALLOCATABLE               :: match(:)
+      INTEGER                           :: partial_ndim = 0, ic, ipar, nc 
+      REAL (DP)                         :: t(2)
+      INTERFACE
+         FUNCTION get_cpu_and_wall(n_) result(t_)
+            IMPORT :: DP
+            IMPLICIT NONE
+            INTEGER    :: n_ 
+            REAL(DP)   t_(2)
+         END FUNCTION get_cpu_and_wall 
+      END INTERFACE
+      ! 
+      IF (PRESENT(partial_clocks)) partial_ndim = SIZE (partial_clocks)
+      DO ic = 1, nclock
+         IF ( TRIM(total_clock) == clock_label(ic) ) EXIT 
+      END DO 
+      t = get_cpu_and_wall(ic) 
+      CALL qes_init ( total_, "total", TRIM(clock_label(ic)), t(1), t(2) ) 
+      IF ( partial_ndim .GT.  0 ) THEN  
+         ALLOCATE(partial_(partial_ndim), match(nclock) ) 
+         DO ipar = 1, partial_ndim 
+            match = clock_label(1:nclock) == TRIM(partial_clocks(ipar)) 
+            IF ( ANY (match))  THEN
+               nc = get_index(.TRUE., match)
+               t = get_cpu_and_wall(nc) 
+               CALL qes_init(partial_(ipar), "partial", TRIM(clock_label(nc)), t(1), t(2),&
+                             called(nc))
+            ELSE 
+               CALL qes_init (partial_(ipar), "partial", "not_found",  -1.d0, -1.d0, 0)  
+               CALL infomsg("add_xml_clocks_pw: label not found ", TRIM(partial_clocks(ipar))) 
+               partial_(ipar)%lwrite=.FALSE. 
+            END IF 
+            END DO
+      END IF 
+      CALL qes_init( timing_, "timing_info", total_, partial_)
+      CALL qes_reset ( total_) 
+      DO ipar =1, partial_ndim 
+         CALL qes_reset(partial_(ipar)) 
+      END DO
+      CONTAINS 
+         FUNCTION get_index(val, array)  result(n) 
+            IMPLICIT NONE
+            LOGICAL                     :: val 
+            LOGICAL                     :: array(:)
+            INTEGER                     :: n 
+            ! 
+            INTEGER                     :: i 
+            !
+            n = - 1
+            DO i =1, SIZE(array) 
+               IF (array(i) .EQV. val) EXIT 
+            END DO
+            IF ( array(i) .EQV. val )  n = i 
+         END FUNCTION get_index 
+   END SUBROUTINE qexsd_init_clocks  
 
 
 END MODULE qexsd_module

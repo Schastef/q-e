@@ -139,7 +139,10 @@ MODULE qes_reset_module
       CALL qes_reset_output(obj%output)
     obj%output_ispresent = .FALSE.
     obj%status_ispresent = .FALSE.
-    CALL qes_reset_timing(obj%timining_info)
+    obj%cputime_ispresent = .FALSE.
+    IF (obj%timing_info_ispresent) &
+      CALL qes_reset_timing(obj%timing_info)
+    obj%timing_info_ispresent = .FALSE.
     IF (obj%closed_ispresent) &
       CALL qes_reset_closed(obj%closed)
     obj%closed_ispresent = .FALSE.

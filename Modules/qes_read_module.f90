@@ -256,42 +256,50 @@ MODULE qes_read_module
     tmp_node_list => getElementsByTagname(xml_node, "cputime")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:espressoType","cputime: wrong number of occurrences")
+           CALL infomsg("qes_read:espressoType","cputime: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:espressoType","cputime: wrong number of occurrences",10)
+           CALL errore("qes_read:espressoType","cputime: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL extractDataContent(tmp_node, obj%cputime, IOSTAT = iostat_ )
-    IF ( iostat_ /= 0 ) THEN
-       IF ( PRESENT (ierr ) ) THEN 
-          CALL infomsg("qes_read:espressoType","error reading cputime")
-          ierr = ierr + 1
-       ELSE 
-          CALL errore ("qes_read:espressoType","error reading cputime",10)
-       END IF
+    IF (tmp_node_list_size>0) THEN
+      obj%cputime_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL extractDataContent(tmp_node, obj%cputime , IOSTAT = iostat_)
+      IF ( iostat_ /= 0 ) THEN
+         IF ( PRESENT (ierr ) ) THEN 
+            CALL infomsg("qes_read:espressoType","error reading cputime")
+            ierr = ierr + 1
+         ELSE 
+            CALL errore ("qes_read:espressoType","error reading cputime",10)
+         END IF
+      END IF
+    ELSE
+       obj%cputime_ispresent = .FALSE.
     END IF
     !
-    tmp_node_list => getElementsByTagname(xml_node, "timining_info")
+    tmp_node_list => getElementsByTagname(xml_node, "timing_info")
     tmp_node_list_size = getLength(tmp_node_list)
     !
-    IF (tmp_node_list_size /= 1) THEN
+    IF (tmp_node_list_size > 1) THEN
         IF (PRESENT(ierr) ) THEN 
-           CALL infomsg("qes_read:espressoType","timining_info: wrong number of occurrences")
+           CALL infomsg("qes_read:espressoType","timing_info: too many occurrences")
            ierr = ierr + 1 
         ELSE 
-           CALL errore("qes_read:espressoType","timining_info: wrong number of occurrences",10)
+           CALL errore("qes_read:espressoType","timing_info: too many occurrences",10)
         END IF
     END IF
     !
-    tmp_node => item(tmp_node_list, 0)
-    IF (ASSOCIATED(tmp_node))&
-       CALL qes_read_timing(tmp_node, obj%timining_info, ierr )
+    IF (tmp_node_list_size>0) THEN
+      obj%timing_info_ispresent = .TRUE.
+      tmp_node => item(tmp_node_list, 0)
+      CALL qes_read_timing(tmp_node, obj%timing_info, ierr )
+    ELSE
+       obj%timing_info_ispresent = .FALSE.
+    END IF
     !
     tmp_node_list => getElementsByTagname(xml_node, "closed")
     tmp_node_list_size = getLength(tmp_node_list)

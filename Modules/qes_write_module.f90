@@ -138,10 +138,14 @@ MODULE qes_write_module
            CALL xml_addCharacters(xp, obj%status)
         CALL xml_EndElement(xp, "status")
      END IF
-     CALL xml_NewElement(xp, 'cputime')
-        CALL xml_addCharacters(xp, obj%cputime)
-     CALL xml_EndElement(xp, 'cputime')
-     CALL qes_write_timing (xp, obj%timining_info)
+     IF (obj%cputime_ispresent) THEN
+        CALL xml_NewElement(xp, "cputime")
+           CALL xml_addCharacters(xp, obj%cputime)
+        CALL xml_EndElement(xp, "cputime")
+     END IF
+     IF (obj%timing_info_ispresent) THEN
+        CALL qes_write_timing (xp, obj%timing_info)
+     END IF
      IF (obj%closed_ispresent) THEN
         CALL qes_write_closed (xp, obj%closed)
      END IF
@@ -368,10 +372,10 @@ MODULE qes_write_module
      CALL xml_addAttribute(xp, 'label', TRIM(obj%label) )
      IF (obj%calls_ispresent) CALL xml_addAttribute(xp, 'calls', obj%calls )
      CALL xml_NewElement(xp, 'cpu')
-        CALL xml_addCharacters(xp, obj%cpu)
+        CALL xml_addCharacters(xp, obj%cpu, fmt='s16')
      CALL xml_EndElement(xp, 'cpu')
      CALL xml_NewElement(xp, 'wall')
-        CALL xml_addCharacters(xp, obj%wall)
+        CALL xml_addCharacters(xp, obj%wall, fmt='s16')
      CALL xml_EndElement(xp, 'wall')
      CALL xml_EndElement(xp, TRIM(obj%tagname))
    END SUBROUTINE qes_write_clock

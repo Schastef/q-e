@@ -111,8 +111,8 @@ MODULE qes_init_module
   CONTAINS
   !
   !
-  SUBROUTINE qes_init_espresso(obj, tagname, input, cputime, timining_info, Units, general_info,&
-                              parallel_info, step, output, status, closed)
+  SUBROUTINE qes_init_espresso(obj, tagname, input, Units, general_info, parallel_info, step,&
+                              output, status, cputime, timing_info, closed)
     !
     IMPLICIT NONE
     !
@@ -125,8 +125,8 @@ MODULE qes_init_module
     TYPE(step_type),OPTIONAL,DIMENSION(:),INTENT(IN) :: step
     TYPE(output_type),OPTIONAL,INTENT(IN) :: output
     INTEGER,OPTIONAL,INTENT(IN) :: status
-    INTEGER,INTENT(IN) :: cputime
-    TYPE(timing_type),INTENT(IN) :: timining_info
+    INTEGER,OPTIONAL,INTENT(IN) :: cputime
+    TYPE(timing_type),OPTIONAL,INTENT(IN) :: timing_info
     TYPE(closed_type),OPTIONAL,INTENT(IN) :: closed
     !
     obj%tagname = TRIM(tagname) 
@@ -172,8 +172,18 @@ MODULE qes_init_module
     ELSE 
       obj%status_ispresent = .FALSE.
     END IF
-    obj%cputime = cputime
-    obj%timining_info = timining_info
+    IF ( PRESENT(cputime)) THEN 
+      obj%cputime_ispresent = .TRUE. 
+      obj%cputime = cputime
+    ELSE 
+      obj%cputime_ispresent = .FALSE.
+    END IF
+    IF ( PRESENT(timing_info)) THEN 
+      obj%timing_info_ispresent = .TRUE. 
+      obj%timing_info = timing_info
+    ELSE 
+      obj%timing_info_ispresent = .FALSE.
+    END IF
     IF ( PRESENT(closed)) THEN 
       obj%closed_ispresent = .TRUE. 
       obj%closed = closed
@@ -509,8 +519,8 @@ MODULE qes_init_module
     CHARACTER(LEN=*), INTENT(IN) :: tagname
     CHARACTER(LEN=*), INTENT(IN) :: label
     INTEGER, OPTIONAL, INTENT(IN) :: calls
-    INTEGER,INTENT(IN) :: cpu
-    INTEGER,INTENT(IN) :: wall
+    REAL(DP),INTENT(IN) :: cpu
+    REAL(DP),INTENT(IN) :: wall
     !
     obj%tagname = TRIM(tagname) 
     obj%lwrite = .TRUE.

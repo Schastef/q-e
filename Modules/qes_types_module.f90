@@ -391,8 +391,8 @@ MODULE qes_types_module
     CHARACTER(len=256) :: label
     INTEGER :: calls
     LOGICAL :: calls_ispresent = .FALSE.
-    INTEGER :: cpu
-    INTEGER :: wall
+    REAL(DP) :: cpu
+    REAL(DP) :: wall
     !
   END TYPE clock_type
   !
@@ -1391,8 +1391,10 @@ MODULE qes_types_module
     TYPE(output_type) :: output
     LOGICAL  :: status_ispresent = .FALSE.
     INTEGER :: status
+    LOGICAL  :: cputime_ispresent = .FALSE.
     INTEGER :: cputime
-    TYPE(timing_type) :: timining_info
+    LOGICAL  :: timing_info_ispresent = .FALSE.
+    TYPE(timing_type) :: timing_info
     LOGICAL  :: closed_ispresent = .FALSE.
     TYPE(closed_type) :: closed
     !

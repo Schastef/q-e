@@ -143,8 +143,12 @@ MODULE qes_bcast_module
     CALL mp_bcast(obj%status_ispresent, ionode_id, comm)
     IF (obj%status_ispresent) &
       CALL mp_bcast(obj%status, ionode_id, comm)
-    CALL mp_bcast(obj%cputime, ionode_id, comm)
-    CALL qes_bcast_timing(obj%timining_info, ionode_id, comm)
+    CALL mp_bcast(obj%cputime_ispresent, ionode_id, comm)
+    IF (obj%cputime_ispresent) &
+      CALL mp_bcast(obj%cputime, ionode_id, comm)
+    CALL mp_bcast(obj%timing_info_ispresent, ionode_id, comm)
+    IF (obj%timing_info_ispresent) &
+      CALL qes_bcast_timing(obj%timing_info, ionode_id, comm)
     CALL mp_bcast(obj%closed_ispresent, ionode_id, comm)
     IF (obj%closed_ispresent) &
       CALL qes_bcast_closed(obj%closed, ionode_id, comm)
