@@ -111,7 +111,7 @@
        !
        vc_ = .false.
        IF (PRESENT(vc)) vc_ = vc
-       IF ( .NOT. vc ) THEN
+       IF ( .NOT. vc_ ) THEN
           IF ( ASSOCIATED( gl ) ) DEALLOCATE ( gl )
        END IF
        !
