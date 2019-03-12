@@ -534,7 +534,6 @@ CONTAINS
     !
     IF (eels) THEN
        !
-       IF (okvan .AND. noncolin) CALL errore( 'lr_readin', 'Ultrasoft PP + noncolin is not fully implemented', 1 )
        IF (gamma_only)  CALL errore( 'lr_readin', 'gamma_only is not supported', 1 )
        !
        ! Tamm-Dancoff approximation is not recommended to be used with EELS, and
