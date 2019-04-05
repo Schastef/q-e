@@ -48,7 +48,6 @@ SUBROUTINE lr_readin
   USE esm,                 ONLY : do_comp_esm
   USE qpoint,              ONLY : xq
   USE io_rho_xml,          ONLY : write_scf
-  USE noncollin_module,    ONLY : noncolin
   USE mp_bands,            ONLY : ntask_groups
   USE constants,           ONLY : eps4
   USE control_lr,          ONLY : lrpa
