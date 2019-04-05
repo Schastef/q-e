@@ -1,21 +1,11 @@
 !
-! Copyright (C) 2001-2016 Quantum ESPRESSO group
+! Copyright (C) 2001-2019 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !-----------------------------------------------------------------------------
-!SUBROUTINE lr_addus_dvpsi ( ik, ldia, n, m, psi, dvpsi )
-  !---------------------------------------------------------------------------
-!
-! Copyright (C) 2016 Andrea Dal Corso
-! This file is distributed under the terms of the
-! GNU General Public License. See the file `License'
-! in the root directory of the present distribution,
-! or http://www.gnu.org/copyleft/gpl.txt .
-!
-!----------------------------------------------------------------------
 SUBROUTINE lr_addus_dvpsi (npwq, ik,psi,dvpsi)
   !----------------------------------------------------------------------
   !---------------------------------------------------------------------------
