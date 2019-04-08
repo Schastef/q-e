@@ -398,7 +398,7 @@
       minus_q = .true.
       sym = .false.
       sym(1:nsym) = .true.
-      CALL smallg_q(xq, 0, at, bg, nsym, s, ftau, sym, minus_q) ! s is intent(in)
+      CALL smallg_q(xq, 0, at, bg, nsym, s, sym, minus_q) ! s is intent(in)
       !
       ! SP: Notice that the function copy_sym reshuffles the s matrix for each irr_q.  
       !     This is why we then need to call gmap_sym for each irr_q [see below]. 
