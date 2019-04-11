@@ -1,5 +1,11 @@
-<<<<<<< HEAD
-=======
+Problems fixed in development branch :
+  * option "write_unkg" of pw2wannier90.f90 wasn't working as expected
+
+Incompatible changes in development branch :
+  * fractional translations "ftau" in FFT grid units no longer existing as
+    global variables: replaced by "ft", in crystal axis, computed locally
+    where needed (in real-space symmetrization only)
+
 New in 6.4.1 branch :
   * A warning is issued if the lattice parameter seems to be a conversion
     factor instead of a true lattice parameter. Conversion should be achieved
@@ -18,7 +24,6 @@ Problems fixed in 6.4.1 branch :
     issue #102)
   * XML file correctly written if tetrahedra are used (see gitlab issue #103)
 
->>>>>>> 0efe83d29ae4c5f0bd004403548617d997955670
 New in version 6.4:
   * Experimental version of SCDM localization with k-points, activated like for
     k=0 by specifying in &system namelist a value > 0 for "localization_thr".
@@ -38,11 +43,8 @@ New in version 6.4:
   * XDM now works also for USPP and norm-conserving PP
 
 Problems fixed in version 6.4 (+ = in qe-6.3-backports as well) :
-<<<<<<< HEAD
-=======
   + Codes reading scf data recomputed celldm parameters also if ibrav=0
     This produced confusing output and had the potential to break some codes
->>>>>>> 0efe83d29ae4c5f0bd004403548617d997955670
   + index not correctly initialized in LSDA phonon with core corrections 
   + GTH pseudopotentials in analytical form wrongly computed in some cases
   + projwfc.x not working with new xml format in noncolinear/spinorbit case 
