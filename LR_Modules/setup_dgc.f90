@@ -24,19 +24,26 @@ subroutine setup_dgc
   USE noncollin_module,     ONLY : noncolin, ux, nspin_gga, nspin_mag
   USE wavefunctions,        ONLY : psic
   USE kinds,                ONLY : DP
-  USE funct,                ONLY : dft_is_gradient, gcxc, gcx_spin, &
-                                   gcc_spin, dgcxc, dgcxc_spin
+  USE funct,                ONLY : dft_is_gradient, init_gga_xc
+  USE xc_gga,               ONLY : gcxc, gcx_spin, gcc_spin
   USE uspp,                 ONLY : nlcc_any
   USE gc_lr,                ONLY : grho, gmag, dvxc_rr, dvxc_sr, &
                                    dvxc_ss, dvxc_s, vsgga, segni
 
   implicit none
   integer :: k, is, ipol, jpol, ir
-  real(DP) :: grho2 (2), rh, zeta, grh2, fac, sx, sc, &
-       v1x, v2x, v1c, v2c, vrrx, vsrx, vssx, vrrc, vsrc, vssc, v1xup, &
-       v1xdw, v2xup, v2xdw, v1cup, v1cdw, vrrxup, vrrxdw, vrsxup, vrsxdw, &
-       vssxup, vssxdw, vrrcup, vrrcdw, vrscup, vrscdw, vrzcup, vrzcdw,   &
-       amag, seg, seg0, sgn(2)
+  real(DP) :: grho2(2), rh(1), zeta(1), grh2(1), fac, rho_v(1), grho2_v(1,2), &  !^^^
+              amag, seg, seg0, sgn(2)
+  !
+  real(dp), dimension(1,nspin_gga) :: v1x, v2x, v1c, v2c
+  real(dp), dimension(1,nspin_gga) :: vrrx, vsrx, vssx, vrrc, vsrc, vrzc
+  real(dp), dimension(1) :: vssc, sc, sx
+  !
+  !^^^TEMPORARY
+  real(dp), dimension(1,2) :: r_vv, s2_vv
+  real(dp), dimension(1,3,2) :: s2_vvv
+  !^^^
+  !
   COMPLEX(DP), ALLOCATABLE :: rhogout(:,:)
   real(DP), allocatable :: rhoout(:,:)
   real (DP), parameter :: epsr = 1.0d-6, epsg = 1.0d-10
@@ -44,7 +51,9 @@ subroutine setup_dgc
   IF ( .NOT. dft_is_gradient() ) RETURN
  
   CALL start_clock ('setup_dgc')
- 
+  
+  CALL init_gga_xc()
+  
   IF (noncolin.AND.domag) THEN
      allocate (segni (dfftp%nnr))
      allocate (vsgga (dfftp%nnr))
@@ -113,14 +122,22 @@ subroutine setup_dgc
   do k = 1, dfftp%nnr
      grho2 (1) = grho (1, k, 1) **2 + grho (2, k, 1) **2 + grho (3, k, 1) **2
      if (nspin_gga == 1) then
-        if (abs (rhoout (k, 1) ) > epsr .and. grho2 (1) > epsg) then
-           call gcxc (rhoout (k, 1), grho2(1), sx, sc, v1x, v2x, v1c, v2c)
-           call dgcxc (rhoout (k, 1), grho2(1), vrrx, vsrx, vssx, vrrc, &
-                vsrc, vssc)
-           dvxc_rr (k, 1, 1) = e2 * (vrrx + vrrc)
-           dvxc_sr (k, 1, 1) = e2 * (vsrx + vsrc)
-           dvxc_ss (k, 1, 1) = e2 * (vssx + vssc)
-           dvxc_s (k, 1, 1) = e2 * (v2x + v2c)
+        if (abs (rhoout(k, 1) ) > epsr .and. grho2(1) > epsg) then
+           !
+           rho_v(1)=rhoout(k,1)
+           grho2_v(:,1)=grho2(1)
+           !
+           call gcxc( 1, rho_v, grho2_v(:,1), sx, sc, v1x(:,1), &
+                                             v2x(:,1), v1c(:,1), v2c(:,1) )
+           !
+           !WRITE(*,*) 'ttest gxcx: setup_dgc'
+           !
+           call dgcxc( 1, rho_v, grho2_v, vrrx(:,1), vsrx(:,1), vssx(:,1), &
+                                        vrrc(:,1), vsrc(:,1), vssc ) !^^^
+           dvxc_rr(k,1,1) = e2 * (vrrx(1,1) + vrrc(1,1))
+           dvxc_sr(k,1,1) = e2 * (vsrx(1,1) + vsrc(1,1))
+           dvxc_ss(k,1,1) = e2 * (vssx(1,1) + vssc(1))
+           dvxc_s(k,1,1)  = e2 * (v2x(1,1)  + v2c(1,1))
         endif
      else
         grho2 (2) = grho(1, k, 2) **2 + grho(2, k, 2) **2 + grho(3, k, 2) **2
@@ -129,45 +146,53 @@ subroutine setup_dgc
         grh2 = (grho (1, k, 1) + grho (1, k, 2) ) **2 + (grho (2, k, 1) &
              + grho (2, k, 2) ) **2 + (grho (3, k, 1) + grho (3, k, 2) ) ** 2
 
-        call gcx_spin (rhoout (k, 1), rhoout (k, 2), grho2 (1), grho2 (2), &
-             sx, v1xup, v1xdw, v2xup, v2xdw)
-
-        call dgcxc_spin (rhoout (k, 1), rhoout (k, 2), grho (1, k, 1), &
-             grho (1, k, 2), vrrxup, vrrxdw, vrsxup, vrsxdw, vssxup, vssxdw, &
-             vrrcup, vrrcdw, vrscup, vrscdw, vssc, vrzcup, vrzcdw)
-        if (rh > epsr) then
-           zeta = (rhoout (k, 1) - rhoout (k, 2) ) / rh
-           call gcc_spin (rh, zeta, grh2, sc, v1cup, v1cdw, v2c)
-           dvxc_rr (k, 1, 1) = e2 * (vrrxup + vrrcup + vrzcup * &
-                (1.d0 - zeta) / rh)
-           dvxc_rr (k, 1, 2) = e2 * (vrrcup - vrzcup * (1.d0 + zeta) / rh)
-           dvxc_rr (k, 2, 1) = e2 * (vrrcdw + vrzcdw * (1.d0 - zeta) / rh)
-           dvxc_rr (k, 2, 2) = e2 * (vrrxdw + vrrcdw - vrzcdw * &
-                (1.d0 + zeta) / rh)
-           dvxc_s (k, 1, 1) = e2 * (v2xup + v2c)
-           dvxc_s (k, 1, 2) = e2 * v2c
-           dvxc_s (k, 2, 1) = e2 * v2c
-           dvxc_s (k, 2, 2) = e2 * (v2xdw + v2c)
+        !call gcx_spin (rhoout (k, 1), rhoout (k, 2), grho2 (1), grho2 (2), & !^^^
+        !     sx, v1xup, v1xdw, v2xup, v2xdw)
+        r_vv(1,1)=rhoout(k,1) ; r_vv(1,2)=rhoout(k,2)
+        s2_vv(1,1)=grho2(1)   ; s2_vv(1,2)=grho2(2)
+        !
+        call gcx_spin( 1, r_vv, s2_vv, sx, v1x, v2x )
+        !
+        !
+        s2_vvv(1,1:3,1)=grho(1:3,k,1)
+        s2_vvv(1,1:3,2)=grho(1:3,k,2)
+        call dgcxc_spin ( 1, r_vv, s2_vvv, vrrx, vsrx, vssx, vrrc, vsrc, vssc, vrzc )
+        
+        if (rh(k) > epsr) then
+           zeta = (rhoout(k,1) - rhoout(k,2) ) / rh
+           !
+           call gcc_spin( 1, rh, zeta, grh2, sc, v1c, v2c(:,1) )  !^^^
+           !
+           dvxc_rr(k,1,1) = e2 * (vrrx(1,1) + vrrc(1,1) + vrzc(1,1) * (1.d0 - zeta(1)) / rh(1))
+           dvxc_rr(k,1,2) = e2 * (vrrc(1,1) - vrzc(1,1) * (1.d0 + zeta(1)) / rh(1))
+           dvxc_rr(k,2,1) = e2 * (vrrc(1,2) + vrzc(1,2) * (1.d0 - zeta(1)) / rh(1))
+           dvxc_rr(k,2,2) = e2 * (vrrx(1,2) + vrrc(1,2) - vrzc(1,2) * (1.d0 + zeta(1)) / rh(1))
+           dvxc_s(k,1,1) = e2 * (v2x(1,1) + v2c(1,1))
+           dvxc_s(k,1,2) = e2 * v2c(1,1)
+           dvxc_s(k,2,1) = e2 * v2c(1,1)
+           dvxc_s(k,2,2) = e2 * (v2x(1,2) + v2c(1,1))
         else
-           dvxc_rr (k, 1, 1) = 0.d0
-           dvxc_rr (k, 1, 2) = 0.d0
-           dvxc_rr (k, 2, 1) = 0.d0
-           dvxc_rr (k, 2, 2) = 0.d0
-           dvxc_s (k, 1, 1) = 0.d0
-           dvxc_s (k, 1, 2) = 0.d0
-           dvxc_s (k, 2, 1) = 0.d0
-           dvxc_s (k, 2, 2) = 0.d0
+           dvxc_rr(k,1,1) = 0.d0
+           dvxc_rr(k,1,2) = 0.d0
+           dvxc_rr(k,2,1) = 0.d0
+           dvxc_rr(k,2,2) = 0.d0
+           dvxc_s(k,1,1) = 0.d0
+           dvxc_s(k,1,2) = 0.d0
+           dvxc_s(k,2,1) = 0.d0
+           dvxc_s(k,2,2) = 0.d0
         endif
-        dvxc_sr (k, 1, 1) = e2 * (vrsxup + vrscup)
-        dvxc_sr (k, 1, 2) = e2 * vrscup
-        dvxc_sr (k, 2, 1) = e2 * vrscdw
-        dvxc_sr (k, 2, 2) = e2 * (vrsxdw + vrscdw)
-        dvxc_ss (k, 1, 1) = e2 * (vssxup + vssc)
-        dvxc_ss (k, 1, 2) = e2 * vssc
-        dvxc_ss (k, 2, 1) = e2 * vssc
-        dvxc_ss (k, 2, 2) = e2 * (vssxdw + vssc)
+        dvxc_sr(k,1,1) = e2 * (vsrx(1,1) + vsrc(1,1))
+        dvxc_sr(k,1,2) = e2 * vsrc(1,1)
+        dvxc_sr(k,2,1) = e2 * vsrc(1,2)
+        dvxc_sr(k,2,2) = e2 * (vsrx(1,2) + vsrc(1,2))
+        dvxc_ss(k,1,1) = e2 * (vssx(1,1) + vssc(1))
+        dvxc_ss(k,1,2) = e2 * vssc(1)
+        dvxc_ss(k,2,1) = e2 * vssc(1)
+        dvxc_ss(k,2,2) = e2 * (vssx(1,2) + vssc(1))
+        
      endif
   enddo
+  !
   if (noncolin.and.domag) then
      call compute_vsgga(rhoout, grho, vsgga)
   else
