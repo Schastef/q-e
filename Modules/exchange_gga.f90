@@ -1,5 +1,5 @@
 !-----------------------------------------------------------------------
-SUBROUTINE becke88( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE becke88( rho, grho, sx, v1x, v2x )
   !-----------------------------------------------------------------------
   !! Becke exchange: A.D. Becke, PRA 38, 3098 (1988)
   !! only gradient-corrected part, no Slater term included
@@ -8,39 +8,33 @@ SUBROUTINE becke88( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: rho13, rho43, xs, xs2, sa2b8, shm1, dd, dd2, ee
   REAL(DP), PARAMETER :: beta=0.0042_DP
   REAL(DP), PARAMETER :: third=1._DP/3._DP, two13=1.259921049894873_DP
                                           ! two13= 2^(1/3)
   !
-  DO ir = 1, length
-     !
-     rho13 = rho(ir)**third
-     rho43 = rho13**4
-     !
-     xs = two13 * SQRT(grho(ir))/rho43
-     xs2 = xs * xs
-     !
-     sa2b8 = SQRT(1.0_DP + xs2)
-     shm1 = LOG(xs + sa2b8)
-     !
-     dd = 1.0_DP + 6.0_DP * beta * xs * shm1
-     dd2 = dd * dd
-     !
-     ee = 6.0_DP * beta * xs2 / sa2b8 - 1._DP
-     sx(ir) = two13 * grho(ir) / rho43 * ( - beta / dd)
-     !
-     v1x(ir) = - (4._DP / 3._DP) / two13 * xs2 * beta * rho13 * ee / dd2
-     v2x(ir) = two13 * beta * (ee-dd) / (rho43 * dd2)
-     !
-  ENDDO
+  rho13 = rho**third
+  rho43 = rho13**4
+  !   
+  xs = two13 * SQRT(grho)/rho43
+  xs2 = xs * xs
+  !   
+  sa2b8 = SQRT(1.0_DP + xs2)   
+  shm1 = LOG(xs + sa2b8)   
+  !   
+  dd = 1.0_DP + 6.0_DP * beta * xs * shm1   
+  dd2 = dd * dd   
+  !   
+  ee = 6.0_DP * beta * xs2 / sa2b8 - 1._DP   
+  sx = two13 * grho / rho43 * ( - beta / dd)   
+  !   
+  v1x = - (4._DP/3._DP) / two13 * xs2 * beta * rho13 * ee / dd2   
+  v2x = two13 * beta * (ee-dd) / (rho43 * dd2)   
   !
   RETURN
   !
@@ -48,7 +42,7 @@ END SUBROUTINE becke88
 !
 !
 !-----------------------------------------------------------------------
-SUBROUTINE ggax( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE ggax( rho, grho, sx, v1x, v2x )
   !-----------------------------------------------------------------------
   !! Perdew-Wang GGA (PW91), exchange part:
   !! J.P. Perdew et al.,PRB 46, 6671 (1992)
@@ -57,13 +51,11 @@ SUBROUTINE ggax( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: rhom43, s, s2, s3, s4, exps, as, sa2b8, shm1, bs, das, &
               dbs, dls
   REAL(DP), PARAMETER :: f1=0.19645_DP, f2=7.7956_DP, f3=0.2743_DP, &
@@ -72,29 +64,25 @@ SUBROUTINE ggax( length, rho, grho, sx, v1x, v2x )
                        ! fp1= -3/(16 pi)*(3 pi^2)^(-1/3)
                        ! fp2= (1/2)(3 pi^2)**(-1/3)
   !
-  DO ir = 1, length
-     !
-     rhom43 = rho(ir)**(-4.d0/3.d0)
-     s  = fp2 * SQRT(grho(ir)) * rhom43
-     s2 = s * s
-     s3 = s2 * s
-     s4 = s2 * s2
-     !
-     exps  = f4 * EXP( - 100.d0 * s2)
-     as    = f3 - exps - f5 * s2
-     sa2b8 = SQRT(1.0d0 + f2 * f2 * s2)
-     shm1  = LOG(f2 * s + sa2b8)
-     bs    = 1.d0 + f1 * s * shm1 + f5 * s4
-     !
-     das = (200.d0 * exps - 2.d0 * f5) * s
-     dbs = f1 * (shm1 + f2 * s / sa2b8) + 4.d0 * f5 * s3
-     dls = (das / as - dbs / bs)
-     !
-     sx(ir)  = fp1 * grho(ir) * rhom43 * as / bs
-     v1x(ir) = - 4.d0 / 3.d0 * sx(ir) / rho(ir) * (1.d0 + s * dls)
-     v2x(ir) = fp1 * rhom43 * as / bs * (2.d0 + s * dls)
-     !
-  ENDDO
+  rhom43 = rho**(-4.d0/3.d0)   
+  s  = fp2 * SQRT(grho) * rhom43   
+  s2 = s * s   
+  s3 = s2 * s   
+  s4 = s2 * s2   
+  !   
+  exps  = f4 * EXP( - 100.d0 * s2)   
+  as    = f3 - exps - f5 * s2   
+  sa2b8 = SQRT(1.0d0 + f2 * f2 * s2)   
+  shm1  = LOG(f2 * s + sa2b8)   
+  bs    = 1.d0 + f1 * s * shm1 + f5 * s4   
+  !   
+  das = (200.d0 * exps - 2.d0 * f5) * s   
+  dbs = f1 * (shm1 + f2 * s / sa2b8) + 4.d0 * f5 * s3   
+  dls = (das / as - dbs / bs)   
+  !   
+  sx  = fp1 * grho * rhom43 * as / bs   
+  v1x = - 4.d0 / 3.d0 * sx / rho * (1.d0 + s * dls)   
+  v2x = fp1 * rhom43 * as / bs * (2.d0 + s * dls)   
   !
   RETURN
   !
@@ -102,31 +90,30 @@ END SUBROUTINE ggax
 !
 !
 !---------------------------------------------------------------
-SUBROUTINE pbex( length, rho, grho, iflag, sx, v1x, v2x )
+SUBROUTINE pbex( rho, grho, iflag, sx, v1x, v2x )
   !---------------------------------------------------------------
-  !! PBE exchange (without Slater exchange):
-  !! iflag=1  J.P.Perdew, K.Burke, M.Ernzerhof, PRL 77, 3865 (1996)
-  !! iflag=2  "revised' PBE: Y. Zhang et al., PRL 80, 890 (1998)
-  !! iflag=3  PBEsol: J.P.Perdew et al., PRL 100, 136406 (2008)
-  !! iflag=4  PBEQ2D: L. Chiodo et al., PRL 108, 126402 (2012)
-  !! iflag=5  optB88: Klimes et al., J. Phys. Cond. Matter, 22, 022201 (2010)
-  !! iflag=6  optB86b: Klimes et al., Phys. Rev. B 83, 195131 (2011)
-  !! iflag=7  ev: Engel and Vosko, PRB 47, 13164 (1991)
+  !! PBE exchange (without Slater exchange):  
+  !! iflag=1  J.P.Perdew, K.Burke, M.Ernzerhof, PRL 77, 3865 (1996);  
+  !! iflag=2  "revised' PBE: Y. Zhang et al., PRL 80, 890 (1998);  
+  !! iflag=3  PBEsol: J.P.Perdew et al., PRL 100, 136406 (2008);  
+  !! iflag=4  PBEQ2D: L. Chiodo et al., PRL 108, 126402 (2012);  
+  !! iflag=5  optB88: Klimes et al., J. Phys. Cond. Matter, 22, 022201 (2010);  
+  !! iflag=6  optB86b: Klimes et al., Phys. Rev. B 83, 195131 (2011);  
+  !! iflag=7  ev: Engel and Vosko, PRB 47, 13164 (1991).  
   !
   USE kinds,      ONLY : DP
   USE constants,  ONLY : pi
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length, iflag
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
+  INTEGER,  INTENT(IN) :: iflag
+  REAL(DP), INTENT(IN) :: rho, grho
   ! input: charge and squared gradient
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   ! output: energy, potential
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: kf, agrho, s1, s2, ds, dsg, exunif, fx, sx_s
   ! (3*pi2*|rho|)^(1/3)
   ! |grho|
@@ -156,147 +143,137 @@ SUBROUTINE pbex( length, rho, grho, iflag, sx, v1x, v2x )
   SELECT CASE( iflag )
   CASE( 4 )
      !
-     DO ir = 1, length
-        agrho = SQRT(grho(ir))
-        kf = c2 * rho(ir)**third
-        dsg = 0.5_DP / kf
-        s1 = agrho * dsg / rho(ir)
-        p = s1*s1
-        s = s1
-        ak = 0.804_DP
-        amu = 10._DP/81._DP
-        ab = 0.5217_DP
-        c = 2._DP
-        fx =  ak - ak / (1.0_DP + amu * p / ak)  + p**2 * (1.0_DP + p)/       &
-               (10**c + p**3) * ( -1.0_DP - ak + ak / (1.0_DP + amu * p / ak) &
-              + ab * p ** (-0.1D1/ 0.4D1) )
-        !
-        exunif = - c1 * kf
-        sx_s = exunif * fx
-        !
-        dxunif = exunif * third
-        !
-        dfxdp = DBLE(1 / (1 + amu * p / ak) ** 2 * amu) + DBLE(2 * p * (1   &
-        + p) / (10 ** c + p ** 3) * (-1 - ak + ak / (1 + amu * p / ak) + ab &
-        * p ** (-0.1d1 / 0.4D1))) + DBLE(p ** 2 / (10 ** c + p ** 3) * (    &
-        -1 - ak + ak / (1 + amu * p / ak) + ab * p ** (-0.1d1 / 0.4D1))) -  &
-        DBLE(3 * p ** 4 * (1 + p) / (10 ** c + p ** 3) ** 2 * (-1 - ak +    &
-        ak / (1 + amu * p / ak) + ab * p ** (-0.1d1 / 0.4D1))) + DBLE(p **  &
-        2) * DBLE(1 + p) / DBLE(10 ** c + p ** 3) * (-DBLE(1 / (1 + amu *   &
-        p / ak) ** 2 * amu) - DBLE(ab * p ** (-0.5d1 / 0.4D1)) / 0.4D1)
-        !
-        dfxds = dfxdp*2._DP*s
-        dfx = dfxds
-        ds = - c5 * s1
-        !
-        v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-        v2x(ir) = exunif * dfx * dsg / agrho
-        sx(ir)  = sx_s * rho(ir)
-     ENDDO
+     agrho = SQRT(grho)   
+     kf = c2 * rho**third   
+     dsg = 0.5_DP / kf   
+     s1 = agrho * dsg / rho
+     p = s1*s1   
+     s = s1   
+     ak = 0.804_DP   
+     amu = 10._DP/81._DP   
+     ab = 0.5217_DP   
+     c = 2._DP   
+     fx =  ak - ak / (1.0_DP + amu * p / ak)  + p**2 * (1.0_DP + p)/       &   
+            (10**c + p**3) * ( -1.0_DP - ak + ak / (1.0_DP + amu * p / ak) &   
+           + ab * p ** (-0.1D1/ 0.4D1) )   
+     !   
+     exunif = - c1 * kf   
+     sx_s = exunif * fx   
+     !   
+     dxunif = exunif * third   
+     !   
+     dfxdp = DBLE(1 / (1 + amu * p / ak) ** 2 * amu) + DBLE(2 * p * (1   &   
+     + p) / (10 ** c + p ** 3) * (-1 - ak + ak / (1 + amu * p / ak) + ab &   
+     * p ** (-0.1d1 / 0.4D1))) + DBLE(p ** 2 / (10 ** c + p ** 3) * (    &   
+     -1 - ak + ak / (1 + amu * p / ak) + ab * p ** (-0.1d1 / 0.4D1))) -  &   
+     DBLE(3 * p ** 4 * (1 + p) / (10 ** c + p ** 3) ** 2 * (-1 - ak +    &   
+     ak / (1 + amu * p / ak) + ab * p ** (-0.1d1 / 0.4D1))) + DBLE(p **  &   
+     2) * DBLE(1 + p) / DBLE(10 ** c + p ** 3) * (-DBLE(1 / (1 + amu *   &   
+     p / ak) ** 2 * amu) - DBLE(ab * p ** (-0.5d1 / 0.4D1)) / 0.4D1)   
+     !   
+     dfxds = dfxdp*2._DP*s   
+     dfx = dfxds   
+     ds = - c5 * s1   
+     !   
+     v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+     v2x = exunif * dfx * dsg / agrho   
+     sx  = sx_s * rho
      !
   CASE( 5 )
      !
-     DO ir = 1, length
-        agrho = SQRT(grho(ir))
-        kf = c2 * rho(ir)**third
-        dsg = 0.5_DP / kf
-        s1 = agrho * dsg / rho(ir)
-        ab = mu(iflag)*c7 ! mu/ab=1.2
-        p = s1*c6
-        c = LOG(p + SQRT(p*p+1)) ! asinh(p)
-        dfx1=1+ab*s1*c
-        fx = mu(iflag)*s1*s1/dfx1
-        !
-        exunif = - c1 * kf
-        sx_s = exunif * fx
-        !
-        dxunif = exunif * third
-        !
-        dfx=2*fx/s1-fx/dfx1*(ab*c+ab*s1/SQRT(p*p+1)*c6)
-        ds = - c5 * s1
-        !
-        v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-        v2x(ir) = exunif * dfx * dsg / agrho
-        sx(ir)  = sx_s * rho(ir)
-     ENDDO
+     agrho = SQRT(grho)   
+     kf = c2 * rho**third   
+     dsg = 0.5_DP / kf   
+     s1 = agrho * dsg / rho
+     ab = mu(iflag)*c7 ! mu/ab=1.2   
+     p = s1*c6   
+     c = LOG(p + SQRT(p*p+1)) ! asinh(p)   
+     dfx1 = 1 + ab*s1*c   
+     fx = mu(iflag)*s1*s1/dfx1   
+     !   
+     exunif = - c1 * kf   
+     sx_s = exunif * fx   
+     !   
+     dxunif = exunif * third   
+     !   
+     dfx = 2*fx/s1-fx/dfx1*(ab*c+ab*s1/SQRT(p*p+1)*c6)   
+     ds  = - c5 * s1   
+     !   
+     v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+     v2x = exunif * dfx * dsg / agrho   
+     sx  = sx_s * rho
      !
   CASE( 6 )
      !
-     DO ir = 1, length
-        agrho = SQRT(grho(ir))
-        kf = c2 * rho(ir)**third
-        dsg = 0.5_DP / kf
-        s1 = agrho * dsg / rho(ir)
-        p = mu(iflag)*s1*s1
-        fx =  p / ( 1._DP + p )**c8
-        !
-        exunif = - c1 * kf
-        sx_s = exunif * fx
-        !
-        dxunif = exunif * third
-        !
-        dfx = 2*mu(iflag)*s1*fx*(1+(1-c8)*p)/(p*(1+p))
-        ds = - c5 * s1
-        !
-        v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-        v2x(ir) = exunif * dfx * dsg / agrho
-        sx(ir)  = sx_s * rho(ir)
-     ENDDO
+     agrho = SQRT(grho)   
+     kf = c2 * rho**third   
+     dsg = 0.5_DP / kf   
+     s1 = agrho * dsg / rho   
+     p = mu(iflag)*s1*s1   
+     fx =  p / ( 1._DP + p )**c8   
+     !   
+     exunif = - c1 * kf   
+     sx_s = exunif * fx   
+     !   
+     dxunif = exunif * third   
+     !   
+     dfx = 2*mu(iflag)*s1*fx*(1+(1-c8)*p)/(p*(1+p))   
+     ds = - c5 * s1   
+     !   
+     v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+     v2x = exunif * dfx * dsg / agrho   
+     sx  = sx_s * rho   
      !
   CASE( 7 )
      !
-     DO ir = 1, length
-        agrho = SQRT(grho(ir))
-        kf = c2 * rho(ir)**third
-        dsg = 0.5_DP / kf
-        s1 = agrho * dsg / rho(ir)
-        s2 = s1 * s1
-        s = s2*s2
-        f1 =  1._DP + ev(1)*s2 + ev(2)*s + ev(3)*s*s2
-        f2 =  1._DP + ev(4)*s2 + ev(5)*s + ev(6)*s*s2
-        fx = f1 / f2 - 1._DP
-        !
-        exunif = - c1 * kf
-        sx_s = exunif * fx
-        !
-        dxunif = exunif * third
-        ds = - c5 * s1
-        !
-        dfx  =  ev(1) + 2*ev(2)*s2 + 3*ev(3)*s  
-        dfx1 =  ev(4) + 2*ev(5)*s2 + 3*ev(6)*s 
-        dfx  = 2 * s1 * ( dfx - f1*dfx1/f2 ) / f2
-        !
-        v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-        v2x(ir) = exunif * dfx * dsg / agrho
-        sx(ir)  = sx_s * rho(ir)
-     ENDDO
+     agrho = SQRT(grho)
+     kf = c2 * rho**third   
+     dsg = 0.5_DP / kf   
+     s1 = agrho * dsg / rho
+     s2 = s1 * s1   
+     s = s2*s2   
+     f1 =  1._DP + ev(1)*s2 + ev(2)*s + ev(3)*s*s2   
+     f2 =  1._DP + ev(4)*s2 + ev(5)*s + ev(6)*s*s2   
+     fx = f1 / f2 - 1._DP   
+     !   
+     exunif = - c1 * kf   
+     sx_s = exunif * fx   
+     !   
+     dxunif = exunif * third   
+     ds = - c5 * s1   
+     !   
+     dfx  =  ev(1) + 2*ev(2)*s2 + 3*ev(3)*s     
+     dfx1 =  ev(4) + 2*ev(5)*s2 + 3*ev(6)*s    
+     dfx  = 2 * s1 * ( dfx - f1*dfx1/f2 ) / f2   
+     !   
+     v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+     v2x = exunif * dfx * dsg / agrho   
+     sx  = sx_s * rho
      !
   CASE DEFAULT
      !
-     DO ir = 1, length
-        agrho = SQRT(grho(ir))
-        kf = c2 * rho(ir)**third
-        dsg = 0.5_DP / kf
-        s1 = agrho * dsg / rho(ir)
-        s2 = s1 * s1
-        f1 = s2 * mu(iflag) / k(iflag)
-        f2 = 1._DP + f1
-        f3 = k(iflag) / f2
-        fx = k(iflag) - f3
-        !
-        exunif = - c1 * kf
-        sx_s = exunif * fx
-        !
-        dxunif = exunif * third
-        ds = - c5 * s1
-        !
-        dfx1 = f2 * f2
-        dfx = 2._DP * mu(iflag) * s1 / dfx1
-        !
-        v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-        v2x(ir) = exunif * dfx * dsg / agrho
-        sx(ir)  = sx_s * rho(ir)
-     ENDDO
+     agrho = SQRT(grho)   
+     kf = c2 * rho**third   
+     dsg = 0.5_DP / kf   
+     s1 = agrho * dsg / rho
+     s2 = s1 * s1   
+     f1 = s2 * mu(iflag) / k(iflag)   
+     f2 = 1._DP + f1   
+     f3 = k(iflag) / f2   
+     fx = k(iflag) - f3   
+     !   
+     exunif = - c1 * kf   
+     sx_s = exunif * fx   
+     !   
+     dxunif = exunif * third   
+     ds = - c5 * s1   
+     !   
+     dfx1 = f2 * f2   
+     dfx = 2._DP * mu(iflag) * s1 / dfx1   
+     !   
+     v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+     v2x = exunif * dfx * dsg / agrho   
+     sx  = sx_s * rho
      !
   END SELECT
   !
@@ -307,7 +284,7 @@ END SUBROUTINE pbex
 !
 !
 !----------------------------------------------------------------------------
-SUBROUTINE hcth( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE hcth( rho, grho, sx, v1x, v2x )
   !--------------------------------------------------------------------------
   !! HCTH/120, JCP 109, p. 6264 (1998)
   !! Parameters set-up after N.L. Doltsisnis & M. Sprik (1999)
@@ -324,13 +301,11 @@ SUBROUTINE hcth( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER :: ir
   REAL(DP), PARAMETER :: o3 = 1.0d0/3.0d0, o34 = 4.0d0/3.0d0, fr83 = 8.d0/3.d0
   REAL(DP) :: cg0(6), cg1(6), caa(6), cab(6), cx(6)
   REAL(DP) :: r3q2, r3pi, gr, rho_o3, rho_o34, xa, xa2, ra, rab,        &
@@ -374,64 +349,61 @@ SUBROUTINE hcth( length, rho, grho, sx, v1x, v2x )
   cx(5)  =  0.117173d+01
   cx(6)  =  0.004000d+00
   !  ... ... ... ... ...
-  DO ir = 1, length
-     !
-     gr = DSQRT(grho(ir))
-     rho_o3  = rho(ir)**(o3)
-     rho_o34 = rho(ir)**(o34)
-     xa = 1.25992105d0*gr/rho_o34
-     xa2 = xa*xa
-     ra = 0.781592642d0/rho_o3
-     rab = r3q2*ra
-     dra_drho = -0.260530881d0/rho_o34
-     drab_drho = r3q2*dra_drho
-     CALL pwcorr( ra, cg1, g, dg )
-     era1 = g
-     dera1_dra = dg
-     CALL pwcorr( rab, cg0, g, dg )
-     erab0 = g
-     derab0_drab = dg
-     ex = -0.75d0*r3pi*rho_o34
-     dex_drho = -r3pi*rho_o3
-     uaa = caa(6)*xa2
-     uaa = uaa/(1.0d0+uaa)
-     uab = cab(6)*xa2
-     uab = uab/(1.0d0+uab)
-     ux = cx(6)*xa2
-     ux = ux/(1.0d0+ux)
-     ffaa = rho(ir)*era1
-     ffab = rho(ir)*erab0-ffaa
-     dffaa_drho = era1 + rho(ir)*dera1_dra*dra_drho
-     dffab_drho = erab0 + rho(ir)*derab0_drab*drab_drho - dffaa_drho
-     ! mb-> i-loop removed
-     denaa = 1.d0 / (1.0d0+caa(6)*xa2)
-     denab = 1.d0 / (1.0d0+cab(6)*xa2)
-     denx  = 1.d0 / (1.0d0+cx(6)*xa2)
-     f83rho = fr83 / rho(ir)
-     bygr = 2.0d0/gr
-     gaa = caa(1)+uaa*(caa(2)+uaa*(caa(3)+uaa*(caa(4)+uaa*caa(5))))
-     gab = cab(1)+uab*(cab(2)+uab*(cab(3)+uab*(cab(4)+uab*cab(5))))
-     gx  = cx(1)+ux*(cx(2)+ux*(cx(3)+ux*(cx(4)+ux*cx(5))))
-     taa = denaa*uaa*(caa(2)+uaa*(2.d0*caa(3)+uaa &
-           *(3.d0*caa(4)+uaa*4.d0*caa(5))))
-     tab = denab*uab*(cab(2)+uab*(2.d0*cab(3)+uab &
-           *(3.d0*cab(4)+uab*4.d0*cab(5))))
-     txx = denx*ux*(cx(2)+ux*(2.d0*cx(3)+ux &
-           *(3.d0*cx(4)+ux*4.d0*cx(5))))
-     dgaa_drho = -f83rho*taa
-     dgab_drho = -f83rho*tab
-     dgx_drho  = -f83rho*txx
-     dgaa_dgr  =  bygr*taa
-     dgab_dgr  =  bygr*tab
-     dgx_dgr   =  bygr*txx
-     ! mb
-     sx(ir)  = ex*gx + ffaa*gaa + ffab*gab
-     v1x(ir) = dex_drho*gx + ex*dgx_drho          &
-                + dffaa_drho*gaa + ffaa*dgaa_drho &
-                + dffab_drho*gab + ffab*dgab_drho
-     v2x(ir) = (ex*dgx_dgr + ffaa*dgaa_dgr + ffab*dgab_dgr) / gr
-     !
-  ENDDO
+  !
+  gr = DSQRT(grho)   
+  rho_o3  = rho**(o3)   
+  rho_o34 = rho**(o34)   
+  xa = 1.25992105d0*gr/rho_o34   
+  xa2 = xa*xa   
+  ra = 0.781592642d0/rho_o3   
+  rab = r3q2*ra   
+  dra_drho = -0.260530881d0/rho_o34   
+  drab_drho = r3q2*dra_drho   
+  CALL pwcorr( ra, cg1, g, dg )   
+  era1 = g   
+  dera1_dra = dg   
+  CALL pwcorr( rab, cg0, g, dg )   
+  erab0 = g   
+  derab0_drab = dg   
+  ex = -0.75d0*r3pi*rho_o34   
+  dex_drho = -r3pi*rho_o3   
+  uaa = caa(6)*xa2   
+  uaa = uaa/(1.0d0+uaa)   
+  uab = cab(6)*xa2   
+  uab = uab/(1.0d0+uab)   
+  ux = cx(6)*xa2   
+  ux = ux/(1.0d0+ux)   
+  ffaa = rho*era1   
+  ffab = rho*erab0-ffaa   
+  dffaa_drho = era1 + rho*dera1_dra*dra_drho   
+  dffab_drho = erab0 + rho*derab0_drab*drab_drho - dffaa_drho   
+  ! mb-> i-loop removed   
+  denaa = 1.d0 / (1.0d0+caa(6)*xa2)   
+  denab = 1.d0 / (1.0d0+cab(6)*xa2)   
+  denx  = 1.d0 / (1.0d0+cx(6)*xa2)   
+  f83rho = fr83 / rho  
+  bygr = 2.0d0/gr   
+  gaa = caa(1)+uaa*(caa(2)+uaa*(caa(3)+uaa*(caa(4)+uaa*caa(5))))   
+  gab = cab(1)+uab*(cab(2)+uab*(cab(3)+uab*(cab(4)+uab*cab(5))))   
+  gx  = cx(1)+ux*(cx(2)+ux*(cx(3)+ux*(cx(4)+ux*cx(5))))   
+  taa = denaa*uaa*(caa(2)+uaa*(2.d0*caa(3)+uaa &   
+        *(3.d0*caa(4)+uaa*4.d0*caa(5))))   
+  tab = denab*uab*(cab(2)+uab*(2.d0*cab(3)+uab &   
+        *(3.d0*cab(4)+uab*4.d0*cab(5))))   
+  txx = denx*ux*(cx(2)+ux*(2.d0*cx(3)+ux &   
+        *(3.d0*cx(4)+ux*4.d0*cx(5))))   
+  dgaa_drho = -f83rho*taa   
+  dgab_drho = -f83rho*tab   
+  dgx_drho  = -f83rho*txx   
+  dgaa_dgr  =  bygr*taa   
+  dgab_dgr  =  bygr*tab   
+  dgx_dgr   =  bygr*txx   
+  ! mb   
+  sx  = ex*gx + ffaa*gaa + ffab*gab   
+  v1x = dex_drho*gx + ex*dgx_drho          &   
+             + dffaa_drho*gaa + ffaa*dgaa_drho &   
+             + dffab_drho*gab + ffab*dgab_drho   
+  v2x = (ex*dgx_dgr + ffaa*dgaa_dgr + ffab*dgab_dgr) / gr   
   !
   RETURN
   !
@@ -466,7 +438,7 @@ END SUBROUTINE hcth
 !
 !
 !-----------------------------------------------------------------------------
-SUBROUTINE optx( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE optx( rho, grho, sx, v1x, v2x )
   !---------------------------------------------------------------------------
   !! OPTX, Handy et al. JCP 116, p. 5411 (2002) and refs. therein
   !! Present release: Mauro Boero, Tsukuba, 10/9/2002
@@ -481,35 +453,30 @@ SUBROUTINE optx( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER :: ir
   REAL(DP), PARAMETER :: small=1.D-30, smal2=1.D-10
   ! ... coefficients and exponents
-  REAL(DP), PARAMETER :: o43=4.0d0/3.0d0, two13=1.259921049894873D0, &
-       two53=3.174802103936399D0, gam=0.006D0, a1cx=0.9784571170284421D0,&
+  REAL(DP), PARAMETER :: o43=4.0d0/3.0d0, two13=1.259921049894873D0,      &
+       two53=3.174802103936399D0, gam=0.006D0, a1cx=0.9784571170284421D0, &
        a2=1.43169D0 
   REAL(DP) :: gr, rho43, xa, gamx2, uden, uu
   !
   ! ... OPTX in compact form
-  DO ir = 1, length
-     !
-     gr = MAX(grho(ir),SMAL2)
-     rho43 = rho(ir)**o43
-     xa = two13*DSQRT(gr)/rho43
-     gamx2 = gam*xa*xa
-     uden = 1.d+00/(1.d+00+gamx2)
-     uu = a2*gamx2*gamx2*uden*uden
-     uden = rho43*uu*uden
-     sx(ir)  = -rho43*(a1cx+uu)/two13
-     v1x(ir) = o43*(sx(ir)+two53*uden)/rho(ir)
-     v2x(ir) = -two53*uden/gr
-     !
-  ENDDO
+  !   
+  gr = MAX(grho,smal2)   
+  rho43 = rho**o43   
+  xa = two13*DSQRT(gr)/rho43   
+  gamx2 = gam*xa*xa   
+  uden = 1.d+00/(1.d+00+gamx2)   
+  uu = a2*gamx2*gamx2*uden*uden   
+  uden = rho43*uu*uden   
+  sx  = -rho43*(a1cx+uu)/two13   
+  v1x = o43*(sx+two53*uden)/rho
+  v2x = -two53*uden/gr
   !
   RETURN
   !
@@ -517,7 +484,7 @@ END SUBROUTINE optx
 !
 !
 !---------------------------------------------------------------
-SUBROUTINE wcx( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE wcx( rho, grho, sx, v1x, v2x )
   !---------------------------------------------------------------
   !!  Wu-Cohen exchange (without Slater exchange):
   !!  Z. Wu and R. E. Cohen, PRB 73, 235116 (2006)
@@ -527,13 +494,11 @@ SUBROUTINE wcx( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: kf, agrho, s1, s2, es2, ds, dsg, exunif, fx
   ! (3*pi2*|rho|)^(1/3)
   ! |grho|
@@ -553,41 +518,37 @@ SUBROUTINE wcx( length, rho, grho, sx, v1x, v2x )
   REAL(DP), PARAMETER :: k=0.804d0, mu=0.2195149727645171d0, &
                          cwc=0.00793746933516d0
   !
-  DO ir = 1, length
-     !
-     agrho = SQRT(grho(ir))
-     kf  = c2 * rho(ir)**third
-     dsg = 0.5d0 / kf
-     s1  = agrho * dsg / rho(ir)
-     s2  = s1 * s1
-     es2 = EXP(-s2)
-     ds  = - c5 * s1
-     !
-     !   Energy
-     ! x = 10/81 s^2 + (mu - 10/81) s^2 e^-s^2 + ln (1 + c s^4)
-     x1 = teneightyone * s2 
-     x2 = (mu - teneightyone) * s2 * es2
-     x3 = LOG(1.d0 + cwc * s2 * s2)
-     f1 = (x1 + x2 + x3) / k
-     f2 = 1.d0 + f1
-     f3 = k / f2
-     fx = k - f3
-     exunif = - c1 * kf
-     sx_s = exunif * fx
-     !
-     !   Potential
-     dxunif = exunif * third
-     dfx1 = f2 * f2
-     dxds1 = teneightyone
-     dxds2 = (mu - teneightyone) * es2 * (1.d0 - s2)
-     dxds3 = 2.d0 * cwc * s2 / (1.d0 + cwc * s2 *s2)
-     dfx = 2.d0 * s1 * (dxds1 + dxds2 + dxds3) / dfx1
-     !
-     v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-     v2x(ir) = exunif * dfx * dsg / agrho
-     sx(ir)  = sx_s * rho(ir)
-     !
-  ENDDO
+  agrho = SQRT(grho)   
+  kf  = c2 * rho**third   
+  dsg = 0.5d0 / kf   
+  s1  = agrho * dsg / rho
+  s2  = s1 * s1   
+  es2 = EXP(-s2)   
+  ds  = - c5 * s1   
+  !   
+  !   Energy   
+  ! x = 10/81 s^2 + (mu - 10/81) s^2 e^-s^2 + ln (1 + c s^4)   
+  x1 = teneightyone * s2    
+  x2 = (mu - teneightyone) * s2 * es2   
+  x3 = LOG(1.d0 + cwc * s2 * s2)   
+  f1 = (x1 + x2 + x3) / k   
+  f2 = 1.d0 + f1   
+  f3 = k / f2   
+  fx = k - f3   
+  exunif = - c1 * kf   
+  sx_s = exunif * fx   
+  !   
+  !   Potential   
+  dxunif = exunif * third   
+  dfx1 = f2 * f2   
+  dxds1 = teneightyone   
+  dxds2 = (mu - teneightyone) * es2 * (1.d0 - s2)   
+  dxds3 = 2.d0 * cwc * s2 / (1.d0 + cwc * s2 *s2)   
+  dfx = 2.d0 * s1 * (dxds1 + dxds2 + dxds3) / dfx1   
+  !   
+  v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+  v2x = exunif * dfx * dsg / agrho   
+  sx  = sx_s * rho
   !
   RETURN
   !
@@ -595,22 +556,20 @@ END SUBROUTINE wcx
 !
 !
 !-----------------------------------------------------------------------     
-SUBROUTINE pbexsr( length, rho_in, grho, sxsr, v1xsr, v2xsr, omega )
+SUBROUTINE pbexsr( rho, grho, sxsr, v1xsr, v2xsr, omega )
   !---------------------------------------------------------------------
   ! INCLUDE 'cnst.inc'
   USE kinds,      ONLY: DP
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
   REAL(DP), INTENT(IN) :: omega
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho_in, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sxsr, v1xsr, v2xsr
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sxsr, v1xsr, v2xsr
   !
   ! ... local variables
   !
-  INTEGER  :: ir
-  REAL(DP) :: rho, rs, vx, aa, rr, ex, s2, s, d1x, d2x, fx, dsdn, dsdg
+  REAL(DP) :: rs, vx, aa, rr, ex, s2, s, d1x, d2x, fx, dsdn, dsdg
   REAL(DP), PARAMETER :: small=1.D-20, smal2=1.D-08
   REAL(DP), PARAMETER :: us=0.161620459673995492D0, ax=-0.738558766382022406D0, &
                          um=0.2195149727645171D0, uk=0.8040D0, ul=um/uk
@@ -618,37 +577,32 @@ SUBROUTINE pbexsr( length, rho_in, grho, sxsr, v1xsr, v2xsr, omega )
   !
   ! CALL XC(RHO,EX,EC,VX,VC)
   !
-  DO ir = 1, length
-     !
-     rho= rho_in(ir)
-     rs = rho**(1.0_DP/3.0_DP)
-     vx = (4.0_DP/3.0_DP)*f1*alpha*rs
-     !
-     ! aa = dmax1(grho,smal2)
-     aa = grho(ir)
-     ! rr = rho**(-4.0_DP/3.0_DP)
-     rr = 1.0_DP/(rho*rs)
-     ex = ax/rr
-     s2 = aa*rr*rr*us*us
-     !
-     s = SQRT(s2)
-     IF (s > 8.3D0) THEN
-        s = 8.572844D0 - 18.796223D0/s2
-     ENDIF
-     !
-     CALL wpbe_analy_erfc_approx_grad( rho, s, omega, fx, d1x, d2x )
-     !
-     sxsr(ir)  = ex*fx                        ! - ex
-     dsdn      = -4.D0/3.D0*s/rho
-     v1xsr(ir) = vx*fx + (dsdn*d2x+d1x)*ex    ! - VX
-     dsdg      = us*rr
-     v2xsr(ir) = ex*1.D0/SQRT(aa)*dsdg*d2x
-     !
-     ! NOTE, here sx is the total energy density,
-     ! not just the gradient correction energy density as e.g. in pbex()
-     ! And the same goes for the potentials V1X, V2X
-     !
-  ENDDO
+  rs = rho**(1.0_DP/3.0_DP)   
+  vx = (4.0_DP/3.0_DP)*f1*alpha*rs   
+  !   
+  ! aa = dmax1(grho,smal2)   
+  aa = grho
+  ! rr = rho**(-4.0_DP/3.0_DP)   
+  rr = 1.0_DP/(rho*rs)   
+  ex = ax/rr   
+  s2 = aa*rr*rr*us*us   
+  !   
+  s = SQRT(s2)   
+  IF (s > 8.3D0) THEN   
+     s = 8.572844D0 - 18.796223D0/s2   
+  ENDIF   
+  !   
+  CALL wpbe_analy_erfc_approx_grad( rho, s, omega, fx, d1x, d2x )   
+  !   
+  sxsr  = ex*fx                        ! - ex   
+  dsdn  = -4.D0/3.D0*s/rho   
+  v1xsr = vx*fx + (dsdn*d2x+d1x)*ex    ! - VX   
+  dsdg  = us*rr   
+  v2xsr = ex*1.D0/SQRT(aa)*dsdg*d2x   
+  !   
+  ! NOTE, here sx is the total energy density,   
+  ! not just the gradient correction energy density as e.g. in pbex()   
+  ! And the same goes for the potentials V1X, V2X   
   !
   RETURN
   !
@@ -656,57 +610,51 @@ END SUBROUTINE pbexsr
 !
 !
 !-----------------------------------------------------------------------
-SUBROUTINE rPW86( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE rPW86( rho, grho, sx, v1x, v2x )
   !---------------------------------------------------------------------
-  !! PRB 33, 8800 (1986) and J. Chem. Theory comp. 5, 2754 (2009)
+  !! PRB 33, 8800 (1986) and J. Chem. Theory comp. 5, 2754 (2009).
   !
   USE kinds
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: s, s_2, s_3, s_4, s_5, s_6, fs, grad_rho, df_ds
   REAL(DP), PARAMETER :: a=1.851_DP, b=17.33_DP, c=0.163_DP, &
                          s_prefactor=6.18733545256027_DP,    &
                          Ax=-0.738558766382022_DP, four_thirds=4._DP/3._DP
   !
-  DO ir = 1, length
-     !
-     grad_rho = SQRT(grho(ir))
-     !
-     s = grad_rho/(s_prefactor*rho(ir)**(four_thirds))
-     !
-     s_2 = s**2
-     s_3 = s_2 * s
-     s_4 = s_2**2
-     s_5 = s_3 * s_2
-     s_6 = s_2 * s_4
-     !
-     ! Calculation of energy
-     fs = (1 + a*s_2 + b*s_4 + c*s_6)**(1._DP/15._DP)
-     sx(ir) = Ax * rho(ir)**(four_thirds) * (fs -1.0_DP)
-     !
-     ! Calculation of the potential
-     df_ds = (1._DP/(15._DP*fs**(14.0_DP)))*(2*a*s + 4*b*s_3 + 6*c*s_5)
-     !
-     v1x(ir) = Ax*(four_thirds)*(rho(ir)**(1._DP/3._DP)*(fs -1.0_DP) &
-               -grad_rho/(s_prefactor * rho(ir))*df_ds)
-     !
-     v2x(ir) = Ax * df_ds/(s_prefactor*grad_rho)
-     !
-  ENDDO
+  grad_rho = SQRT(grho)   
+  !   
+  s = grad_rho/(s_prefactor*rho**(four_thirds))   
+  !   
+  s_2 = s**2   
+  s_3 = s_2 * s   
+  s_4 = s_2**2   
+  s_5 = s_3 * s_2   
+  s_6 = s_2 * s_4   
+  !   
+  ! Calculation of energy   
+  fs = (1 + a*s_2 + b*s_4 + c*s_6)**(1._DP/15._DP)   
+  sx = Ax * rho**(four_thirds) * (fs -1.0_DP)   
+  !   
+  ! Calculation of the potential   
+  df_ds = (1._DP/(15._DP*fs**(14.0_DP)))*(2*a*s + 4*b*s_3 + 6*c*s_5)   
+  !   
+  v1x = Ax*(four_thirds)*(rho**(1._DP/3._DP)*(fs -1.0_DP) &   
+        -grad_rho/(s_prefactor * rho)*df_ds)   
+  !  
+  v2x = Ax * df_ds/(s_prefactor*grad_rho)   
   !
 END SUBROUTINE rPW86
 !
 !
 !-----------------------------------------------------------------
-SUBROUTINE c09x( length, rho, grho, sx, v1x, v2x )  
+SUBROUTINE c09x( rho, grho, sx, v1x, v2x )  
   !---------------------------------------------------------------
   !! Cooper '09 exchange for vdW-DF (without Slater exchange):
   !! V. R. Cooper, Phys. Rev. B 81, 161104(R) (2010)
@@ -720,13 +668,11 @@ SUBROUTINE c09x( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: kf, agrho, s1, s2, sx_s, ds, dsg, exunif, fx
   ! (3*pi2*|rho|)^(1/3)
   ! |grho|
@@ -746,36 +692,32 @@ SUBROUTINE c09x( length, rho, grho, sx, v1x, v2x )
        mu    / 0.0617_DP /, &
        alpha / 0.0483_DP /
   !
-  DO ir = 1, length
-     !
-     agrho = SQRT(grho(ir))
-     kf = c2 * rho(ir)**third
-     dsg = 0.5_DP / kf
-     s1 = agrho * dsg / rho(ir)
-     s2 = s1 * s1
-     ds = - c5 * s1
-     !
-     ! ... Energy
-     !
-     f1 = EXP( - alpha * s2 )
-     f2 = EXP( - alpha * s2 / 2.0_DP )
-     f3 = mu * s2 * f1
-     fx = f3 + kappa * ( 1.0_DP - f2 )
-     exunif = - c1 * kf
-     sx_s = exunif * fx
-     !
-     ! ... Potential
-     !
-     dxunif = exunif * third
-     dfx1 = 2.0_DP * mu * s1 * ( 1.0_DP - alpha * s2 ) * f1
-     dfx2 = kappa * alpha * s1 * f2 
-     dfx = dfx1 + dfx2 
-     v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-     v2x(ir) = exunif * dfx * dsg / agrho
-     !
-     sx(ir)  = sx_s * rho(ir)
-     !
-  ENDDO
+  agrho = SQRT(grho)   
+  kf = c2 * rho**third   
+  dsg = 0.5_DP / kf   
+  s1 = agrho * dsg / rho
+  s2 = s1 * s1   
+  ds = - c5 * s1   
+  !   
+  ! ... Energy   
+  !   
+  f1 = EXP( - alpha * s2 )   
+  f2 = EXP( - alpha * s2 / 2.0_DP )   
+  f3 = mu * s2 * f1   
+  fx = f3 + kappa * ( 1.0_DP - f2 )   
+  exunif = - c1 * kf   
+  sx_s = exunif * fx   
+  !   
+  ! ... Potential   
+  !   
+  dxunif = exunif * third   
+  dfx1 = 2.0_DP * mu * s1 * ( 1.0_DP - alpha * s2 ) * f1   
+  dfx2 = kappa * alpha * s1 * f2    
+  dfx = dfx1 + dfx2    
+  v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+  v2x = exunif * dfx * dsg / agrho   
+  !   
+  sx  = sx_s * rho
   !
   RETURN
   !
@@ -783,7 +725,7 @@ END SUBROUTINE c09x
 !
 !
 !---------------------------------------------------------------
-SUBROUTINE sogga( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE sogga( rho, grho, sx, v1x, v2x )
   !-------------------------------------------------------------
   !! SOGGA exchange
   ! 
@@ -792,15 +734,13 @@ SUBROUTINE sogga( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   ! input: charge and abs gradient
   ! output: energy and potential
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: rho43, xs, xs2, dxs2_drho, dxs2_dgrho2
   REAL(DP) :: CX, denom, C1, C2, Fso, Fpbe, ex, Fx, dFx_dxs2, dex_drho
   !
@@ -817,92 +757,81 @@ SUBROUTINE sogga( length, rho, grho, sx, v1x, v2x )
   C1    =  mu / denom
   C2    =  mu / (kapa * denom)
   !
-  DO ir = 1, length
-     !
-     rho43 = rho(ir)**f43
-     xs  = grho(ir) / rho43
-     xs2 = xs * xs
-     !
-     dxs2_drho   = -f83 * xs2 / rho(ir)
-     dxs2_dgrho2 = one /rho(ir)**f83
-     !
-     ex       = - CX * rho43
-     dex_drho = - f43 * CX * rho(ir)**f13
-     !
-     Fso  = kapa * (one - EXP(-C2*xs2))
-     Fpbe = C1 * xs2 / (one + C2*xs2)
-     !
-     Fx       = f12 * (Fpbe + Fso)
-     dFx_dxs2 = f12 * (C1 / ((one + C2*xs2)**2) + C1*EXP(-C2*xs2))
-     !
-     !   Energy
-     sx(ir) = Fx * ex
-     !
-     !   Potential
-     v1x(ir) = dex_drho * Fx  +  ex * dFx_dxs2 * dxs2_drho
-     v2x(ir) = two * ex * dFx_dxs2 * dxs2_dgrho2
-     !
-  ENDDO
+  rho43 = rho**f43   
+  xs  = grho / rho43   
+  xs2 = xs * xs   
+  !   
+  dxs2_drho   = -f83 * xs2 / rho   
+  dxs2_dgrho2 = one /rho**f83   
+  !   
+  ex       = - CX * rho43   
+  dex_drho = - f43 * CX * rho**f13   
+  !   
+  Fso  = kapa * (one - EXP(-C2*xs2))   
+  Fpbe = C1 * xs2 / (one + C2*xs2)   
+  !   
+  Fx       = f12 * (Fpbe + Fso)   
+  dFx_dxs2 = f12 * (C1 / ((one + C2*xs2)**2) + C1*EXP(-C2*xs2))   
+  !   
+  !   Energy   
+  sx = Fx * ex   
+  !   
+  !   Potential   
+  v1x = dex_drho * Fx  +  ex * dFx_dxs2 * dxs2_drho   
+  v2x = two * ex * dFx_dxs2 * dxs2_dgrho2   
   !
 END SUBROUTINE sogga
 !
 !
 !-------------------------------------------------------------------------
-SUBROUTINE pbexgau( length, rho_in, grho, sxsr, v1xsr, v2xsr, alpha_gau )
+SUBROUTINE pbexgau( rho, grho, sxsr, v1xsr, v2xsr, alpha_gau )
   !-----------------------------------------------------------------------
   !
   USE kinds,  ONLY: DP
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
   REAL(DP), INTENT(IN) :: alpha_gau
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho_in, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sxsr, v1xsr, v2xsr
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sxsr, v1xsr, v2xsr
   !
   ! ... local variables
   !
-  INTEGER  :: ir
-  REAL(DP) :: rho, rs, vx, aa, rr, ex, s2, s, d1x, d2x, fx, dsdn, dsdg
+  REAL(DP) :: rs, vx, aa, rr, ex, s2, s, d1x, d2x, fx, dsdn, dsdg
   !
   REAL(DP), PARAMETER :: small=1.D-20, smal2=1.D-08
   REAL(DP), PARAMETER :: us=0.161620459673995492D0, ax=-0.738558766382022406D0, &
                          um=0.2195149727645171D0, uk=0.8040D0, ul=um/uk
   REAL(DP), PARAMETER :: f1 = -1.10783814957303361_DP, alpha = 2.0_DP/3.0_DP
   !
-  DO ir = 1, length
-     !
-     rho = rho_in(ir)
-     rs = rho**(1.0_DP/3.0_DP)
-     vx = (4.0_DP/3.0_DP)*f1*alpha*rs
-     aa = grho(ir)
-     rr = 1.0_DP/(rho*rs)
-     ex = ax/rr
-     ! AX is 3/4/PI*(3*PI*PI)**(1/3). This is the same as -c1*c2 in pbex().
-     s2 = aa*rr*rr*us*us
-     s = SQRT(s2)
-     IF (s > 10.D0) THEN
-        s = 10.D0
-     ENDIF
-     CALL pbe_gauscheme( rho, s, alpha_gau, fx, d1x, d2x )
-     sxsr(ir) = ex*fx                        ! - EX
-     dsdn = -4.D0/3.D0*s/rho
-     v1xsr(ir) = vx*fx + (dsdn*d2x+d1x)*ex   ! - VX
-     dsdg = us*rr
-     v2xsr(ir) = ex*1.D0/SQRT(aa)*dsdg*d2x
-     !
-     ! NOTE, here sx is the total energy density,
-     ! not just the gradient correction energy density as e.g. in pbex()
-     ! And the same goes for the potentials V1X, V2X
-     !
-  ENDDO
+  rs = rho**(1.0_DP/3.0_DP)   
+  vx = (4.0_DP/3.0_DP)*f1*alpha*rs   
+  aa = grho
+  rr = 1.0_DP/(rho*rs)   
+  ex = ax/rr   
+  ! AX is 3/4/PI*(3*PI*PI)**(1/3). This is the same as -c1*c2 in pbex().   
+  s2 = aa*rr*rr*us*us   
+  s = SQRT(s2)   
+  IF (s > 10.D0) THEN   
+     s = 10.D0   
+  ENDIF   
+  CALL pbe_gauscheme( rho, s, alpha_gau, fx, d1x, d2x )   
+  sxsr = ex*fx                        ! - EX   
+  dsdn = -4.D0/3.D0*s/rho   
+  v1xsr = vx*fx + (dsdn*d2x+d1x)*ex   ! - VX   
+  dsdg = us*rr   
+  v2xsr = ex*1.D0/SQRT(aa)*dsdg*d2x   
+  !   
+  ! NOTE, here sx is the total energy density,   
+  ! not just the gradient correction energy density as e.g. in pbex()   
+  ! And the same goes for the potentials V1X, V2X   
   !
   RETURN
   !
 END SUBROUTINE pbexgau
     !
     !-----------------------------------------------------------------------
-      SUBROUTINE pbe_gauscheme( rho, s, alpha_gau, Fx, dFxdr, dFxds )
+    SUBROUTINE pbe_gauscheme( rho, s, alpha_gau, Fx, dFxdr, dFxds )
        !--------------------------------------------------------------------
        !
        IMPLICIT NONE
@@ -1016,7 +945,7 @@ END SUBROUTINE pbexgau
 !
 !
 !-------------------------------------------------------------------------
-SUBROUTINE PW86( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE PW86( rho, grho, sx, v1x, v2x )
   !-----------------------------------------------------------------------
   !! Perdew-Wang 1986 exchange gradient correction: PRB 33, 8800 (1986) 
   ! 
@@ -1024,49 +953,43 @@ SUBROUTINE PW86( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: s, s_2, s_3, s_4, s_5, s_6, fs, grad_rho, df_ds
   REAL(DP), PARAMETER :: a=1.296_DP, b=14._DP, c=0.2_DP,   &
                          s_prefactor=6.18733545256027_DP, &
                          Ax=-0.738558766382022_DP, four_thirds=4._DP/3._DP
   !
-  DO ir = 1, length
-     !
-     grad_rho = SQRT(grho(ir))
-     !
-     s = grad_rho / ( s_prefactor*rho(ir)**(four_thirds) )
-     !
-     s_2 = s**2
-     s_3 = s_2 * s
-     s_4 = s_2**2
-     s_5 = s_3 * s_2
-     s_6 = s_2 * s_4
-     !
-     ! Calculation of energy
-     fs = (1 + a*s_2 + b*s_4 + c*s_6)**(1._DP/15._DP)
-     sx(ir) = Ax * rho(ir)**(four_thirds) * (fs-1._DP)
-     !
-     ! Calculation of the potential
-     df_ds = (1._DP/(15._DP*fs**(14._DP)))*(2*a*s + 4*b*s_3 + 6*c*s_5)
-     !
-     v1x(ir) = Ax*(four_thirds)*( rho(ir)**(1._DP/3._DP)*(fs-1._DP) &
-               -grad_rho/(s_prefactor * rho(ir))*df_ds )
-     !
-     v2x(ir) = Ax * df_ds/(s_prefactor*grad_rho)
-     !
-  ENDDO
+  grad_rho = SQRT(grho)   
+  !   
+  s = grad_rho / ( s_prefactor*rho**(four_thirds) )   
+  !   
+  s_2 = s**2   
+  s_3 = s_2 * s   
+  s_4 = s_2**2   
+  s_5 = s_3 * s_2   
+  s_6 = s_2 * s_4   
+  !   
+  ! Calculation of energy   
+  fs = (1 + a*s_2 + b*s_4 + c*s_6)**(1._DP/15._DP)   
+  sx = Ax * rho**(four_thirds) * (fs-1._DP)   
+  !   
+  ! Calculation of the potential   
+  df_ds = (1._DP/(15._DP*fs**(14._DP)))*(2*a*s + 4*b*s_3 + 6*c*s_5)   
+  !   
+  v1x = Ax*(four_thirds)*( rho**(1._DP/3._DP)*(fs-1._DP) &   
+            -grad_rho/(s_prefactor * rho)*df_ds )   
+  !   
+  v2x = Ax * df_ds/(s_prefactor*grad_rho)   
   !
 END SUBROUTINE PW86
 !
 !
 !-----------------------------------------------------------------------
-SUBROUTINE becke86b( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE becke86b( rho, grho, sx, v1x, v2x )
   !-----------------------------------------------------------------------
   !! Becke 1986 gradient correction to exchange
   !! A.D. Becke, J. Chem. Phys. 85 (1986) 7184
@@ -1075,44 +998,38 @@ SUBROUTINE becke86b( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: arho, agrho
   REAL(DP) :: sgp1, sgp1_45, sgp1_95
   REAL(DP) :: rdg2_43, rdg2_73, rdg2_83, rdg2_4, rdg4_5
   REAL(DP), PARAMETER :: beta=0.00375_DP, gamma=0.007_DP
   !
-  DO ir = 1, length
-     !
-     arho  = 0.5_DP  * rho(ir)
-     agrho = 0.25_DP * grho(ir)
-     !
-     rdg2_43 = agrho / arho**(4d0/3d0)
-     rdg2_73 = rdg2_43 / arho
-     rdg2_83 = rdg2_43 * rdg2_43 / agrho
-     rdg2_4 = rdg2_43 * rdg2_83 / agrho
-     rdg4_5 = rdg2_73 * rdg2_83
-     !
-     sgp1 = 1d0 + gamma * rdg2_83
-     sgp1_45 = sgp1**(-4d0/5d0)
-     sgp1_95 = sgp1_45 / sgp1
-     !
-     sx(ir) = -2d0 * beta * agrho / arho**(4d0/3d0) * sgp1_45
-     v1x(ir) = -beta * (-4d0/3d0*rdg2_73*sgp1_45 + 32d0/15d0*gamma*rdg4_5*sgp1_95)
-     v2x(ir) = -beta * (sgp1_45*rdg2_43/agrho - 4d0/5d0 *gamma*rdg2_4*sgp1_95)
-     !
-  ENDDO
-
+  arho  = 0.5_DP  * rho
+  agrho = 0.25_DP * grho
+  !   
+  rdg2_43 = agrho / arho**(4d0/3d0)   
+  rdg2_73 = rdg2_43 / arho   
+  rdg2_83 = rdg2_43 * rdg2_43 / agrho   
+  rdg2_4 = rdg2_43 * rdg2_83 / agrho   
+  rdg4_5 = rdg2_73 * rdg2_83   
+  !   
+  sgp1 = 1d0 + gamma * rdg2_83   
+  sgp1_45 = sgp1**(-4d0/5d0)   
+  sgp1_95 = sgp1_45 / sgp1   
+  !   
+  sx  = -2d0 * beta * agrho / arho**(4d0/3d0) * sgp1_45   
+  v1x = -beta * (-4d0/3d0*rdg2_73*sgp1_45 + 32d0/15d0*gamma*rdg4_5*sgp1_95)   
+  v2x = -beta * (sgp1_45*rdg2_43/agrho - 4d0/5d0 *gamma*rdg2_4*sgp1_95)   
+  !   
 END SUBROUTINE becke86b
 !
 !
 !---------------------------------------------------------------
-SUBROUTINE b86b( length, rho, grho, iflag, sx, v1x, v2x )
+SUBROUTINE b86b( rho, grho, iflag, sx, v1x, v2x )
   !-------------------------------------------------------------
   !! Becke exchange (without Slater exchange):
   !! iflag=1: A. D. Becke, J. Chem. Phys. 85, 7184 (1986) (B86b)
@@ -1127,13 +1044,12 @@ SUBROUTINE b86b( length, rho, grho, iflag, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length, iflag
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  INTEGER,  INTENT(IN) :: iflag
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: kf, agrho, s1, s2, sx_s, ds, dsg, exunif, fx
   ! (3*pi2*|rho|)^(1/3)
   ! |grho|
@@ -1152,34 +1068,30 @@ SUBROUTINE b86b( length, rho, grho, iflag, sx, v1x, v2x )
   DATA k / 0.5757_DP, 1.0000_DP, 0.711357_DP/, &
        mu/ 0.2449_DP, 0.1234_DP, 0.1234_DP  /
   !
-  DO ir = 1, length
-     !
-     agrho = SQRT(grho(ir))
-     kf = c2 * rho(ir)**third
-     dsg = 0.5_DP / kf
-     s1 = agrho * dsg / rho(ir)
-     s2 = s1 * s1
-     ds = - c5 * s1
-     !
-     ! ... Energy
-     !
-     f1 = mu(iflag)*s2
-     f2 = 1._DP + mu(iflag)*s2/k(iflag)
-     f3 = f2**(4._DP/5._DP)
-     fx = f1/f3
-     exunif = - c1 * kf
-     sx_s = exunif * fx
-     !
-     ! ... Potential
-     !
-     dxunif = exunif * third
-     dfx1 = 1._DP + (1._DP/5._DP)*mu(iflag)*s2 / k(iflag)
-     dfx  = 2._DP * mu(iflag) * s1 * dfx1 / (f2 * f3)
-     v1x(ir) = sx_s + dxunif * fx + exunif * dfx * ds
-     v2x(ir) = exunif * dfx * dsg / agrho
-     sx(ir) = sx_s * rho(ir)
-     !
-  ENDDO
+  agrho = SQRT(grho)   
+  kf = c2 * rho**third   
+  dsg = 0.5_DP / kf   
+  s1 = agrho * dsg / rho
+  s2 = s1 * s1   
+  ds = - c5 * s1   
+  !   
+  ! ... Energy   
+  !   
+  f1 = mu(iflag)*s2   
+  f2 = 1._DP + mu(iflag)*s2/k(iflag)   
+  f3 = f2**(4._DP/5._DP)   
+  fx = f1/f3   
+  exunif = - c1 * kf   
+  sx_s = exunif * fx   
+  !   
+  ! ... Potential   
+  !   
+  dxunif = exunif * third   
+  dfx1 = 1._DP + (1._DP/5._DP)*mu(iflag)*s2 / k(iflag)   
+  dfx  = 2._DP * mu(iflag) * s1 * dfx1 / (f2 * f3)   
+  v1x = sx_s + dxunif * fx + exunif * dfx * ds   
+  v2x = exunif * dfx * dsg / agrho   
+  sx = sx_s * rho
   !
   RETURN
   !
@@ -1187,7 +1099,7 @@ END SUBROUTINE b86b
 !
 !
 !-----------------------------------------------------------------------
-SUBROUTINE cx13( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE cx13( rho, grho, sx, v1x, v2x )
   !-----------------------------------------------------------------------
   !! The new exchange partner for a vdW-DF1-cx suggested
   !! by K. Berland and P. Hyldgaard, see PRB 89, 035412 (2014), 
@@ -1197,51 +1109,45 @@ SUBROUTINE cx13( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER,  INTENT(IN) :: length
-  REAL(DP), INTENT(IN),  DIMENSION(length) :: rho, grho
-  REAL(DP), INTENT(OUT), DIMENSION(length) :: sx, v1x, v2x
+  REAL(DP), INTENT(IN) :: rho, grho
+  REAL(DP), INTENT(OUT) :: sx, v1x, v2x
   !
   ! ... local variables
   !
-  INTEGER  :: ir
   REAL(DP) :: s, s_2, s_3, s_4, s_5, s_6, fs, fs_rPW86, df_rPW86_ds, grad_rho, df_ds
   REAL(DP), PARAMETER :: alp=0.021789_DP, beta=1.15_DP, a=1.851_DP, b=17.33_DP, &
                          c=0.163_DP, mu_LM=0.09434_DP,    &
                          s_prefactor=6.18733545256027_DP, &
                          Ax = -0.738558766382022_DP, four_thirds = 4._DP/3._DP
   !
-  DO ir = 1, length
-     !
-     grad_rho = SQRT(grho(ir))
-     !
-     s = grad_rho/(s_prefactor*rho(ir)**(four_thirds))
-     !
-     s_2 = s*s
-     s_3 = s_2 * s
-     s_4 = s_2 * s_2
-     s_5 = s_3 * s_2
-     s_6 = s_2 * s_2 *s_2
-     !
-     ! ... Energy
-     fs_rPW86 = (1._DP + a*s_2 + b*s_4 + c*s_6)**(1._DP/15._DP)
-     fs = 1._DP/(1._DP + alp*s_6) * (1._DP + mu_LM *s_2) &
-          + alp*s_6/(beta+alp*s_6)*fs_rPW86
-     !
-     sx(ir) = Ax * rho(ir)**(four_thirds) * (fs-1._DP)
-     !
-     ! ... Potential
-     df_rPW86_ds = (1._DP/(15._DP*fs_rPW86**(14._DP)))*(2*a*s + 4*b*s_3 + 6*c*s_5)
-     !
-     df_ds = 1._DP/(1._DP+alp*s_6)**2*( 2._DP*mu_LM*s*(1._DP+alp*s_6) &
-               - 6._DP*alp*s_5*( 1._DP+mu_LM*s_2) )                   &
-             + alp*s_6/(beta+alp*s_6)*df_rPW86_ds                     &
-             + 6._DP*alp*s_5*fs_rPW86/(beta+alp*s_6)*(1._DP-alp*s_6/(beta + alp*s_6))
-     !
-     v1x(ir) = Ax*(four_thirds)*(rho(ir)**(1._DP/3._DP)*(fs-1._DP) &
-               -grad_rho/(s_prefactor * rho(ir))*df_ds)
-     v2x(ir) = Ax * df_ds/(s_prefactor*grad_rho)
-  !
-  ENDDO
+  grad_rho = SQRT(grho)   
+  !   
+  s = grad_rho/(s_prefactor*rho**(four_thirds))   
+  !   
+  s_2 = s*s   
+  s_3 = s_2 * s   
+  s_4 = s_2 * s_2   
+  s_5 = s_3 * s_2   
+  s_6 = s_2 * s_2 *s_2   
+  !   
+  ! ... Energy   
+  fs_rPW86 = (1._DP + a*s_2 + b*s_4 + c*s_6)**(1._DP/15._DP)   
+  fs = 1._DP/(1._DP + alp*s_6) * (1._DP + mu_LM *s_2) &   
+       + alp*s_6/(beta+alp*s_6)*fs_rPW86   
+  !   
+  sx = Ax * rho**(four_thirds) * (fs-1._DP)   
+  !   
+  ! ... Potential   
+  df_rPW86_ds = (1._DP/(15._DP*fs_rPW86**(14._DP)))*(2*a*s + 4*b*s_3 + 6*c*s_5)   
+  !   
+  df_ds = 1._DP/(1._DP+alp*s_6)**2*( 2._DP*mu_LM*s*(1._DP+alp*s_6) &   
+            - 6._DP*alp*s_5*( 1._DP+mu_LM*s_2) )                   &   
+          + alp*s_6/(beta+alp*s_6)*df_rPW86_ds                     &   
+          + 6._DP*alp*s_5*fs_rPW86/(beta+alp*s_6)*(1._DP-alp*s_6/(beta + alp*s_6))   
+  !   
+  v1x = Ax*(four_thirds)*(rho**(1._DP/3._DP)*(fs-1._DP) &   
+        -grad_rho/(s_prefactor * rho)*df_ds)   
+  v2x = Ax * df_ds/(s_prefactor*grad_rho)   
   !
 END SUBROUTINE cx13
 !
@@ -1250,7 +1156,7 @@ END SUBROUTINE cx13
 ! ===========> SPIN <===========
 !
 !-----------------------------------------------------------------------
-SUBROUTINE becke88_spin( length, rho, grho, sx, v1x, v2x )
+SUBROUTINE becke88_spin( rho, grho, sx, v1x, v2x )
   !-----------------------------------------------------------------------
   !! Becke exchange: A.D. Becke, PRA 38, 3098 (1988) - Spin polarized case
   !
@@ -1258,48 +1164,42 @@ SUBROUTINE becke88_spin( length, rho, grho, sx, v1x, v2x )
   !
   IMPLICIT NONE
   !
-  INTEGER, INTENT(IN) :: length
-  !! length of the I/O arrays
-  REAL(DP), INTENT(IN), DIMENSION(length,2) :: rho
+  REAL(DP), INTENT(IN) :: rho(2)
   !! charge
-  REAL(DP), INTENT(IN), DIMENSION(length,2) :: grho
+  REAL(DP), INTENT(IN) :: grho(2)
   !! gradient
-  REAL(DP), INTENT(OUT), DIMENSION(length,2) :: sx
+  REAL(DP), INTENT(OUT) :: sx(2)
   !! the up and down energies
-  REAL(DP), INTENT(OUT), DIMENSION(length,2) :: v1x
+  REAL(DP), INTENT(OUT) :: v1x(2)
   !! first part of the potential
-  REAL(DP), INTENT(OUT), DIMENSION(length,2) :: v2x
+  REAL(DP), INTENT(OUT) :: v2x(2)
   !! second part of the potential
   !
   ! ... local variables
   !
-  INTEGER :: ir, is
+  INTEGER :: is
   REAL(DP), PARAMETER :: beta = 0.0042_DP, third = 1._DP/3._DP
   REAL(DP) :: rho13, rho43, xs, xs2, sa2b8, shm1, dd, dd2, ee
   !
   !
-  DO is = 1, 2
-     DO ir = 1, length
-        rho13 = rho(ir,is)**third
-        rho43 = rho13**4
-        xs  = SQRT(grho(ir,is)) / rho43
-        xs2 = xs * xs
-        sa2b8 = SQRT(1.0_DP + xs2)
-        shm1  = LOG(xs + sa2b8)
-        dd  = 1.0_DP + 6.0_DP * beta * xs * shm1
-        dd2 = dd * dd
-        ee = 6.0_DP * beta * xs2 / sa2b8 - 1._DP
-        sx(ir,is)  = grho(ir,is) / rho43 * (-beta/dd)
-        v1x(ir,is) = -(4._DP/3._DP) * xs2 * beta * rho13 * ee / dd2
-        v2x(ir,is) = beta * (ee-dd) / (rho43*dd2)
-     ENDDO
-  ENDDO
+  DO is = 1, 2   
+     rho13 = rho(is)**third   
+     rho43 = rho13**4   
+     xs  = SQRT(grho(is)) / rho43   
+     xs2 = xs * xs   
+     sa2b8 = SQRT(1.0_DP + xs2)   
+     shm1  = LOG(xs + sa2b8)   
+     dd  = 1.0_DP + 6.0_DP * beta * xs * shm1   
+     dd2 = dd * dd   
+     ee = 6.0_DP * beta * xs2 / sa2b8 - 1._DP   
+     sx(is)  = grho(is) / rho43 * (-beta/dd)   
+     v1x(is) = -(4._DP/3._DP) * xs2 * beta * rho13 * ee / dd2   
+     v2x(is) = beta * (ee-dd) / (rho43*dd2)   
+  ENDDO   
   !
   RETURN
   !
 END SUBROUTINE becke88_spin
-!
-!
 !
 !
 !-----------------------------------------------------------------------------
@@ -1900,4 +1800,4 @@ SUBROUTINE wpbe_analy_erfc_approx_grad( rho, s, omega, Fx_wpbe, d1rfx, d1sfx )
         !
       ENDIF
       !
-      END SUBROUTINE wpbe_analy_erfc_approx_grad
+END SUBROUTINE wpbe_analy_erfc_approx_grad

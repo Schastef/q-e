@@ -48,18 +48,19 @@ PROGRAM do_ppacf
   USE scf,                  ONLY : scf_type,create_scf_type,destroy_scf_type
   USE scf,                  ONLY : scf_type_COPY
   USE scf,                  ONLY : rho, rho_core, rhog_core, vltot
-  USE funct,                ONLY : gcxc,gcx_spin,gcc_spin,dft_is_nonlocc,nlc
+  USE funct,                ONLY : dft_is_nonlocc, nlc
   USE funct,                ONLY : get_iexch, get_icorr, get_igcx, get_igcc
-  USE funct,                ONLY : set_exx_fraction,set_auxiliary_flags,enforce_input_dft, init_lda_xc
+  USE funct,                ONLY : set_exx_fraction, set_auxiliary_flags, enforce_input_dft
+  USE funct,                ONLY : init_gga_xc, init_lda_xc
+  USE xc_gga,               ONLY : gcxc, gcx_spin, gcc_spin
   USE xc_lda_lsda,          ONLY : xc_lda, xc_lsda
-  USE wvfct,                ONLY : npwx
+  USE wvfct,                ONLY : npw, npwx
   USE environment,          ONLY : environment_start, environment_end
   USE kernel_table,         ONLY : Nqs, vdw_table_name, kernel_file_name
   USE vdW_DF,               ONLY : get_potential, vdW_energy
   USE vdW_DF_scale,         ONLY : xc_vdW_DF_ncc, xc_vdW_DF_spin_ncc, &
                                    get_q0cc_on_grid, get_q0cc_on_grid_spin
   USE vasp_xml,             ONLY : readxmlfile_vasp
-  USE symm_base,            ONLY : fft_fact
 
   ! 
   IMPLICIT NONE
@@ -94,6 +95,11 @@ PROGRAM do_ppacf
   REAL(DP) :: ex(1),ec(1),vx(1,2),vc(1,2),expp(1),ecpp(1),exm(1),ecm(1)
   REAL(DP) :: ec_l,ecgc_l,Ec_nl
   REAL(DP) :: etxccc,etxcccnl,etxcccnlp,etxcccnlm,vtxccc,vtxccc_buf,vtxcccnl 
+  !^^^
+  !
+  REAL(DP) :: sx_v(1), sc_v(1), arhox_v(1), grho2_v(1)  !^^^ PROVISIONAL
+  REAL(DP) :: v1x_v(1), v2x_v(1), v1c_v(1), v2c_v(1),vtt(1)
+  !
   REAL(DP) :: grho2(2),sx, sc,scp,scm, v1x, v2x, v1c, v2c, &
               v1xup, v1xdw, v2xup, v2xdw, v1cup, v1cdw,  &
               etxcgc, vtxcgc, segno, fac, rh, grh2, amag, indx
@@ -111,7 +117,6 @@ PROGRAM do_ppacf
   REAL(DP), ALLOCATABLE :: tot_grad_rho(:,:),grad_rho(:,:,:)
   REAL(DP), ALLOCATABLE :: tot_rho(:)
 
-  INTEGER :: npw                ! number of plane waves
   INTEGER :: ik                 ! counter on k points
   INTEGER, ALLOCATABLE  :: igk_buf(:)
   REAL(dp), ALLOCATABLE :: gk(:) ! work space
@@ -148,6 +153,12 @@ PROGRAM do_ppacf
   COMPLEX(DP), ALLOCATABLE :: ecnl_c(:), tcnl_c(:)
 
   REAL(DP), ALLOCATABLE    :: kin_r(:,:)        ! the kinetic energy density in R-space
+  !
+  !^^^TEMPORARY
+  real(dp), dimension(1,2) :: r_vv, s2_vv, v1x_vv, v2x_vv
+  real(dp), dimension(1) :: sx_vv
+  !^^^
+  !
 
   type (scf_type) :: exlda, eclda
   type (scf_type) :: tclda  ! the kinetic energy per particle
@@ -183,6 +194,8 @@ PROGRAM do_ppacf
   lecnl_qxln=.False.
   lecnl_qx=.False.
   !
+  
+  CALL init_gga_xc()
   
   IF (ionode) THEN
      !
@@ -220,7 +233,9 @@ PROGRAM do_ppacf
   IF (code_num == 1) THEN
      !
      tmp_dir=TRIM(outdir) 
+!     CALL read_xml_file_internal(.TRUE.)
      CALL  read_file()
+
 !     Check exchange correlation functional
      iexch = get_iexch()
      icorr = get_icorr()
@@ -336,9 +351,10 @@ PROGRAM do_ppacf
         IF (arhox(1) > vanishing_charge) THEN
            IF(iexch==1) THEN
               rs = pi34 /arhox**third
-              CALL slater( rs, ex(1), vx(1,1))     ! \epsilon_x,\lambda[n]=\epsilon_x[n]
+              CALL slater(rs(1), ex(1), vx(1,1))     ! \epsilon_x,\lambda[n]=\epsilon_x[n]
            ELSE
-              CALL xc_lda( 1, arhox, ex, ec, vx(:,1), vc(:,1) )
+              CALL xc_lda( 1, arhox, ex, ec, vx(:,1), vc(:,1))
+              !
            ENDIF
            etx=etx+e2*ex(1)*rhox
            etxlda=etxlda+e2*ex(1)*rhox
@@ -372,8 +388,21 @@ PROGRAM do_ppacf
               ENDIF
               IF(grho2(1) > epsg .AND. igcc .NE. 0) THEN
                  segno = SIGN( 1.D0, rhoout(ir,1) )
-                 CALL gcxc(arhox(1)/ccp3,grho2(1)/ccp8,sx,scp,v1x,v2x,v1c,v2c)
-                 CALL gcxc(arhox(1)/ccm3,grho2(1)/ccm8,sx,scm,v1x,v2x,v1c,v2c)
+                 !
+                 arhox_v(1)=arhox(1)/ccp3 !^^^ PROV
+                 grho2_v(1)=grho2(1)/ccp8
+                 CALL gcxc(1, arhox_v, grho2_v,sx_v,sc_v,v1x_v,v2x_v,v1c_v,v2c_v)
+                 scp=sc_v(1) ; v1x=v1x_v(1) ; v2x=v2x_v(1)
+                 v1c=v1c_v(1) ; v2c=v2c_v(1)
+                 !
+                 arhox_v(1)=arhox(1)/ccm3 !^^^
+                 grho2_v(1)=grho2(1)/ccm8
+                 CALL gcxc(1, arhox_v, grho2_v,sx_v,sc_v,v1x_v,v2x_v,v1c_v,v2c_v)
+                 scm=sc_v(1) ; v1x=v1x_v(1) ; v2x=v2x_v(1)
+                 v1c=v1c_v(1) ; v2c=v2c_v(1)
+                 !
+                 !CALL gcxc(arhox(1)/ccp3,grho2(1)/ccp8,sx,scp,v1x,v2x,v1c,v2c)
+                 !CALL gcxc(arhox(1)/ccm3,grho2(1)/ccm8,sx,scm,v1x,v2x,v1c,v2c)
                  ecgc_l=(ccp2*scp*ccp3-ccm2*scm*ccm3)/dcc*0.5_DP
                  etcgclambda=etcgclambda+e2*ecgc_l*segno
               ENDIF
@@ -388,7 +417,14 @@ PROGRAM do_ppacf
            END IF
            IF ( grho2(1) > epsg ) THEN
               segno = SIGN( 1.D0, rhoout(ir,1) )
-              CALL gcxc( arhox(1), grho2(1), sx, sc, v1x, v2x, v1c, v2c )
+              !
+              arhox_v(1)=arhox(1)
+              grho2_v(1)=grho2(1)
+              CALL gcxc( 1, arhox_v, grho2_v, sx_v, sc_v, v1x_v, v2x_v, v1c_v, v2c_v )
+              sx=sx_v(1) ; sc=sc_v(1) ; v1x=v1x_v(1) ; v2x=v2x_v(1)
+              v1c=v1c_v(1) ; v2c=v2c_v(1)
+              !
+              !CALL gcxc( arhox(1), grho2(1), sx, sc, v1x, v2x, v1c, v2c )
               etx=etx+e2*sx*segno
               etxgc=etxgc+e2*sx*segno
               etc=etc+e2*sc*segno
@@ -453,8 +489,8 @@ PROGRAM do_ppacf
                  ttclda=ttclda+e2*(ec(1)-ec_l)*rhox
               ENDIF
               IF(igcc .NE. 0) THEN
-                 CALL gcc_spin(rhox/ccp3,zeta(1),grh2/ccp8,scp,v1cup,v1cdw,v2c)
-                 CALL gcc_spin(rhox/ccm3,zeta(1),grh2/ccm8,scm,v1cup,v1cdw,v2c)
+                 !CALL gcc_spin(rhox/ccp3,zeta(1),grh2/ccp8,scp,v1cup,v1cdw,v2c)  !^^^ DA SISTEMARE 
+                 !CALL gcc_spin(rhox/ccm3,zeta(1),grh2/ccm8,scm,v1cup,v1cdw,v2c)  !^^^ RIMETTERE!!!!
                  ecgc_l=(ccp2*scp*ccp3-ccm2*scm*ccm3)/dcc*0.5_DP
                  etcgclambda=etcgclambda+e2*ecgc_l
               ENDIF
@@ -468,11 +504,19 @@ PROGRAM do_ppacf
               eclda%of_r(ir,1)=e2*ec(1)*rhox
            END IF
            grho2(:) = grho(1,ir,:)**2 + grho(2,ir,:)**2 + grho(3,ir,:)**2
-           CALL gcx_spin( rhoout(ir,1), rhoout(ir,2), grho2(1), &
-                          grho2(2), sx, v1xup, v1xdw, v2xup, v2xdw )
+           !CALL gcx_spin( rhoout(ir,1), rhoout(ir,2), grho2(1), &
+           !               grho2(2), sx, v1xup, v1xdw, v2xup, v2xdw )
+           r_vv(1,1)=rhoout(ir,1) ; r_vv(1,2)=rhoout(ir,2)
+           s2_vv(1,1)=grho2(1)   ; s2_vv(1,2)=grho2(2)
+           call gcx_spin( 1, r_vv, s2_vv, sx_vv, v1x_vv, v2x_vv )
+           sx=sx_vv(1) ; v1xup=v1x_vv(1,1) ; v1xdw=v1x_vv(1,2)
+           v2xup=v2x_vv(1,1) ; v2xdw=v2x_vv(1,2) 
+           
+           
+           !
            etx=etx+e2*sx
            etxgc=etxgc+e2*sx
-           CALL gcc_spin( rhox, zeta(1), grh2, sc, v1cup, v1cdw, v2c )
+           !CALL gcc_spin( rhox, zeta(1), grh2, sc, v1cup, v1cdw, v2c )  !^^^ RIMETTERE!!!!!
            etcgc=etcgc+e2*sc
            etc=etc+e2*sc
            IF(icc==ncc) THEN
@@ -697,7 +741,6 @@ PROGRAM do_ppacf
   DEALLOCATE ( igk_buf, gk )
   !
 !  CALL setup()
-  fft_fact(:)=1
   CALL exx_grid_init()
   CALL exx_mp_init()
   CALL exx_div_check()
