@@ -1900,17 +1900,13 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
           rh = r(:,1) + r(:,2)
           !
           WHERE ( rh > eps )
-             !
              zeta = ( r(:,1)-r(:,2) ) / rh
              grh2 = ( grad(:,1,1) + grad(:,1,2) )**2 + &
                     ( grad(:,2,1) + grad(:,2,2) )**2 + &
                     ( grad(:,3,1) + grad(:,3,2) )**2
-             !
           ELSEWHERE
-             !
-             zeta = 2.d0 !zeta_trash   !metti valore fuori soglia. Fai cosi' dappertutto
-             grh2 = 0.d0 !grh2_trash
-             !
+             zeta = 2.d0 !zeta_trash   ! value out of threshold: results automitically
+             grh2 = 0.d0 !grh2_trash   ! set to zero here (in gcc_spin).
           END WHERE
           !
           CALL gcc_spin( i%m, rh, zeta, grh2, sc, v1c, v2c )

@@ -8,10 +8,10 @@
 !-----------------------------------------------------------------------
 SUBROUTINE cg_setupdgc
   !-----------------------------------------------------------------------
-  ! Setup all arrays needed in the gradient correction case
-  ! This version requires on input allocated array
+  !! Set up all arrays needed in the gradient correction case.  
+  !! This version requires allocated arrays on input.
   !
-  USE kinds,     ONLY: dp
+  USE kinds,     ONLY: DP
   USE constants, ONLY: e2
   USE scf,       ONLY: rho, rho_core, rhog_core, rhoz_or_updw
   USE funct,     ONLY: dft_is_gradient, init_gga_xc
@@ -23,130 +23,157 @@ SUBROUTINE cg_setupdgc
   USE cgcom
   !
   IMPLICIT NONE
+  !
   INTEGER k, is
-  real(DP) &
-       &       grho2(2), rh(1), zeta(1), grh2(1),  &
-       &       sx(1),sc(1),v1x(1,2),v2x(1,2),v1c(1,2),v2c(1,2), &
-       &       vrrx(1,2),vsrx(1,2),vssx(1,2),                   &
-       &       vrrc(1,2),vsrc(1,2),vssc(1),                     &
-       &       vrzc(1,2), rho_v(1), grho2_v(1), s2_vvv(3,2)   !^^^
   !
+  REAL(DP), ALLOCATABLE :: rh(:), zeta(:)
+  REAL(DP), ALLOCATABLE :: grh(:,:,:), grho2(:,:), grh2(:)
+  REAL(DP) :: ne2, fac, sgn(2), null_v(dfftp%nnr)
   !
-  !^^^
-  real(dp), dimension(1,2) :: r_vv, s2_vv
-  !^^^
+  REAL(DP), ALLOCATABLE :: v1x(:,:), v2x(:,:), v1c(:,:), v2c(:,:)
+  REAL(DP), ALLOCATABLE :: vrrx(:,:), vsrx(:,:), vssx(:,:), vrrc(:,:)
+  REAL(DP), ALLOCATABLE :: vsrc(:,:), vrzc(:,:), vssc(:), sc(:), sx(:)
   !
   REAL(DP), PARAMETER :: epsr=1.0d-6, epsg=1.0d-10
+  REAL(DP), PARAMETER :: rho_trash=0.5d0, zeta_trash=0.2d0, &
+                         grho2_trash=0.1d0
   !
-  IF (.not. dft_is_gradient() ) RETURN
-  CALL start_clock('setup_dgc')
+  IF (.NOT. dft_is_gradient() ) RETURN
+  !
+  CALL start_clock( 'setup_dgc' )
   !
   dvxc_rr(:,:,:) = 0.d0
   dvxc_sr(:,:,:) = 0.d0
   dvxc_ss(:,:,:) = 0.d0
-  dvxc_s (:,:,:) = 0.d0
-  grho (:,:,:) = 0.d0
+  dvxc_s(:,:,:) = 0.d0
+  grho(:,:,:) = 0.d0
   !
   CALL init_gga_xc()
   !
-  !    add rho_core to the charge density rho
+  ALLOCATE( rh(dfftp%nnr), grho2(dfftp%nnr,nspin) )
+  ALLOCATE( v1x(dfftp%nnr,nspin), v2x(dfftp%nnr,nspin) )
+  ALLOCATE( v1c(dfftp%nnr,nspin), v2c(dfftp%nnr,nspin) )
+  ALLOCATE( vrrx(dfftp%nnr,nspin), vsrx(dfftp%nnr,nspin) )
+  ALLOCATE( vssx(dfftp%nnr,nspin), vrrc(dfftp%nnr,nspin) )
+  ALLOCATE( vsrc(dfftp%nnr,nspin), vssc(dfftp%nnr) )
+  ALLOCATE( sx(dfftp%nnr), sc(dfftp%nnr) )
+  IF (nspin /= 1) THEN
+     ALLOCATE( zeta(dfftp%nnr) )
+     ALLOCATE( grh(dfftp%nnr,3,nspin), grh2(dfftp%nnr) )
+     ALLOCATE( vrzc(dfftp%nnr,nspin) )
+  ENDIF
+  !
+  ! ... add rho_core to the charge density rho
   !
   IF (nlcc_any) THEN
      rho%of_r(:,1) = rho_core(:)  + rho%of_r(:,1)
      rho%of_g(:,1) = rhog_core(:) + rho%of_g(:,1)
   ENDIF
   !
-  !    for LSDA, convert rho to (up,down) (gradient grho is (up,down))
+  ! ... for LSDA, convert rho to (up,down) (gradient grho is (up,down))
   !
   IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', '->updw' )
-  DO is=1,nspin
-     CALL fft_gradient_g2r (dfftp, rho%of_g(1,is), g, grho(1,1,is))
+  !
+  DO is = 1, nspin
+     CALL fft_gradient_g2r( dfftp, rho%of_g(1,is), g, grho(1,1,is) )
   ENDDO
   !
-  IF (nspin==1) THEN
-     DO k = 1,dfftp%nnr
-        grho2(1)=grho(1,k,1)**2+grho(2,k,1)**2+grho(3,k,1)**2
-        IF (abs(rho%of_r(k,1))>epsr.and.grho2(1)>epsg) THEN
-           !
-           !
-           rho_v(1)=rho%of_r(k,nspin)
-           grho2_v(1)=grho2(1)
-           CALL gcxc( 1, rho_v,grho2_v(1),sx,sc,v1x(:,1),v2x(:,1),v1c(:,1),v2c(:,1) ) !^^^
-           !
-           !
-           CALL dgcxc( 1, rho%of_r(k,nspin),grho2(1),vrrx(:,1),vsrx(:,1), &
-                         vssx(:,1),vrrc(:,1),vsrc(:,1),vssc)
-           dvxc_rr(k,1,1) = e2 * ( vrrx(1,1) + vrrc(1,1) )
-           dvxc_sr(k,1,1) = e2 * ( vsrx(1,1) + vsrc(1,1) )
-           dvxc_ss(k,1,1) = e2 * ( vssx(1,1) + vssc(1) )
-           dvxc_s (k,1,1) = e2 * ( v2x(1,1) + v2c(1,1) )
-        ENDIF
-     ENDDO
+  grho2(:,1) = grho(1,:,1)**2 + grho(2,:,1)**2 + grho(3,:,1)**2
+  !
+  IF (nspin == 1) THEN
+     !
+     rh(:) = rho%of_r(:,1)
+     WHERE (ABS(rho%of_r(:,1))<=epsr .OR. grho2(:,1)<=epsg)
+        rh = rho_trash
+        grho2(:,1) = grho2_trash
+        null_v = 0.0_DP
+     END WHERE
+     !
+     CALL gcxc( dfftp%nnr, rh, grho2(:,1), sx, sc, v1x(:,1), &
+                                v2x(:,1), v1c(:,1), v2c(:,1) )
+     !
+     CALL dgcxc( dfftp%nnr, rh, grho2(:,1), vrrx(:,1), vsrx(:,1), &
+                       vssx(:,1), vrrc(:,1), vsrc(:,1), vssc )
+     !
+     dvxc_rr(:,1,1) = e2 * (vrrx(:,1) + vrrc(:,1)) * null_v
+     dvxc_sr(:,1,1) = e2 * (vsrx(:,1) + vsrc(:,1)) * null_v
+     dvxc_ss(:,1,1) = e2 * (vssx(:,1) + vssc(:)  ) * null_v
+     dvxc_s(:,1,1)  = e2 * (v2x(:,1)  + v2c(:,1) ) * null_v
+     !
   ELSE
-     DO k = 1,dfftp%nnr
-        grho2(1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
-        grho2(2) = grho(1,k,2)**2 + grho(2,k,2)**2 + grho(3,k,2)**2
-        rh(1)=rho%of_r(k,1) + rho%of_r(k,2)
-        grh2(1)= (grho(1,k,1) + grho(1,k,2))**2              &
-                           + (grho(2,k,1)+grho(2,k,2))**2 &
-                           + (grho(3,k,1)+grho(3,k,2))**2
-        !
-        !CALL gcx_spin(rho%of_r(k,1),rho%of_r(k,2),grho2(1),grho2(2),sx, &
-        !     v1xup,v1xdw,v2xup,v2xdw)
-        !
-        r_vv(1,1) = rho%of_r(k,1) ; r_vv(1,2) = rho%of_r(k,2)
-        s2_vv(1,1) = grho2(1)   ; s2_vv(1,2) = grho2(2)
-        call gcx_spin( 1, r_vv, s2_vv, sx, v1x, v2x )
-        !
-        !
-        !
-        s2_vvv(:,:) = grho(:,k,:)
-        !
-        CALL dgcxc_spin( 1, r_vv, s2_vvv, &
-                         vrrx, vsrx, vssx, vrrc, vsrc, vssc, vrzc )
-        !
-        IF (rh(1)>epsr) THEN
-           zeta=(rho%of_r(k,1)-rho%of_r(k,2))/rh(1)
-           CALL gcc_spin( 1, rh, zeta, grh2, sc, v1c, v2c(:,1) )
-           !
-           dvxc_rr(k,1,1)=e2*(vrrx(1,1)+vrrc(1,1)+vrzc(1,1)*(1.d0-zeta(1))/rh(1))
-           dvxc_rr(k,1,2)=e2*(vrrc(1,1)-vrzc(1,1)*(1.d0+zeta(1))/rh(1))
-           dvxc_rr(k,2,1)=e2*(vrrc(1,2)+vrzc(1,2)*(1.d0-zeta(1))/rh(1))
-           dvxc_rr(k,2,2)=e2*(vrrx(1,2)+vrrc(1,2)-vrzc(1,2)*(1.d0+zeta(1))/rh(1))
-           !
-           dvxc_s(k,1,1)=e2*(v2x(1,1)+v2c(1,1))
-           dvxc_s(k,1,2)=e2*v2c(1,1)
-           dvxc_s(k,2,1)=e2*v2c(1,1)
-           dvxc_s(k,2,2)=e2*(v2x(1,2)+v2c(1,1))
-        ELSE
-           dvxc_rr(k,1,1)=0.d0
-           dvxc_rr(k,1,2)=0.d0
-           dvxc_rr(k,2,1)=0.d0
-           dvxc_rr(k,2,2)=0.d0
-           !
-           dvxc_s(k,1,1)=0.d0
-           dvxc_s(k,1,2)=0.d0
-           dvxc_s(k,2,1)=0.d0
-           dvxc_s(k,2,2)=0.d0
-        ENDIF
-        dvxc_sr(k,1,1)=e2*(vsrx(1,1)+vsrc(1,1))
-        dvxc_sr(k,1,2)=e2*vsrc(1,1)
-        dvxc_sr(k,2,1)=e2*vsrc(1,2)
-        dvxc_sr(k,2,2)=e2*(vsrx(1,2)+vsrc(1,2))
-        !
-        dvxc_ss(k,1,1)=e2*(vssx(1,1)+vssc(1))
-        dvxc_ss(k,1,2)=e2*vssc(1)
-        dvxc_ss(k,2,1)=e2*vssc(1)
-        dvxc_ss(k,2,2)=e2*(vssx(1,2)+vssc(1))
+     !
+     grho2(:,2) = grho(1,:,2)**2 + grho(2,:,2)**2 + grho(3,:,2)**2  
+     !
+     CALL gcx_spin( dfftp%nnr, rho%of_r, grho2, sx, v1x, v2x )
+     !
+     ! ... swap grho indices to match dgcx_spin input (waiting for a better fix)
+     DO k = 1, dfftp%nnr
+        grh(k,1:3,1) = grho(1:3,k,1)
+        grh(k,1:3,2) = grho(1:3,k,2)
      ENDDO
+     !
+     CALL dgcxc_spin( dfftp%nnr, rho%of_r, grh, vrrx, vsrx, vssx, vrrc, &
+                      vsrc, vssc, vrzc )
+     !
+     rh = rho%of_r(:,1) + rho%of_r(:,2)
+     grh2(:) = (grho(1,:,1)+grho(1,:,2))**2 + (grho(2,:,1) &   
+               +grho(2,:,2))**2 + (grho(3,:,1)+grho(3,:,2))**2
+     !
+     WHERE (rh > epsr)
+        zeta = (rho%of_r(:,1)-rho%of_r(:,2)) / rh
+     ELSEWHERE
+        rh = rho_trash
+        zeta = zeta_trash
+        null_v = 0.0_DP
+     END WHERE
+     !
+     CALL gcc_spin( dfftp%nnr, rh, zeta, grh2, sc, v1c, v2c(:,1) )
+     !
+     DO k = 1, dfftp%nnr
+        ne2 = null_v(k) * e2
+        !
+        dvxc_rr(k,1,1) = ne2 * (vrrx(k,1) + vrrc(k,1) + vrzc(k,1) * (1.d0 - zeta(k)) / rh(k))
+        dvxc_rr(k,1,2) = ne2 * (vrrc(k,1) - vrzc(k,1) * (1.d0 + zeta(k)) / rh(k))
+        dvxc_rr(k,2,1) = ne2 * (vrrc(k,2) + vrzc(k,2) * (1.d0 - zeta(k)) / rh(k))
+        dvxc_rr(k,2,2) = ne2 * (vrrx(k,2) + vrrc(k,2) - vrzc(k,2) * (1.d0 + zeta(k)) / rh(k))
+        !
+        dvxc_s(k,1,1) = ne2 * (v2x(k,1) + v2c(k,1))
+        dvxc_s(k,1,2) = ne2 * v2c(k,1)
+        dvxc_s(k,2,1) = ne2 * v2c(k,1)
+        dvxc_s(k,2,2) = ne2 * (v2x(k,2) + v2c(k,1))
+        !
+        dvxc_sr(k,1,1) = e2 * (vsrx(k,1) + vsrc(k,1))   
+        dvxc_sr(k,1,2) = e2 * vsrc(k,1)   
+        dvxc_sr(k,2,1) = e2 * vsrc(k,2)   
+        dvxc_sr(k,2,2) = e2 * (vsrx(k,2) + vsrc(k,2))   
+        !
+        dvxc_ss(k,1,1) = e2 * (vssx(k,1) + vssc(k))   
+        dvxc_ss(k,1,2) = e2 * vssc(k)   
+        dvxc_ss(k,2,1) = e2 * vssc(k)   
+        dvxc_ss(k,2,2) = e2 * (vssx(k,2) + vssc(k))
+     ENDDO
+     !
   ENDIF
-  !   restore rho to its input value
+  !
+  ! ... restore rho to its input value
   IF (nspin == 2) CALL rhoz_or_updw( rho, 'r_and_g', '->rhoz' )
+  !
   IF (nlcc_any) THEN
-     rho%of_r(:,1)  = rho%of_r(:,1) - rho_core(:)
+     rho%of_r(:,1) = rho%of_r(:,1) - rho_core(:)
      rho%of_g(:,1) = rho%of_g(:,1) - rhog_core(:)
   ENDIF
-  CALL stop_clock('setup_dgc')
+  !
+  DEALLOCATE( rh, grho2 )
+  DEALLOCATE( v1x, v2x, v1c, v2c )
+  DEALLOCATE( vrrx, vsrx, vssx, vrrc )
+  DEALLOCATE( vsrc, vssc, sx, sc )
+  IF (nspin /= 1) THEN
+     DEALLOCATE( zeta, grh, grh2 )
+     DEALLOCATE( vrzc )
+  ENDIF
+  !
+  CALL stop_clock( 'setup_dgc' )
   !
   RETURN
+  !
 END SUBROUTINE cg_setupdgc
