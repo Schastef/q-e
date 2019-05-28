@@ -19,10 +19,10 @@ SUBROUTINE lr_transform_intq_nc(intq,na)
 
   IMPLICIT NONE
   INTEGER :: na
+  COMPLEX(DP) :: intq(nhm,nhm,nat)
   !
   ! ... local variables
   !
-  COMPLEX(DP) :: intq(nhm,nhm,nat)
   INTEGER :: ih, jh, np
   !
   np = ityp(na)
