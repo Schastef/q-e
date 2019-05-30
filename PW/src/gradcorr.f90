@@ -16,14 +16,13 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
   USE lsda_mod,             ONLY : nspin
   USE cell_base,            ONLY : omega
   USE funct,                ONLY : igcc_is_lyp, dft_is_gradient, get_igcc, &
-                                   init_gga_xc
-  USE xc_gga,               ONLY : gcxc, gcx_spin, gcc_spin, gcc_spin_more
+                                   init_xc
+  USE xc_gga,               ONLY : xc_gcx, gcx_spin, gcc_spin
   USE spin_orb,             ONLY : domag
   USE noncollin_module,     ONLY : ux
   USE wavefunctions,        ONLY : psic
   USE fft_base,             ONLY : dfftp
   USE fft_interfaces,       ONLY : fwfft
-
   !
   IMPLICIT NONE
   !
@@ -40,16 +39,13 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
 
   COMPLEX(DP), ALLOCATABLE :: rhogaux(:,:)
   !
-  !^^^
   REAL(DP), ALLOCATABLE :: grho2(:,:), grho_ud(:)
   REAL(DP), ALLOCATABLE :: sign_v(:), arho(:)
   REAL(DP), ALLOCATABLE :: rh(:), zeta(:)  
   REAL(DP), ALLOCATABLE :: v1x(:,:), v2x(:,:)
   REAL(DP), ALLOCATABLE :: v1c(:,:), v2c(:,:), v2c_ud(:)
   REAL(DP) :: vnull
-  !^^^
   REAL(DP) :: sx(dfftp%nnr), sc(dfftp%nnr)
-  !^^^
   !
   REAL(DP) :: sgn(2), etxcgc, vtxcgc, segno, fac, amag 
   !
@@ -60,7 +56,7 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
   !
   IF ( .NOT. dft_is_gradient() ) RETURN
   !
-  CALL init_gga_xc()
+  CALL init_xc( 'GGA' )
   !
   etxcgc = 0.0_DP
   vtxcgc = 0.0_DP
@@ -105,7 +101,7 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
         !
         rhogaux(:,is) = psic(dfftp%nl(:))
         !
-     END DO
+     ENDDO
   ELSE
      !
      ! ... for convenience rhoaux and rhogaux are in (up,down) format, if LSDA
@@ -116,6 +112,7 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
      ENDDO
      !
   ENDIF
+  !
   DO is = 1, nspin0
      !
      rhoaux(:,is)  = fac *  rho_core(:) +  rhoaux(:,is)
@@ -123,7 +120,7 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
      !
      CALL fft_gradient_g2r( dfftp, rhogaux(1,is), g, grho(1,1,is) )
      !
-  END DO
+  ENDDO
   !
   DEALLOCATE( rhogaux )
   !
@@ -132,47 +129,26 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
      !
      ! ... This is the spin-unpolarised case
      !
-     ALLOCATE( arho(dfftp%nnr), sign_v(dfftp%nnr) )
-     !
-     DO k = 1, dfftp%nnr
-        arho(k) = ABS( rhoaux(k,1) )
-        IF ( arho(k) > epsr ) THEN
-           grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
-           IF ( grho2(k,1) > epsg ) THEN
-              sign_v(k) = SIGN( 1._DP, rhoaux(k,1) )
-           ELSE
-              arho(k)    = 0.5_DP
-              grho2(k,1) = 0.1_DP
-              sign_v(k)  = 0.0_DP
-           ENDIF
-        ELSE
-           arho(k)    = 0.5_DP
-           grho2(k,1) = 0.1_DP
-           sign_v(k)  = 0.0_DP
-        ENDIF
-     ENDDO
-     !
-     CALL gcxc( dfftp%nnr, arho, grho2(:,1), sx, sc, v1x(:,1), v2x(:,1), &
-                                                     v1c(:,1), v2c(:,1) )
+     CALL xc_gcx( dfftp%nnr, nspin0, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c )
      !
      DO k = 1, dfftp%nnr
         !
-        vnull = ABS(sign_v(k))
+        !vnull = ABS(sign_v(k))
         !
         ! ... first term of the gradient correction : D(rho*Exc)/D(rho)
-        v(k,1) = v(k,1) + e2 * ( v1x(k,1) + v1c(k,1) ) * vnull
+        v(k,1) = v(k,1) + e2 * ( v1x(k,1) + v1c(k,1) ) ! * vnull
         !
         ! ... h contains:  D(rho*Exc) / D(|grad rho|) * (grad rho) / |grad rho|
-        h(:,k,1) = e2 * ( v2x(k,1) + v2c(k,1) ) * grho(:,k,1) * vnull
+        h(:,k,1) = e2 * ( v2x(k,1) + v2c(k,1) ) * grho(:,k,1) ! * vnull
         !
         vtxcgc = vtxcgc + e2 * ( v1x(k,1) + v1c(k,1) ) * &
-                               (rhoaux(k,1) - rho_core(k) ) * vnull
+                               (rhoaux(k,1) - rho_core(k) ) ! * vnull
         !
-        etxcgc = etxcgc + e2 * ( sx(k) + sc(k) ) * sign_v(k)
+        etxcgc = etxcgc + e2 * ( sx(k) + sc(k) ) ! * sign_v(k)
         !
      ENDDO
      !
-     DEALLOCATE( arho, sign_v )
+     !DEALLOCATE( arho, sign_v )
      !
      !
   ELSE
@@ -187,40 +163,19 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
      !
      ALLOCATE( v2c_ud(dfftp%nnr) )
      !
-     DO is = 1, 2
-       grho2(:,is) = grho(1,:,is)**2 + grho(2,:,is)**2 + grho(3,:,is)**2
-     ENDDO
-     !
-     CALL gcx_spin( dfftp%nnr, rhoaux, grho2, sx, v1x, v2x )
-     !
-     !
-     IF ( igcc_is_lyp() ) THEN
-        !
-        ALLOCATE( grho_ud(dfftp%nnr) )
-        !
-        grho_ud = grho(1,:,1) * grho(1,:,2) + grho(2,:,1) * grho(2,:,2) + &
-                  grho(3,:,1) * grho(3,:,2)
-        !
-        WHERE ( rhoaux(:,1)+rhoaux(:,2) < epsr ) 
-           rhoaux(:,1) = 0.0_DP !trash value
-           rhoaux(:,2) = 0.0_DP
-        ENDWHERE
-        !
-        CALL gcc_spin_more( dfftp%nnr, rhoaux, grho2, grho_ud, &
-                                                 sc, v1c, v2c, v2c_ud )
-        !
-        DEALLOCATE( grho_ud )
-        !
-     ELSE
+     IF ( .NOT. igcc_is_lyp() .AND. (nspin==4 .AND. domag) ) THEN
         !
         ALLOCATE( rh(dfftp%nnr), zeta(dfftp%nnr) )
         !
         rh = rhoaux(:,1) + rhoaux(:,2)
         !
-        zeta = 2.0_DP ! trash value, gcc-routines get rid of it when present
-        WHERE ( rh > epsr ) zeta = ( rhoaux(:,1) - rhoaux(:,2) ) / rh(:)
+        DO is = 1, 2
+           grho2(:,is) = grho(1,:,is)**2 + grho(2,:,is)**2 + grho(3,:,is)**2
+        ENDDO
         !
-        IF ( nspin==4 .AND. domag ) zeta = ABS(zeta) * segni(:)
+        CALL gcx_spin( dfftp%nnr, rhoaux, grho2, sx, v1x, v2x )
+        !
+        zeta = ABS(zeta) * segni(:)
         !
         grho2(:,1) = ( grho(1,:,1) + grho(1,:,2) )**2 + &
                      ( grho(2,:,1) + grho(2,:,2) )**2 + &
@@ -232,6 +187,10 @@ SUBROUTINE gradcorr( rho, rhog, rho_core, rhog_core, etxc, vtxc, v )
         v2c_ud(:) = v2c(:,1)
         !
         DEALLOCATE( rh, zeta )
+        !
+     ELSE   
+        !
+        CALL xc_gcx( dfftp%nnr, nspin0, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c, v2c_ud )
         !
      ENDIF
      !

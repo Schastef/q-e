@@ -8,15 +8,23 @@ PRIVATE
 SAVE
 !
 !  GGA exchange-correlation drivers
-PUBLIC :: gcxc, gcx_spin, gcc_spin, gcc_spin_more, &
-          select_gga_functionals
+PUBLIC :: xc_gcx, gcxc, gcx_spin, gcc_spin, gcc_spin_more, &
+          select_gga_functionals, change_threshold_gga
 !
+PUBLIC :: libxc_switches_gga
 PUBLIC :: igcx_l, igcc_l
 PUBLIC :: exx_started_g, exx_fraction_g
 PUBLIC :: screening_parameter_l, gau_parameter_l
 !
+!  libxc on/off
+INTEGER  :: libxc_switches_gga(2)
+!
 !  indexes defining xc functionals
 INTEGER  :: igcx_l, igcc_l
+!
+!  input thresholds (default values)
+REAL(DP) :: rho_threshold = 1.D-6
+REAL(DP) :: grho_threshold = 1.D-10
 !
 !  variables for hybrid exchange
 LOGICAL  :: exx_started_g
@@ -33,7 +41,8 @@ REAL(DP) :: screening_parameter_l, gau_parameter_l
 !----- Select functionals by the corresponding indexes ----------------------
 !----------------------------------------------------------------------------
 SUBROUTINE select_gga_functionals( igcx, igcc, exx_fraction, screening_parameter, &
-                                    gau_parameter )
+                                   gau_parameter )
+   !-----------------------------------------------------------------------------
    !
    IMPLICIT NONE
    !
@@ -58,8 +67,8 @@ SUBROUTINE select_gga_functionals( igcx, igcc, exx_fraction, screening_parameter
    screening_parameter_l = 0.0_DP
    gau_parameter_l = 0.0_DP
    !
-   IF ( PRESENT(screening_parameter) ) THEN          !^^^ SISTEMA, metti compatiblita' con indici e 
-      screening_parameter_l = screening_parameter         ! vedi ordine variabili optional
+   IF ( PRESENT(screening_parameter) ) THEN
+      screening_parameter_l = screening_parameter
    ENDIF
    !
    IF ( PRESENT(gau_parameter) ) THEN
@@ -69,6 +78,424 @@ SUBROUTINE select_gga_functionals( igcx, igcc, exx_fraction, screening_parameter
    RETURN
    !
 END SUBROUTINE select_gga_functionals
+!
+!
+!-----------------------------------------------------------------------
+SUBROUTINE change_threshold_gga( rho_thr_in, grho_thr_in )
+  !--------------------------------------------------------------------
+  !! Change rho and grho thresholds.
+  !
+  IMPLICIT NONE
+  !
+  REAL(DP), INTENT(IN) :: rho_thr_in
+  REAL(DP), INTENT(IN), OPTIONAL :: grho_thr_in
+  !
+  rho_threshold = rho_thr_in
+  IF (PRESENT(grho_thr_in)) grho_threshold = grho_thr_in
+  !
+  RETURN
+  !
+END SUBROUTINE
+!
+!
+!---------------------------------------------------------------------------
+SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
+  !-------------------------------------------------------------------------
+  !! Wrapper routine. Calls xc_gga-driver routines from internal libraries
+  !! of q-e or from the external libxc, depending on the input choice.
+  !
+  !! NOTE: look at 'PP/src/benchmark_libxc.f90' to test and see the differences
+  !!       between q-e and libxc libraries.
+  !
+#if defined(__LIBXC)
+  USE xc_f90_types_m
+  USE xc_f90_lib_m
+#endif
+  !
+  IMPLICIT NONE
+  !
+  INTEGER,  INTENT(IN) :: length
+  !! length of the I/O arrays
+  INTEGER,  INTENT(IN) :: ns
+  !! spin dimension for input
+  REAL(DP), INTENT(IN) :: rho(length,ns)
+  !! Charge density
+  REAL(DP), INTENT(IN) :: grho(3,length,ns)
+  !! gradient
+  REAL(DP), INTENT(OUT) :: ex(length)
+  !! exchange energy
+  REAL(DP), INTENT(OUT) :: ec(length)
+  !! correlation energy
+  REAL(DP), INTENT(OUT) :: v1x(length,ns)
+  !! exchange potential
+  REAL(DP), INTENT(OUT) :: v2x(length,ns)
+  !! exchange
+  REAL(DP), INTENT(OUT) :: v1c(length,ns)
+  !! correlation potential
+  REAL(DP), INTENT(OUT) :: v2c(length,ns)
+  !! correlation
+  REAL(DP), INTENT(OUT), OPTIONAL :: v2c_ud(length)
+  !! correlation
+  !
+  ! ... local variables
+  !
+#if defined(__LIBXC)
+  TYPE(xc_f90_pointer_t) :: xc_func
+  TYPE(xc_f90_pointer_t) :: xc_info1, xc_info2
+  REAL(DP), ALLOCATABLE :: rho_lxc(:), sigma(:)
+  REAL(DP), ALLOCATABLE :: ex_lxc(:), ec_lxc(:)
+  REAL(DP), ALLOCATABLE :: vx_rho(:), vx_sigma(:)
+  REAL(DP), ALLOCATABLE :: vc_rho(:), vc_sigma(:)
+  !
+  REAL(DP), ALLOCATABLE :: aux1(:), aux2(:), aux3(:)
+  !
+  INTEGER :: np
+  REAL(DP) :: rs, rtot, zet, sgn(2), vc_2(2)
+  REAL(DP), PARAMETER :: pi34 = 0.6203504908994_DP
+  !
+  LOGICAL :: POLARIZED
+  INTEGER :: ildax, ildac, pol_unpol
+#endif
+  REAL(DP), ALLOCATABLE :: arho(:,:), sign_v(:)
+  REAL(DP), ALLOCATABLE :: rh(:), zeta(:)
+  REAL(DP), ALLOCATABLE :: grho2(:,:), grho_ud(:)
+  !
+  INTEGER :: k, is
+  REAL(DP), PARAMETER :: small = 1.E-10_DP
+  !
+  !
+  IF (ns==2 .AND. .NOT. PRESENT(v2c_ud)) CALL errore( 'xc_gga', 'cross &
+                                             &term v2c_ud not found', 1 )
+  !
+#if defined(__LIBXC)
+  !
+  POLARIZED = .FALSE.
+  IF (ns == 2) THEN
+     POLARIZED = .TRUE.
+  ENDIF
+  !
+  pol_unpol = 1
+  np = 1
+  IF ( ns == 2 ) THEN
+     pol_unpol = 2
+     np = 3
+  ENDIF
+  !
+  ALLOCATE( rho_lxc(length*ns) )
+  ALLOCATE( sigma(length*np) )
+  IF ( ns == 1 ) ALLOCATE( sign_v(length) )
+  !
+  ALLOCATE( ex_lxc(length)    , ec_lxc(length)      )
+  ALLOCATE( vx_rho(length*ns) , vx_sigma(length*np) )
+  ALLOCATE( vc_rho(length*ns) , vc_sigma(length*np) )
+  !
+  !
+  IF ( ns == 1 ) THEN
+    !
+    DO k = 1, length
+       rho_lxc(k) = ABS( rho(k,1) )
+       IF ( rho_lxc(k) > rho_threshold ) THEN
+          sigma(k) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
+          IF ( sigma(k) > grho_threshold ) THEN
+             sign_v(k) = SIGN( 1._DP, rho(k,1) )
+          ELSE
+             rho_lxc(k) = 0.5_DP
+             sigma(k) = 0.1_DP
+             sign_v(k) = 0.0_DP
+          ENDIF
+       ELSE
+          rho_lxc(k) = 0.5_DP
+          sigma(k) = 0.1_DP
+          sign_v(k) = 0.0_DP
+       ENDIF
+    ENDDO
+    !
+  ELSE
+    !
+    DO k = 1, length
+       rho_lxc(2*k-1) = rho(k,1)
+       rho_lxc(2*k)   = rho(k,2)
+       !
+       sigma(3*k-2) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
+       sigma(3*k-1) = grho(1,k,1) * grho(1,k,2) + grho(2,k,1) * grho(2,k,2) + &
+                      grho(3,k,1) * grho(3,k,2)
+       sigma(3*k)   = grho(1,k,2)**2 + grho(2,k,2)**2 + grho(3,k,2)**2
+    ENDDO
+    !
+  ENDIF
+  !
+  ! --- GGA EXCHANGE
+  !
+  IF ( libxc_switches_gga(1) == 1 ) THEN
+    !
+    CALL xc_f90_func_init( xc_func, xc_info1, igcx_l, pol_unpol )
+    CALL xc_f90_func_set_dens_threshold( xc_func, rho_threshold )
+     CALL xc_f90_gga_exc_vxc( xc_func, length, rho_lxc(1), sigma(1), ex_lxc(1), vx_rho(1), vx_sigma(1) )
+    CALL xc_f90_func_end( xc_func )
+    !
+    IF (.NOT. POLARIZED) THEN
+      DO k = 1, length
+        ex(k) = ex_lxc(k) * rho_lxc(k) * sign_v(k)
+        sgn(1) = ABS(sign_v(k))
+        v1x(k,1) = vx_rho(k)*sgn(1)
+        v2x(k,1) = vx_sigma(k)*sgn(1)
+      ENDDO
+    ELSE
+      DO k = 1, length
+        ex(k) = ex_lxc(k) * (rho_lxc(2*k-1)+rho_lxc(2*k))
+        v1x(k,1) = vx_rho(2*k-1)
+        v1x(k,2) = vx_rho(2*k)
+        v2x(k,1) = vx_sigma(3*k-2)*2.d0
+        v2x(k,2) = vx_sigma(3*k)*2.d0
+      ENDDO
+    ENDIF
+    !
+  ELSE
+    !
+    ALLOCATE( grho2(length,ns) )
+    !
+    IF ( ns == 1 ) THEN
+       !
+       ! ... This is the spin-unpolarised case
+       !
+       CALL gcxc( length, rho(:,1), sigma, ex, ec, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )
+       !
+       ex = ex*sign_v
+       DO k = 1, length
+         sgn(1) = ABS(sign_v(k))
+         v1x(k,1) = v1x(k,1)*sgn(1)  ;  v2x(k,1) = v2x(k,1)*sgn(1)
+       ENDDO
+       !
+    ELSE
+       !
+       DO is = 1, 2
+          grho2(:,is) = grho(1,:,is)**2 + grho(2,:,is)**2 + grho(3,:,is)**2
+       ENDDO
+       !
+       CALL gcx_spin( length, rho, grho2, ex, v1x, v2x )
+       !
+    ENDIF
+    !
+    DEALLOCATE( grho2 )
+    !
+  ENDIF
+  !
+  ! ---- GGA CORRELATION
+  !
+  IF ( libxc_switches_gga(2) == 1 ) THEN  !lda part of LYP not present in libxc
+    !
+    CALL xc_f90_func_init( xc_func, xc_info2, igcc_l, pol_unpol )
+    CALL xc_f90_func_set_dens_threshold( xc_func, rho_threshold )
+     CALL xc_f90_gga_exc_vxc( xc_func, length, rho_lxc(1), sigma(1), ec_lxc(1), vc_rho(1), vc_sigma(1) )
+    CALL xc_f90_func_end( xc_func )
+    !
+    IF (.NOT. POLARIZED) THEN
+      DO k = 1, length
+        ec(k) = ec_lxc(k) * rho_lxc(k) * sign_v(k)
+        sgn(1) = ABS(sign_v(k))
+        v1c(k,1) = vc_rho(k) * sgn(1)
+        v2c(k,1) = vc_sigma(k) * sgn(1)
+      ENDDO
+    ELSE
+      DO k = 1, length
+        sgn(:) = 1.d0
+        IF (rho_lxc(2*k-1)<rho_threshold .OR. SQRT(ABS(sigma(3*k-2)))<grho_threshold) sgn(1)=0.d0
+        IF (rho_lxc(2*k)  <rho_threshold .OR. SQRT(ABS(sigma(3*k)))  <grho_threshold) sgn(2)=0.d0
+        ec(k) = ec_lxc(k) * (rho_lxc(2*k-1)*sgn(1)+rho_lxc(2*k)*sgn(2))
+        v1c(k,1) = vc_rho(2*k-1) * sgn(1)
+        v1c(k,2) = vc_rho(2*k) * sgn(2)
+        v2c(k,1) = vc_sigma(3*k-2)*2.d0 * sgn(1)
+        v2c_ud(k)= vc_sigma(3*k-1) * sgn(1)*sgn(2)
+        v2c(k,2) = vc_sigma(3*k)*2.d0 * sgn(2)
+      ENDDO
+    ENDIF
+    !  
+  ELSE
+    !
+    ALLOCATE( arho(length,ns), grho2(length,ns) )
+    !
+    IF ( ns == 1 ) THEN
+       !
+       ! ... This is the spin-unpolarised case
+       !
+       DO k = 1, length
+          arho(k,1) = ABS( rho(k,1) )
+          IF ( arho(k,1) > rho_threshold ) THEN
+             grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
+             IF ( grho2(k,1) > grho_threshold ) THEN
+                sign_v(k) = SIGN( 1._DP, rho(k,1) )
+             ELSE
+                arho(k,1)  = 0.5_DP
+                grho2(k,1) = 0.1_DP
+                sign_v(k)  = 0.0_DP
+             ENDIF
+          ELSE
+             arho(k,1)  = 0.5_DP
+             grho2(k,1) = 0.1_DP
+             sign_v(k)  = 0.0_DP
+          ENDIF
+       ENDDO
+       !
+       ALLOCATE( aux1(length), aux2(length), aux3(length))
+       CALL gcxc( length, arho(:,1), grho2(:,1), aux1, ec, aux2, aux3, v1c(:,1), v2c(:,1) )
+       DEALLOCATE( aux1, aux2, aux3 )
+       !
+       ec = ec*sign_v
+       sign_v = ABS(sign_v)
+       v1c(:,1) = v1c(:,1)*sign_v  ;  v2c(:,1) = v2c(:,1)*sign_v
+       !
+       !
+    ELSE
+       !
+       DO is = 1, 2
+          grho2(:,is) = grho(1,:,is)**2 + grho(2,:,is)**2 + grho(3,:,is)**2
+       ENDDO
+       !
+       IF (igcc_l==3 .OR. igcc_l==7 .OR. igcc_l==13 ) THEN
+          !
+          ALLOCATE( grho_ud(length) )
+          !
+          grho_ud = grho(1,:,1) * grho(1,:,2) + grho(2,:,1) * grho(2,:,2) + &
+                    grho(3,:,1) * grho(3,:,2)
+          !
+          arho = rho
+          !
+          WHERE ( rho(:,1)+rho(:,2) < rho_threshold )
+             arho(:,1) = 0.0_DP
+             arho(:,2) = 0.0_DP
+          ENDWHERE
+          !
+          CALL gcc_spin_more( length, arho, grho2, grho_ud, ec, v1c, v2c, v2c_ud )
+          !
+          DEALLOCATE( grho_ud )
+          !
+       ELSE
+          !
+          ALLOCATE( rh(length), zeta(length) )
+          !
+          rh = rho(:,1) + rho(:,2)
+          !
+          zeta = 2.0_DP ! trash value, gcc-routines get rid of it when present
+          WHERE ( rh > rho_threshold ) zeta = ( rho(:,1) - rho(:,2) ) / rh(:)
+          !
+          grho2(:,1) = ( grho(1,:,1) + grho(1,:,2) )**2 + &
+                       ( grho(2,:,1) + grho(2,:,2) )**2 + &
+                       ( grho(3,:,1) + grho(3,:,2) )**2
+          !
+          CALL gcc_spin( length, rh, zeta, grho2(:,1), ec, v1c, v2c(:,1) )
+          !
+          v2c(:,2)  = v2c(:,1)
+          v2c_ud(:) = v2c(:,1)
+          !
+          DEALLOCATE( rh, zeta )
+          !
+       ENDIF
+       !   
+    ENDIF
+    !
+    DEALLOCATE( arho, grho2 )
+    !
+  ENDIF  
+  !
+  DEALLOCATE( rho_lxc, sigma )
+  IF (ns == 1) DEALLOCATE( sign_v )
+  DEALLOCATE( ex_lxc , ec_lxc   )
+  DEALLOCATE( vx_rho , vx_sigma )
+  DEALLOCATE( vc_rho , vc_sigma )
+  !
+#else
+  !
+  ALLOCATE( arho(length,ns), grho2(length,ns) )
+  !
+  IF ( ns == 1 ) THEN
+     !
+     ! ... This is the spin-unpolarised case
+     ALLOCATE( sign_v(length) )
+     !
+     DO k = 1, length
+        arho(k,1) = ABS( rho(k,1) )
+        IF ( arho(k,1) > rho_threshold ) THEN
+           grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
+           IF ( grho2(k,1) > grho_threshold ) THEN
+              sign_v(k) = SIGN( 1._DP, rho(k,1) )
+           ELSE
+              arho(k,1)  = 0.5_DP
+              grho2(k,1) = 0.1_DP
+              sign_v(k)  = 0.0_DP
+           ENDIF
+        ELSE
+           arho(k,1)  = 0.5_DP
+           grho2(k,1) = 0.1_DP
+           sign_v(k)  = 0.0_DP
+        ENDIF
+     ENDDO
+     !
+     CALL gcxc( length, arho(:,1), grho2(:,1), ex, ec, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )
+     !
+     ex = ex*sign_v              ;  ec = ec * sign_v
+     sign_v = ABS(sign_v)
+     v1x(:,1) = v1x(:,1)*sign_v  ;  v2x(:,1) = v2x(:,1)*sign_v
+     v1c(:,1) = v1c(:,1)*sign_v  ;  v2c(:,1) = v2c(:,1)*sign_v
+     !
+     DEALLOCATE( sign_v )
+     !
+  ELSE
+     !
+     DO is = 1, 2
+        grho2(:,is) = grho(1,:,is)**2 + grho(2,:,is)**2 + grho(3,:,is)**2
+     ENDDO
+     !
+     CALL gcx_spin( length, rho, grho2, ex, v1x, v2x )
+     !
+     IF (igcc_l==3 .OR. igcc_l==7 .OR. igcc_l==13 ) THEN
+        !
+        ALLOCATE( grho_ud(length) )
+        !
+        grho_ud = grho(1,:,1) * grho(1,:,2) + grho(2,:,1) * grho(2,:,2) + &
+                  grho(3,:,1) * grho(3,:,2)
+        !
+        arho = rho
+        WHERE ( rho(:,1)+rho(:,2) < rho_threshold )
+           arho(:,1) = 0.0_DP !trash value
+           arho(:,2) = 0.0_DP
+        ENDWHERE
+        !
+        CALL gcc_spin_more( length, arho, grho2, grho_ud, ec, v1c, v2c, v2c_ud )
+        !
+        DEALLOCATE( grho_ud )
+        !
+     ELSE
+        !
+        ALLOCATE( rh(length), zeta(length) )
+        !
+        rh = rho(:,1) + rho(:,2)
+        !
+        zeta = 2.0_DP ! trash value, gcc-routines get rid of it when present
+        WHERE ( rh > rho_threshold ) zeta = ( rho(:,1) - rho(:,2) ) / rh(:)
+        !
+        grho2(:,1) = ( grho(1,:,1) + grho(1,:,2) )**2 + &
+                     ( grho(2,:,1) + grho(2,:,2) )**2 + &
+                     ( grho(3,:,1) + grho(3,:,2) )**2
+        !
+        CALL gcc_spin( length, rh, zeta, grho2(:,1), ec, v1c, v2c(:,1) )
+        !
+        v2c(:,2)  = v2c(:,1)
+        v2c_ud(:) = v2c(:,1)
+        !
+        DEALLOCATE( rh, zeta )
+        !
+     ENDIF
+     !   
+  ENDIF
+  !
+  DEALLOCATE( arho, grho2 )
+  !
+#endif
+  !
+  !
+  RETURN
+  !
+END SUBROUTINE xc_gcx
 !
 !
 !-----------------------------------------------------------------------
@@ -105,10 +532,18 @@ SUBROUTINE gcxc( length, rho_in, grho_in, sx_out, sc_out, v1x_out, &
   REAL(DP) :: sxsr, v1xsr, v2xsr
   REAL(DP) :: sc, v1c, v2c
   REAL(DP), PARAMETER :: small = 1.E-10_DP
+#if defined(_OPENMP)
+  INTEGER :: ntids
+  INTEGER, EXTERNAL :: omp_get_num_threads
+#endif
   !
+#if defined(_OPENMP)
+  ntids = omp_get_num_threads()
+#endif
   !
-!$omp parallel do private( rho, grho, sx, sx_, sxsr, v1x, v1x_, v1xsr, &
-!$omp                      v2x, v2x_, v2xsr, sc, v1c, v2c )
+!$omp parallel if(ntids==1)
+!$omp do private( rho, grho, sx, sx_, sxsr, v1x, v1x_, v1xsr, &
+!$omp             v2x, v2x_, v2xsr, sc, v1c, v2c )
   DO ir = 1, length  
      !
      rho  = rho_in(ir)
@@ -384,7 +819,8 @@ SUBROUTINE gcxc( length, rho_in, grho_in, sx_out, sc_out, v1x_out, &
      v2x_out(ir) = v2x ;  v2c_out(ir) = v2c
      !
   ENDDO 
-!$omp end parallel do  
+!$omp end do
+!$omp end parallel
   !
   !
   RETURN
@@ -427,11 +863,20 @@ SUBROUTINE gcx_spin( length, rho_in, grho2_in, sx_tot, v1x_out, v2x_out )
   REAL(DP), PARAMETER :: rho_trash=0.5_DP, grho2_trash=0.2_DP
   ! temporary values assigned to rho and grho when they
   ! are too small in order to avoid numerical problems.
+#if defined(_OPENMP)
+  INTEGER :: ntids
+  INTEGER, EXTERNAL :: omp_get_num_threads
+#endif    
   !
   sx_tot = 0.0_DP
   !
-!$omp parallel do private( rho, grho2, null_v, sx, sxsr, v1x, v1xsr, &
-!$omp                      v2x, v2xsr )
+#if defined(_OPENMP)
+  ntids = omp_get_num_threads()
+#endif
+  !
+!$omp parallel if(ntids==1)
+!$omp do private( rho, grho2, null_v, sx, sxsr, v1x, v1xsr, &
+!$omp             v2x, v2xsr )
   DO ir = 1, length  
      !
      rho(:) = rho_in(ir,:)
@@ -755,7 +1200,8 @@ SUBROUTINE gcx_spin( length, rho_in, grho2_in, sx_tot, v1x_out, v2x_out )
      v2x_out(ir,:) = v2x(:) * null_v(:)
      !
   ENDDO
-!$omp end parallel do  
+!$omp end do
+!$omp end parallel
   !
   !
   RETURN
@@ -791,16 +1237,23 @@ SUBROUTINE gcc_spin( length, rho_in, zeta_io, grho_in, sc_out, v1c_out, v2c_out 
   INTEGER :: ir
   REAL(DP) :: rho, zeta, grho
   REAL(DP) :: sc, v1c(2), v2c
-  REAL(DP), PARAMETER :: small=1.E-10_DP, epsr=1.E-6_DP
+  REAL(DP), PARAMETER :: small=1.E-10_DP !, epsr=1.E-6_DP
   !
+#if defined(_OPENMP)
+  INTEGER :: ntids
+  INTEGER, EXTERNAL :: omp_get_num_threads
   !
-!$omp parallel do private( rho, zeta, grho, sc, v1c, v2c )
+  ntids = omp_get_num_threads()
+#endif
+  !
+!$omp parallel if(ntids==1)
+!$omp do private( rho, zeta, grho, sc, v1c, v2c )
   DO ir = 1, length
     !
     rho  = rho_in(ir)
     grho = grho_in(ir)
     IF ( ABS(zeta_io(ir))<=1.0_DP ) zeta_io(ir) = SIGN( MIN(ABS(zeta_io(ir)), &
-                                              (1.0_DP-epsr)), zeta_io(ir) )
+                                    (1.0_DP-rho_threshold)), zeta_io(ir) )
     zeta = zeta_io(ir)
     !
     IF ( ABS(zeta)>1.0_DP .OR. rho<=small .OR. SQRT(ABS(grho))<=small ) THEN
@@ -834,7 +1287,7 @@ SUBROUTINE gcc_spin( length, rho_in, zeta_io, grho_in, sc_out, v1c_out, v2c_out 
        !
     CASE DEFAULT
        !
-       CALL errore( 'lsda_functionals (gcc_spin)', 'not implemented', igcc_l )
+       CALL errore( 'xc_gga_drivers (gcc_spin)', 'not implemented', igcc_l )
        !
     END SELECT
     !
@@ -843,7 +1296,8 @@ SUBROUTINE gcc_spin( length, rho_in, zeta_io, grho_in, sc_out, v1c_out, v2c_out 
     v2c_out(ir) = v2c
     !
   ENDDO
-!$omp end parallel do
+!$omp end do
+!$omp end parallel
   !
   RETURN
   !
@@ -889,13 +1343,22 @@ SUBROUTINE gcc_spin_more( length, rho_in, grho_in, grho_ud_in, &
   REAL(DP) :: rho(2), grho(2)
   REAL(DP) :: grho_ud
   REAL(DP), PARAMETER :: small=1.E-20_DP
+#if defined(_OPENMP)
+  INTEGER :: ntids
+  INTEGER, EXTERNAL :: omp_get_num_threads
+#endif    
   !
   sc  = 0.0_DP
   v1c = 0.0_DP
   v2c = 0.0_DP
   v2c_ud = 0.0_DP
   !
-!$omp parallel do private( rho, grho, grho_ud )
+#if defined(_OPENMP)
+  ntids = omp_get_num_threads()
+#endif
+  !
+!$omp parallel if(ntids==1)
+!$omp do private( rho, grho, grho_ud )
   DO ir = 1, length
     !
     rho(:) = rho_in(ir,:)
@@ -941,7 +1404,8 @@ SUBROUTINE gcc_spin_more( length, rho_in, grho_in, grho_ud_in, &
     END SELECT
     !
   ENDDO
-!$omp end parallel do
+!$omp end do
+!$omp end parallel
   !
   RETURN
   !

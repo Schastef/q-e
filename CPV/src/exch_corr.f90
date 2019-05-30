@@ -370,10 +370,9 @@
 
 subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
   use kinds,       only: DP
-  use funct,       only: dft_is_gradient, get_igcc, &
-                         init_gga_xc, init_lda_xc
+  use funct,       only: dft_is_gradient, get_igcc, init_xc
   use xc_lda_lsda, only: xc
-  use xc_gga,      only: gcxc, gcx_spin, gcc_spin, gcc_spin_more
+  use xc_gga,      only: xc_gcx, change_threshold_gga
   implicit none
   integer, intent(in) :: nnr
   integer, intent(in) :: nspin
@@ -381,22 +380,19 @@ subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
   real(DP) :: h(nnr,nspin,nspin)
   real(DP), intent(in) :: rhor(nnr,nspin)
   real(DP) :: v(nnr,nspin)
-  real(DP) :: etxc, vtxc     !^^^
+  real(DP) :: etxc, vtxc
   integer :: ir, is, k
   real(DP), dimension(nnr,nspin) :: rhox !^
   real(DP), dimension(nnr) :: arhox , zeta
   real(DP), dimension(nnr) :: ex, ec
   real(DP), dimension(nnr,nspin) :: vx, vc
   !
-  !^^^
-  real(DP), dimension(nnr,nspin) :: grho2
-  REAL(DP), dimension(nnr) :: sign_v, sx, sc             !workspace
-  REAL(DP), dimension(nnr,nspin) :: v1x, v2x, v1c, v2c   !workspace
-  real(dp), dimension(nnr) :: v2c_ud, grho_ud
+  REAL(DP), dimension(nnr) :: sx, sc
+  REAL(DP), dimension(nnr,nspin) :: v1x, v2x, v1c, v2c
+  real(dp), dimension(nnr) :: v2c_ud
   real(dp) :: zetas
-  !^^^
   !
-  real(DP), dimension(nnr) :: rh !, grh2
+  real(DP), dimension(nnr) :: rh, sign_v
   real(DP) :: e2
   real(DP) :: arho, segno, xnull
   !
@@ -410,17 +406,13 @@ subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
   e2  = 1.0d0
   etxc = 0.0d0
   !
-  call init_lda_xc()
+  call init_xc( 'LDA' )
   !
   IF ( nspin == 1 ) THEN
      !
      ! spin-unpolarized case
      !
-     !^arhox(:) = abs(rhor(:,nspin))
-     !^
-     !^CALL xc( nnr, arhox, ex, ec, vx, vc )
-     !
-     CALL xc( nnr, 1, 1, rhor, ex, ec, vx, vc )
+     CALL xc( nnr, nspin, nspin, rhor, ex, ec, vx, vc )
      !
      v(:,nspin) = e2 * (vx(:,1) + vc(:,1) )
      etxc = e2 * SUM( (ex + ec)*rhor(:,nspin) )
@@ -432,23 +424,6 @@ subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
      neg(1) = 0
      neg(2) = 0
      neg(3) = 0
-     !
-     !^do ir = 1, nnr
-     !^   rhox(ir)  = rhor(ir,1) + rhor(ir,2)
-     !^   arhox(ir) = abs(rhox(ir))
-     !^   if ( arhox(ir) > 1.D-30 ) then
-     !^       zeta(ir) = ( rhor(ir,1) - rhor(ir,2) ) / arhox(ir)
-     !^       if (abs(zeta(ir)) > 1.d0) then
-     !^          neg(3) = neg(3) + 1
-     !^          zeta(ir) = sign(1.d0,zeta(ir))
-     !^       endif
-     !^       if (rhor(ir,1) < 0.d0) neg(1) = neg(1) + 1
-     !^       if (rhor(ir,2) < 0.d0) neg(2) = neg(2) + 1
-     !^   endif
-     !^enddo
-     !
-     !call xc_spin( nnr, arhox, zeta, ex, ec, vx, vc )
-     !
      !
      rhox(:,1) = rhor(:,1) + rhor(:,2)
      rhox(:,2) = rhor(:,1) - rhor(:,2)
@@ -469,15 +444,8 @@ subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
         !
      ENDDO
      !
-     !^do ir = 1, nnr
-     !^   do is = 1, nspin
-     !^      v(ir,is) = e2 * (vx(ir,is) + vc(ir,is) )
-     !^   enddo
-     !^   etxc = etxc + e2 * (ex(ir) + ec(ir)) * rhox(ir)
-     !^enddo
-     !
   ENDIF
-
+  !
   if( debug_xc ) then
     open(unit=17,form='unformatted')
     write(17) nnr, nspin
@@ -486,92 +454,37 @@ subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
     close(17)
     debug_xc = .false.
   end if
-
+  !
   ! now come the corrections
-
-  IF ( dft_is_gradient() ) THEN
+  !
+  if ( dft_is_gradient() ) then
     !
-    call init_gga_xc()
+    call init_xc( 'GGA' )
     !
-    IF (nspin == 1) THEN
+    call change_threshold_gga( epsr )
+    !
+    !
+    if (nspin == 1) then
        !
        ! ... This is the spin-unpolarised case
        !
-       grho2(:,1) = grhor(1,:,1)**2 + grhor(2,:,1)**2 + grhor(3,:,1)**2
-       arhox(:) = ABS( rhor(:,1) )
        sign_v(:)  = SIGN( 1.d0, rhor(:,1) )
-       WHERE ( .NOT. ((arhox(:)>epsr) .AND. (grho2(:,1)>epsg)) )
-          grho2(:,1) = 0.1d0
-          arhox = 0.5d0
-          sign_v = 0.d0
-       END WHERE
        !
-       CALL gcxc( nnr, arhox, grho2(:,1), sx, sc, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )
+       call xc_gcx( nnr, nspin, rhor, grhor, sx, sc, v1x, v2x, v1c, v2c )
        !
-       DO k = 1, nnr
-          xnull = ABS(sign_v(k))
+       do k = 1, nnr
           ! first term of the gradient correction: D(rho*Exc)/D(rho)
-          v(k,1) = v(k,1) + e2 * (v1x(k,1) + v1c(k,1)) * xnull
+          v(k,1) = v(k,1) + e2 * (v1x(k,1) + v1c(k,1))
           ! HERE h contains D(rho*Exc)/D(|grad rho|) / |grad rho|
-          h(k, 1, 1) = e2 * (v2x(k,1) + v2c(k,1))* xnull
+          h(k, 1, 1) = e2 * (v2x(k,1) + v2c(k,1))
           etxc = etxc + e2 * (sx(k) + sc(k)) * sign_v(k)
-       ENDDO
+       enddo
        !
-    ELSE
+    else
        !
        ! ... Spin-polarised case
        !
-       DO is = 1, 2
-          grho2(:,is) = grhor(1,:,is)**2 + grhor(2,:,is)**2 + grhor(3,:,is)**2
-       ENDDO
-       !
-       CALL gcx_spin( nnr, rhor, grho2, sx, v1x, v2x )
-       !
-       !rh(:) = rhor(:,1) + rhor(:,2)
-       !WHERE (rh < epsr) null_v(:) = 0.0_DP   ! threshold is already inside gcc-routines
-       !
-       IF ( igcc_is_lyp ) THEN
-          !grhoup = grhor(1,k,1)**2 + grhor(2,k,1)**2 + grhor(3,k,1)**2
-          !grhodw = grhor(1,k,2)**2 + grhor(2,k,2)**2 + grhor(3,k,2)**2
-          grho_ud = grhor(1,k,1)*grhor(1,k,2) + grhor(2,k,1)*grhor(2,k,2) &
-                                             + grhor(3,k,1)*grhor(3,k,2)
-          !
-          CALL gcc_spin_more( nnr, rhor, grho2, grho_ud, sc, v1c, v2c, v2c_ud )
-          !
-          !write(*,*) ' dddddddddd up'
-          !
-       ELSE
-          !
-          rh(:) = rhor(:,1) + rhor(:,2)
-          !
-          WHERE ( rh > epsr )
-            zeta = ( rhor(:,1) - rhor(:,2) ) / rh(:) 
-          ELSEWHERE
-            zeta = 2.0_DP   ! trash value, gcc-routines get rid of it
-          END WHERE
-          !
-          grho2(:,1) = ( grhor(1,:,1) + grhor(1,:,2) )**2 + &
-                       ( grhor(2,:,1) + grhor(2,:,2) )**2 + &
-                       ( grhor(3,:,1) + grhor(3,:,2) )**2
-          !
-          CALL gcc_spin( nnr, rh, zeta, grho2(:,1), sc, v1c, v2c(:,1) )
-          !
-          v2c(:,2)  = v2c(:,1)
-          v2c_ud(:) = v2c(:,1)
-          !
-          !write(*,*) ' dddddddddd dw'
-          do is = 1, 5
-           !write(*,*) 'dddddddd', sc(is), v1c(is,1), v1c(is,2), v2c(is,1)
-          enddo
-          !
-       ENDIF
-       !
-       !sc(:)     = sc(:)     * null_v(:)   !threshold already inside gcc...
-       !v1c(:,1)  = v1c(:,1)  * null_v(:)
-       !v1c(:,2)  = v1c(:,2)  * null_v(:)
-       !v2c(:,1)  = v2c(:,1)  * null_v(:)
-       !v2c(:,2)  = v2c(:,2)  * null_v(:)
-       !v2c_ud(:) = v2c_ud(:) * null_v(:)
+       call xc_gcx( nnr, 2, rhor, grhor, sx, sc, v1x, v2x, v1c, v2c, v2c_ud )
        !
        ! first term of the gradient correction : D(rho*Exc)/D(rho)
        !
@@ -585,7 +498,6 @@ subroutine exch_corr_wrapper( nnr, nspin, grhor, rhor, etxc, v, h )
        h(:,2,2) = e2 * (v2x(:,2) + v2c(:,2))  ! Spin DW-DW
        !
        etxc = etxc + e2 * SUM( sx(:)+sc(:) )
-       !
        !
     endif
     !

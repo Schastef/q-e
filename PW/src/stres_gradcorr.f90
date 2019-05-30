@@ -13,8 +13,8 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
   !
   USE kinds,            ONLY: DP
   USE funct,            ONLY: dft_is_gradient, dft_is_meta, get_igcc,  &
-                              tau_xc, tau_xc_spin, get_meta, init_gga_xc
-  USE xc_gga,           ONLY: gcxc, gcx_spin, gcc_spin, gcc_spin_more
+                              tau_xc, tau_xc_spin, get_meta, init_xc
+  USE xc_gga,           ONLY: xc_gcx !gcxc, gcx_spin, gcc_spin, gcc_spin_more
   USE mp_bands,         ONLY: intra_bgrp_comm
   USE mp,               ONLY: mp_sum
   USE fft_types,        ONLY: fft_type_descriptor
@@ -55,7 +55,7 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
   !
   IF ( .NOT. dft_is_gradient() .AND. .NOT. dft_is_meta() ) RETURN
   !
-  CALL init_gga_xc()
+  CALL init_xc( 'GGA' )
   !
   nspin0 = nspin
   !if (nspin==4) nspin0 = 1
@@ -114,23 +114,18 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
      ! sigma_gradcor_{alpha,beta} ==
      !     omega^-1 \int (grad_alpha rho) ( D(rho*Exc)/D(grad_alpha rho) ) d3
      !
-     ALLOCATE( rhos(nrxx), null_v(nrxx) )     
+     ALLOCATE( null_v(nrxx) )     
      !
      ! routine computing v1x_v and v2x_v is different for GGA and meta-GGA
      ! FIXME : inefficient implementation
      !
      null_v = 1
      grho2(:,1) = grho(1,:,1)**2 + grho(2,:,1)**2 + grho(3,:,1)**2
-     rhos = rhoaux(:,1)
      !
-     WHERE( .NOT. (ABS(rhoaux(:,1))>epsr .AND. grho2(:,1)>epsg) )
-        rhos(:)   = 0.5_DP
-        grho2(:,1) = 0.2_DP
-        null_v(:)  = 0
-     END WHERE
+     WHERE( .NOT. (ABS(rhoaux(:,1))>epsr .AND. grho2(:,1)>epsg) ) null_v(:)  = 0
      !
      IF ( .NOT. (dft_is_meta() .AND. get_meta() /= 4) ) &
-     CALL gcxc( nrxx, rhos, grho2(:,1), sx, sc, v1x, v2x, v1c, v2c )
+       CALL xc_gcx( nrxx, nspin, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c )
      !
      DO k = 1, nrxx
         IF ( dft_is_meta() .AND. get_meta() /= 4 .AND. null_v(k) /= 0 ) THEN
@@ -147,13 +142,13 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
         DO l = 1, 3
            DO m = 1, l
               sigma_gradcorr(l,m) = sigma_gradcorr(l,m) + grho(l,k,1)*grho(m,k,1)* &
-                                    e2 * (v2x(k,1) + v2c(k,1)) * null_v(k)
+                                    e2 * (v2x(k,1) + v2c(k,1)) !* null_v(k)
            ENDDO
         ENDDO
         !
      ENDDO
      !
-     DEALLOCATE( rhos , null_v )
+     DEALLOCATE( null_v )
      !
      !
   ELSEIF (nspin == 2) THEN
@@ -172,42 +167,9 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
         !
      ELSE
         !
-        IF ( igcc_is_lyp ) ALLOCATE( grho_ud(dfft%nnr) )
         ALLOCATE( v2c_ud(dfft%nnr) )
         !
-        CALL gcx_spin( nrxx, rhoaux, grho2, sx, v1x, v2x )
-        !
-        !
-        IF ( igcc_is_lyp ) THEN
-           !
-           grho_ud = grho(1,k,1) * grho(1,k,2) + grho(2,k,1) * grho(2,k,2) + &
-                                                 grho(3,k,1) * grho(3,k,2)
-           !
-           CALL gcc_spin_more( nrxx, rhoaux, grho2, grho_ud, sc, &
-                                                v1c, v2c, v2c_ud )
-           !
-        ELSE
-           !
-           ALLOCATE( rh(dfft%nnr), zeta(dfft%nnr), grhor2(dfft%nnr) )
-           !
-           rh = rhoaux(:,1) + rhoaux(:,2)
-           !
-           zeta = 2.0_DP ! trash value, gcc-routines get rid of it when present
-           WHERE ( rh > epsr ) zeta = ( rhoaux(:,1)-rhoaux(:,2) ) / rh(:)
-           !
-           grhor2 = ( grho(1,:,1) + grho(1,:,2) )**2 + &
-                    ( grho(2,:,1) + grho(2,:,2) )**2 + &
-                    ( grho(3,:,1) + grho(3,:,2) )**2
-           !
-           CALL gcc_spin( nrxx, rh, zeta, grhor2, sc, v1c, v2c(:,1) )
-           !
-           v2c(:,2)  = v2c(:,1)
-           v2c_ud(:) = v2c(:,1)
-           !
-           DEALLOCATE( rh, zeta, grhor2 )
-           !
-        ENDIF
-        !
+        CALL xc_gcx( nrxx, nspin, rhoaux, grho, sx, sc, v1x, v2x, v1c, v2c, v2c_ud )
         !
         DO l = 1, 3
            DO m = 1, l
@@ -227,7 +189,6 @@ SUBROUTINE stres_gradcorr( rho, rhog, rho_core, rhog_core, kedtau, nspin, &
         ENDDO
         !
         DEALLOCATE( v2c_ud )
-        IF ( igcc_is_lyp ) DEALLOCATE( grho_ud )
         !
      ENDIF
      !

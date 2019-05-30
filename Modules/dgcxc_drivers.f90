@@ -8,8 +8,7 @@ SUBROUTINE dgcxc( length, r_in, s2_in, vrrx, vsrx, vssx, vrrc, vsrc, vssc )
   !! This routine computes the derivative of the exchange and correlation
   !! potentials.
   !
-  USE xc_gga,       ONLY: gcxc, igcx_l, igcc_l
-  USE funct,        ONLY: init_gga_xc  
+  USE xc_gga,       ONLY: gcxc, libxc_switches_gga
   USE kinds,        ONLY: DP
   !
   IMPLICIT NONE
@@ -26,8 +25,6 @@ SUBROUTINE dgcxc( length, r_in, s2_in, vrrx, vsrx, vssx, vrrc, vsrc, vssc )
   REAL(DP), DIMENSION(4*length) :: raux, s2aux
   REAL(DP), ALLOCATABLE :: v1x(:), v2x(:), v1c(:), v2c(:)
   REAL(DP), ALLOCATABLE :: sx(:), sc(:)
-  !
-  CALL init_gga_xc()
   !
   ALLOCATE( v1x(4*length), v2x(4*length), sx(4*length) )
   ALLOCATE( v1c(4*length), v2c(4*length), sc(4*length) )
@@ -74,8 +71,7 @@ SUBROUTINE dgcxc_spin( length, r_in, g_in, vrrx, vrsx, vssx, vrrc, vrsc, &
   !! This routine computes the derivative of the exchange and correlation
   !! potentials in the spin-polarized case.
   !
-  USE xc_gga,       ONLY: gcx_spin, gcc_spin, igcx_l, igcc_l
-  USE funct,        ONLY: init_gga_xc
+  USE xc_gga,       ONLY: gcx_spin, gcc_spin, libxc_switches_gga
   USE kinds,        ONLY: DP
   !
   IMPLICIT NONE
@@ -117,9 +113,6 @@ SUBROUTINE dgcxc_spin( length, r_in, g_in, vrrx, vrsx, vssx, vrrc, vrsc, &
   REAL(DP), PARAMETER :: rho_trash = 0.4_DP, zeta_trash = 0.2_DP, &
                          s2_trash = 0.1_DP
   !
-  !write(*,*) g_in(1,1:3,1)
-  !
-  CALL init_gga_xc()
   !
   ! ... EXCHANGE
   !

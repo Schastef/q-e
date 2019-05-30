@@ -14,8 +14,8 @@ SUBROUTINE cg_setupdgc
   USE kinds,     ONLY: DP
   USE constants, ONLY: e2
   USE scf,       ONLY: rho, rho_core, rhog_core, rhoz_or_updw
-  USE funct,     ONLY: dft_is_gradient, init_gga_xc
-  USE xc_gga,    ONLY: gcxc, gcx_spin, gcc_spin
+  USE funct,     ONLY: dft_is_gradient, init_xc
+  USE xc_gga,    ONLY: gcxc, gcx_spin, gcc_spin, libxc_switches_gga
   USE fft_base,  ONLY: dfftp
   USE gvect,     ONLY: ngm, g
   USE lsda_mod,  ONLY: nspin
@@ -48,7 +48,10 @@ SUBROUTINE cg_setupdgc
   dvxc_s(:,:,:) = 0.d0
   grho(:,:,:) = 0.d0
   !
-  CALL init_gga_xc()
+  CALL init_xc( 'GGA' )
+  !
+  IF ( SUM(libxc_switches_gga(:)) /= 0 ) CALL errore( 'cg_setupdgc', 'libxc derivatives of &
+                                                      &xc potentials for GGA not implemented yet', 1 )
   !
   ALLOCATE( rh(dfftp%nnr), grho2(dfftp%nnr,nspin) )
   ALLOCATE( v1x(dfftp%nnr,nspin), v2x(dfftp%nnr,nspin) )

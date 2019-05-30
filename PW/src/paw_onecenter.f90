@@ -408,7 +408,7 @@ SUBROUTINE PAW_xc_potential(i, rho_lm, rho_core, v_lm, energy)
     USE uspp_param,             ONLY : upf
     USE lsda_mod,               ONLY : nspin
     USE atom,                   ONLY : g => rgrid
-    USE funct,                  ONLY : dft_is_gradient, init_lda_xc
+    USE funct,                  ONLY : dft_is_gradient, init_xc
     USE xc_lda_lsda,            ONLY : xc
     USE constants,              ONLY : fpi ! REMOVE
 
@@ -456,7 +456,7 @@ SUBROUTINE PAW_xc_potential(i, rho_lm, rho_core, v_lm, energy)
        g_rad = 0.0_DP
     ENDIF
     !
-    CALL init_lda_xc()   !^^^
+    CALL init_xc( 'LDA' )   !^^^
     !
 !$omp parallel default(private), &
 !$omp shared(i,rad,v_lm,rho_lm,rho_core,v_rad,ix_s,ix_e,energy,e_of_tid,nspin,g,lsd,nspin_mag,with_small_so,g_rad)
@@ -631,8 +631,8 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
     USE noncollin_module,       ONLY : noncolin, nspin_mag, nspin_gga
     USE atom,                   ONLY : g => rgrid
     USE constants,              ONLY : sqrtpi, fpi,pi,e2
-    USE funct,                  ONLY : init_gga_xc, igcc_is_lyp
-    USE xc_gga,                 ONLY : gcxc, gcx_spin, gcc_spin, gcc_spin_more
+    USE funct,                  ONLY : init_xc, igcc_is_lyp
+    USE xc_gga,                 ONLY : xc_gcx !  gcxc, gcx_spin, gcc_spin, gcc_spin_more
     USE mp,                     ONLY : mp_sum
     !
     TYPE(paw_info), INTENT(IN) :: i   ! atom's minimal info
@@ -645,6 +645,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
 
     REAL(DP),ALLOCATABLE    :: rho_rad(:,:)! charge density sampled
     REAL(DP),ALLOCATABLE    :: grad(:,:,:) ! gradient
+    REAL(DP),ALLOCATABLE    :: gradx(:,:,:) ! gradient (swapped indexes)
     REAL(DP),ALLOCATABLE    :: grad2(:,:)  ! square modulus of gradient
                                                              ! (first of charge, than of hamiltonian)
     REAL(DP),ALLOCATABLE    :: gc_rad(:,:,:) ! GC correction to V (radial samples)
@@ -661,7 +662,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
     !
     !^^^
     REAL(DP), ALLOCATABLE :: sign_v(:), arho(:), grad2_v(:)
-    REAL(DP), ALLOCATABLE :: r_vec(:,:), rh(:), zeta(:), grhor(:,:), grhoud(:), grh2(:)
+    REAL(DP), ALLOCATABLE :: r_vec(:,:) !, rh(:), zeta(:) !, grhor(:,:), grhoud(:), grh2(:)
     !
     REAL(DP), DIMENSION(i%m,nspin_gga) :: v1x, v2x, v1c, v2c  !workspace
     REAL(DP), DIMENSION(i%m) :: sx, sc
@@ -687,7 +688,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
 
     if(TIMING) CALL start_clock ('PAW_gcxc_v')
   
-    CALL init_gga_xc()
+    CALL init_xc( 'GGA' )
   
     e_gcxc = 0._dp
 
@@ -744,6 +745,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
         !     GGA case
         !
         ALLOCATE( arho(i%m), sign_v(i%m), grad2_v(i%m) )
+        ALLOCATE( gradx(3,i%m,1))
         !
 !$omp do
         DO ix = ix_s, ix_e
@@ -753,26 +755,20 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
            CALL PAW_gradient(i, ix, rho_lm, rho_rad, rho_core, grad2, grad)
            !
            DO k = 1, i%m
-              arho(k)   = rho_rad(k,1)*g(i%t)%rm2(k) + rho_core(k)
-              sign_v(k) = SIGN(1._DP,arho(k))
-              arho(k)   = ABS(arho(k))
-              grad2_v(k) = grad2(k,1)
-              ! I am using grad(rho)**2 here, so its eps has to be eps**2
-              IF ( arho(k)<epsr .OR. grad2(k,1)<epsg ) THEN
-                 arho(k)    = 0.5_DP
-                 grad2_v(k) = 0.1_DP
-                 sign_v(k)  = 0.0_DP
-              ENDIF
+              arho(k) = rho_rad(k,1)*g(i%t)%rm2(k) + rho_core(k)
+!               sign_v(k) = SIGN(1._DP,arho(k))
+              arho(k) = ABS(arho(k))
+              gradx(:,k,1) = grad(k,:,1)
            ENDDO
-           !
-           CALL gcxc( i%m, arho, grad2_v, sx, sc, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )
+!
+           CALL xc_gcx( i%m, 1, arho, gradx, sx, sc, v1x, v2x, v1c, v2c )
            !
            DO k = 1, i%m
-              vnull = ABS(sign_v(k))
+              !vnull = ABS(sign_v(k))
               IF ( PRESENT(energy) ) &
-                 e_rad(k)     = sign_v(k) * e2 * (sx(k)+sc(k)) * g(i%t)%r2(k)
-              gc_rad(k,ix,1)  = vnull * (v1x(k,1)+v1c(k,1))!*g(i%t)%rm2(k)
-              h_rad(k,:,ix,1) = vnull * (v2x(k,1)+v2c(k,1))*grad(k,:,1)*g(i%t)%r2(k)
+                 e_rad(k)     = e2 * (sx(k)+sc(k)) * g(i%t)%r2(k) !* sign_v(k)
+              gc_rad(k,ix,1)  = (v1x(k,1)+v1c(k,1)) !*vnull  !*g(i%t)%rm2(k)
+              h_rad(k,:,ix,1) = (v2x(k,1)+v2c(k,1))*grad(k,:,1)*g(i%t)%r2(k) !*vnull
            ENDDO
            !
            ! integrate energy (if required)
@@ -785,19 +781,22 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
 !$omp end do
         !
         DEALLOCATE( arho, sign_v, grad2_v ) 
+        DEALLOCATE( gradx )
         !
         !
     ELSEIF ( nspin_mag == 2 .OR. nspin_mag == 4 ) THEN
         !
-        ALLOCATE( r_vec(i%m,2), rh(i%m) )
+        ALLOCATE( gradx(3,i%m,2) )
+        ALLOCATE( r_vec(i%m,2) )
         ALLOCATE( v2cud(i%m) )
-        IF ( igcc_is_lyp() ) ALLOCATE( grhor(i%m,2), grhoud(i%m) )
-        IF ( .NOT. igcc_is_lyp() ) ALLOCATE( zeta(i%m), grh2(i%m) )
         !
         !   this is the \sigma-GGA case
         !
+        !
 !$omp do
         DO ix = ix_s, ix_e
+           !
+           
            !
            CALL PAW_lm2rad( i, ix, rhoout_lm, rho_rad, nspin_gga )
            CALL PAW_gradient( i, ix, rhoout_lm, rho_rad, rho_core,grad2, grad )
@@ -811,38 +810,12 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
                r_vec(k,1) = rho_rad(k,1)*g(i%t)%rm2(k) + co2
                r_vec(k,2) = rho_rad(k,2)*g(i%t)%rm2(k) + co2
                !
-           END DO
+               !
+               gradx(:,k,1) = grad(k,:,1)
+               gradx(:,k,2) = grad(k,:,2)
+           ENDDO
            !
-           CALL gcx_spin( i%m, r_vec, grad2, sx, v1x, v2x )
-           !
-           !
-           rh = r_vec(:,1) + r_vec(:,2)
-           !
-           IF ( igcc_is_lyp() ) THEN
-              !
-              DO is = 1, 2
-                 grhor(:,is) = grad(:,1,is)**2 + grad(:,2,is)**2 + grad(:,3,is)**2
-              ENDDO
-              !
-              grhoud(:) = grad(:,1,1)*grad(:,1,2) + grad(:,2,1)*grad(:,2,2) + &
-                           grad(:,3,1)*grad(:,3,2)
-              !
-              CALL gcc_spin_more( i%m, r_vec, grhor, grhoud, sc, v1c, v2c, v2cud )
-              !
-           ELSE
-              !
-              zeta = 2.0_DP ! trash value, gcc-routines get rid of it when present
-              WHERE ( rh > epsr ) zeta = ( r_vec(:,1) - r_vec(:,2) ) / rh(:)
-              !
-              grh2 = (grad(:,1,1) + grad(:,1,2))**2 + (grad(:,2,1) + grad(:,2,2))**2 + &
-                     (grad(:,3,1) + grad(:,3,2))**2
-              !
-              CALL gcc_spin( i%m, rh, zeta, grh2, sc, v1c, v2c(:,1) )
-              !
-              v2c(:,2) = v2c(:,1) 
-              v2cud(:) = v2c(:,1)
-              !
-           ENDIF
+           CALL xc_gcx( i%m, 2, r_vec, gradx, sx, sc, v1x, v2x, v1c, v2c, v2cud )
            !
            DO k = 1, i%m
               !
@@ -871,11 +844,10 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
            !
         ENDDO ! ix
 !$omp end do nowait
-        DEALLOCATE( r_vec, rh )
-        DEALLOCATE( v2cud )
-        IF ( igcc_is_lyp() ) DEALLOCATE( grhor, grhoud )
-        IF ( .NOT. igcc_is_lyp() ) DEALLOCATE( zeta, grh2 )
         !
+        DEALLOCATE( gradx )
+        DEALLOCATE( r_vec )
+        DEALLOCATE( v2cud )
         !
     ELSE spin
     !
@@ -1615,7 +1587,7 @@ SUBROUTINE PAW_dxc_potential( i, drho_lm, rho_lm, rho_core, v_lm )
     USE noncollin_module,       ONLY : nspin_mag
     USE lsda_mod,               ONLY : nspin
     USE atom,                   ONLY : g => rgrid
-    USE funct,                  ONLY : dft_is_gradient, init_lda_xc
+    USE funct,                  ONLY : dft_is_gradient, init_xc
     !
     TYPE(paw_info), INTENT(IN) :: i                   ! atom's minimal info
     REAL(DP), INTENT(IN)  :: rho_lm(i%m,i%l**2,nspin_mag) ! charge density as 
@@ -1643,7 +1615,7 @@ SUBROUTINE PAW_dxc_potential( i, drho_lm, rho_lm, rho_core, v_lm )
     ALLOCATE(v_rad(i%m,rad(i%t)%nx,nspin_mag))
     ALLOCATE(dmuxc(i%m,nspin_mag,nspin_mag))
     !
-    CALL init_lda_xc()
+    CALL init_xc( 'LDA' )
     !
     DO ix = ix_s, ix_e
        !
@@ -1741,8 +1713,8 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
     USE lsda_mod,               ONLY : nspin
     USE atom,                   ONLY : g => rgrid
     USE constants,              ONLY : pi,e2, eps => eps12, eps2 => eps24
-    USE funct,                  ONLY : init_gga_xc
-    USE xc_gga,                 ONLY : gcxc, gcx_spin, gcc_spin
+    USE funct,                  ONLY : init_xc
+    USE xc_gga,                 ONLY : gcxc, gcx_spin, gcc_spin, libxc_switches_gga
     !
     TYPE(paw_info), INTENT(IN) :: i   ! atom's minimal info
     REAL(DP), INTENT(IN)    :: rho_lm(i%m,i%l**2,nspin_mag) ! charge density as lm components
@@ -1789,14 +1761,17 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
     !
     IF (TIMING) CALL start_clock( 'PAW_dgcxc_v' )
     !
-    CALL init_gga_xc()
+    CALL init_xc( 'GGA' )
+    !
+    IF ( SUM(libxc_switches_gga(:)) /= 0 )  CALL errore( 'PAW_dgcxc_potential', 'libxc derivatives of &
+                                                        &xc potentials for GGA not available yet', 1 )
     !
     zero    = 0.0_DP
     gc_rad  = 0.0_DP
     h_rad   = 0.0_DP
     vout_lm = 0.0_DP
     !
-    ALLOCATE( v1x(i%m,nspin_gga), v2x(i%m,nspin_gga) )     !con nspin_gga non serve allocare*********
+    ALLOCATE( v1x(i%m,nspin_gga), v2x(i%m,nspin_gga) )
     ALLOCATE( v1c(i%m,nspin_gga) )
     !
     ALLOCATE( vrrx(i%m,nspin_gga), vsrx(i%m,nspin_gga), vssx(i%m,nspin_gga) )
@@ -1836,7 +1811,7 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
           !
           CALL gcxc( i%m, arho, grad2(:,1), sx, sc, v1x, v2x, v1c, v2c )
           !
-          CALL dgcxc( i%m, arho, grad2(:,1), vrrx, vsrx, vssx, vrrc, vsrc, vssc ) !CONVIENE QUI VETTORIZZARE? (MEMO)
+          CALL dgcxc( i%m, arho, grad2(:,1), vrrx, vsrx, vssx, vrrc, vsrc, vssc )
           !
           DO k = 1, i%m
              !
