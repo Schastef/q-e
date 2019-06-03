@@ -147,8 +147,6 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
   REAL(DP), ALLOCATABLE :: vx_rho(:), vx_sigma(:)
   REAL(DP), ALLOCATABLE :: vc_rho(:), vc_sigma(:)
   !
-  REAL(DP), ALLOCATABLE :: aux1(:), aux2(:), aux3(:)
-  !
   INTEGER :: np
   REAL(DP) :: rs, rtot, zet, sgn(2), vc_2(2)
   REAL(DP), PARAMETER :: pi34 = 0.6203504908994_DP
@@ -224,6 +222,9 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     !
   ENDIF
   !
+  IF ( ns==1 .AND. SUM(libxc_switches_gga(:))/=2) &
+              CALL gcxc( length, rho(:,1), sigma, ex, ec, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )  
+  !
   ! --- GGA EXCHANGE
   !
   IF ( libxc_switches_gga(1) == 1 ) THEN
@@ -257,8 +258,6 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     IF ( ns == 1 ) THEN
        !
        ! ... This is the spin-unpolarised case
-       !
-       CALL gcxc( length, rho(:,1), sigma, ex, ec, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )
        !
        ex = ex*sign_v
        DO k = 1, length
@@ -318,32 +317,9 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
        !
        ! ... This is the spin-unpolarised case
        !
-       DO k = 1, length
-          arho(k,1) = ABS( rho(k,1) )
-          IF ( arho(k,1) > rho_threshold ) THEN
-             grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
-             IF ( grho2(k,1) > grho_threshold ) THEN
-                sign_v(k) = SIGN( 1._DP, rho(k,1) )
-             ELSE
-                arho(k,1)  = 0.5_DP
-                grho2(k,1) = 0.1_DP
-                sign_v(k)  = 0.0_DP
-             ENDIF
-          ELSE
-             arho(k,1)  = 0.5_DP
-             grho2(k,1) = 0.1_DP
-             sign_v(k)  = 0.0_DP
-          ENDIF
-       ENDDO
-       !
-       ALLOCATE( aux1(length), aux2(length), aux3(length))
-       CALL gcxc( length, arho(:,1), grho2(:,1), aux1, ec, aux2, aux3, v1c(:,1), v2c(:,1) )
-       DEALLOCATE( aux1, aux2, aux3 )
-       !
        ec = ec*sign_v
        sign_v = ABS(sign_v)
        v1c(:,1) = v1c(:,1)*sign_v  ;  v2c(:,1) = v2c(:,1)*sign_v
-       !
        !
     ELSE
        !

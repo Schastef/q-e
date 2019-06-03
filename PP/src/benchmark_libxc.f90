@@ -99,20 +99,8 @@ PROGRAM benchmark_libxc
   !            adding thw pw lda part (in qe)
   !
   !
-  !
-  !
   PRINT *, CHAR(10)//" --- BENCHMARK TEST BETWEEN QE AND LIBXC ---"//CHAR(10)//" "
   !
-  
-  ns=xc_f90_functional_get_number( 'xc_lda_c_gl' )
-  print *, 'asaas',ns
-  
-  return
-  
-  
-  
-  
-  
   WRITE (*,'(/,1x,a)', ADVANCE='no') "Derivative of xc?(y/n) "
   READ(*,*) f_q
   DF_OK = .FALSE.
@@ -268,7 +256,6 @@ PROGRAM benchmark_libxc
   rho_lxc = 0.0_DP
   IF ( GGA ) sigma = 0.0_DP
   !
-  !
   ! -------- Setting up an arbitrary input for both qe and libxc -----
   !
   ! ... qe
@@ -306,7 +293,6 @@ PROGRAM benchmark_libxc
                          grho(ii,3,1) * grho(ii,3,2)
            !
         ENDIF
-        
         !
      ENDIF
      !
@@ -363,18 +349,18 @@ PROGRAM benchmark_libxc
      !
      CALL select_lda_functionals( iexch_qe, icorr_qe )   ! ... EXCHANGE and CORRELATION
      !
-     IF ( DF_OK ) THEN   
-       IF ( .NOT.POLARIZED ) THEN   
-         CALL dmxc( nnr, rho_qe(:,1), dmuxc(:,1,1) )   
-       ELSE   
-         CALL dmxc_spin( nnr, rho_qe, dmuxc )
-       ENDIF   
-     ENDIF   
+     IF ( DF_OK ) THEN
+       IF ( .NOT.POLARIZED ) THEN
+         CALL dmxc_lda( nnr, rho_qe(:,1), dmuxc(:,1,1) )
+       ELSE
+         CALL dmxc_lsda( nnr, rho_qe, dmuxc )
+       ENDIF
+     ENDIF
      !  
      IF ( .NOT. POLARIZED ) THEN
-        CALL xc( nnr, rho_qe(:,1), ex_qe, ec_qe, vx_qe(:,1), vc_qe(:,1) )
+        CALL xc_lda( nnr, rho_qe(:,1), ex_qe, ec_qe, vx_qe(:,1), vc_qe(:,1) )
      ELSE
-        CALL xc_spin( nnr, rho_tot, zeta, ex_qe, ec_qe, vx_qe, vc_qe )
+        CALL xc_lsda( nnr, rho_tot, zeta, ex_qe, ec_qe, vx_qe, vc_qe )
      ENDIF
      !
      !
@@ -466,17 +452,12 @@ PROGRAM benchmark_libxc
            CALL dgcxc( nnr, rho_qe(:,1), grho2(:,1), vrrx(:,1), vsrx(:,1), vssx(:,1), &
                        vrrc(:,1), vsrc(:,1), vssc )
            !
-           !PRINT *, 'adasds',vrrx(1:nnr,1)
-           !CALL dmxc( nnr, rho_qe(:,1), dmuxc(:,1,1) )
         ELSE
            CALL dgcxc_spin( nnr, rho_qe, grho, vrrx, vsrx, vssx, vrrc, vsrc, &
                             vssc, vrzc )
-           !
-           !CALL dmxc_spin( nnr, rho_qe, dmuxc )
         ENDIF
         !
      ELSE
-        !
         ! 
         IF ( .NOT. POLARIZED ) THEN
           !
@@ -509,7 +490,6 @@ PROGRAM benchmark_libxc
            !
          ELSE
            CALL gcc_spin_more( nnr, rho_qe, grho2, grho_ud, ec_qe, v1c, v2c, v2c_ud )
-           !
            CALL lsd_lyp( nnr, rho_tot, zeta, ec_qe2, vc_qe2 )
            ec_qe(:) = ec_qe(:) + ec_qe2(:)*rho_tot(:)
            v1c(:,1) = v1c(:,1) + vc_qe2(:,1)
@@ -524,7 +504,7 @@ PROGRAM benchmark_libxc
      !ec_qe=ec_qe*2.d0
      !v1c = v1c * 2.d0
      !
-  ENDIF
+  ENDIF 
   !
   !------------------
   !
@@ -688,46 +668,53 @@ PROGRAM benchmark_libxc
           ENDIF
         ELSE
           PRINT *, " "   
-          PRINT *, "=== First derivative of xc functional: ==="  
+          PRINT *, "====== First derivative of xc functional: ==="  
           !
-!           IF ( .NOT. POLARIZED ) THEN
-!             WRITE (*,103) vrrx(ii,1), vsrx(ii,1), vssx(ii,1)
-!             WRITE (*,203) v2rho2_x(ii), v2rhosigma_x(ii)*2.d0, v2sigma2_x(ii)*4.d0
-!             PRINT *, " --- "
-!             WRITE (*,303) vrrx(ii,1)-v2rho2_x(ii), vsrx(ii,1)-v2rhosigma_x(ii)*2.d0, vssx(ii,1)-v2sigma2_x(ii)*4.d0
-!           ELSE   
-!             PRINT *, 'vrrx'
-!             WRITE (*,102) vrrx(ii,1), vrrx(ii,2)
-!             WRITE (*,202) v2rho2_x(3*ii-2), v2rho2_x(3*ii)
-!             PRINT *, " --- "
-!             WRITE (*,302) vrrx(ii,1)-v2rho2_x(3*ii-2), vrrx(ii,2)-v2rho2_x(3*ii)
-!             PRINT *, 'vsrx'
-!             WRITE (*,102) vsrx(ii,1), vsrx(ii,2)
-!             WRITE (*,202) v2rhosigma_x(6*ii-5)*2.d0, v2rhosigma_x(6*ii)*2.d0
-!             PRINT *, " --- "
-!             WRITE (*,303) vsrx(ii,1)-v2rhosigma_x(6*ii-5)*2, vsrx(ii,2)-v2rhosigma_x(6*ii)*2.d0
-!             PRINT *, 'vssx'
-!             WRITE (*,102) vssx(ii,1), vssx(ii,2)
-!             !
-!             WRITE (*,202) v2sigma2_x(6*ii-5)*4, v2sigma2_x(6*ii)*2
-!             !WRITE (*,203) v2sigma2_x(6*ii-5)*2, v2sigma2_x(6*ii-4), v2sigma2_x(6*ii-3)
-!             !WRITE (*,203) v2sigma2_x(6*ii-2), v2sigma2_x(6*ii-1), v2sigma2_x(6*ii)
-!             PRINT *, " --- "
-!             WRITE (*,302) vssx(ii,1)-v2sigma2_x(6*ii-5)*4, vssx(ii,2)-v2sigma2_x(6*ii)*4
-        
+          PRINT *, " "
+          PRINT *, "=== Exchange part ==="
+          !
+          IF ( .NOT. POLARIZED ) THEN
+            WRITE (*,103) vrrx(ii,1), vsrx(ii,1), vssx(ii,1)
+            WRITE (*,203) v2rho2_x(ii), v2rhosigma_x(ii)*2.d0, v2sigma2_x(ii)*4.d0
+            PRINT *, " --- "
+            WRITE (*,303) vrrx(ii,1)-v2rho2_x(ii), vsrx(ii,1)-v2rhosigma_x(ii)*2.d0, vssx(ii,1)-v2sigma2_x(ii)*4.d0
+          ELSE   
+            PRINT *, 'vrrx'
+            WRITE (*,102) vrrx(ii,1), vrrx(ii,2)
+            WRITE (*,202) v2rho2_x(3*ii-2), v2rho2_x(3*ii)
+            PRINT *, " --- "
+            WRITE (*,302) vrrx(ii,1)-v2rho2_x(3*ii-2), vrrx(ii,2)-v2rho2_x(3*ii)
+            PRINT *, 'vsrx'
+            WRITE (*,102) vsrx(ii,1), vsrx(ii,2)
+            WRITE (*,202) v2rhosigma_x(6*ii-5)*2.d0, v2rhosigma_x(6*ii)*2.d0
+            PRINT *, " --- "
+            WRITE (*,303) vsrx(ii,1)-v2rhosigma_x(6*ii-5)*2, vsrx(ii,2)-v2rhosigma_x(6*ii)*2.d0
+            PRINT *, 'vssx'
+            WRITE (*,102) vssx(ii,1), vssx(ii,2)
+            !
+            WRITE (*,202) v2sigma2_x(6*ii-5)*4, v2sigma2_x(6*ii)*2
+            !WRITE (*,203) v2sigma2_x(6*ii-5)*2, v2sigma2_x(6*ii-4), v2sigma2_x(6*ii-3)
+            !WRITE (*,203) v2sigma2_x(6*ii-2), v2sigma2_x(6*ii-1), v2sigma2_x(6*ii)
+            PRINT *, " --- "
+            WRITE (*,302) vssx(ii,1)-v2sigma2_x(6*ii-5)*4, vssx(ii,2)-v2sigma2_x(6*ii)*4
+          ENDIF
+          !
+          PRINT *, " "
+          PRINT *, "=== Corr part ==="
+          !
           IF ( .NOT. POLARIZED ) THEN
             WRITE (*,103) vrrc(ii,1), vsrc(ii,1), vssc(ii)
             WRITE (*,203) v2rho2_c(ii), v2rhosigma_c(ii)*2.d0, v2sigma2_c(ii)*4.d0
             PRINT *, " --- "
             WRITE (*,303) vrrc(ii,1)-v2rho2_c(ii), vsrc(ii,1)-v2rhosigma_c(ii)*2.d0, vssc(ii)-v2sigma2_c(ii)*4.d0
-          ELSE   
+          ELSE
             PRINT *, 'vrrc'
             WRITE (*,102) vrrc(ii,1), vrrc(ii,2)
-            WRITE (*,203) v2rho2_c(3*ii-2), v2rho2_c(3*ii-1), v2rho2_c(3*ii)
+            WRITE (*,203) v2rho2_c(3*ii-1), v2rho2_c(3*ii-2), v2rho2_c(3*ii)
             PRINT *, " --- "
             !WRITE (*,302) vrrc(ii,1)-v2rho2_c(3*ii-2), vrrc(ii,2)-v2rho2_c(3*ii)
             PRINT *, 'vsrc'
-            WRITE (*,102) vsrc(ii,1), vsrc(ii,2)
+            WRITE (*,102) vsrc(ii,1)+4.d0*vsrc(ii,2), vsrc(ii,2)
             WRITE (*,202) v2rhosigma_c(6*ii-5)*2.d0, v2rhosigma_c(6*ii)*2.d0
             !WRITE (*,203) v2rhosigma_c(6*ii-5), v2rhosigma_c(6*ii-4), v2rhosigma_c(6*ii-3)
             !WRITE (*,203) v2rhosigma_c(6*ii-2), v2rhosigma_c(6*ii-1), v2rhosigma_c(6*ii)
