@@ -223,7 +223,7 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
   ENDIF
   !
   IF ( ns==1 .AND. SUM(libxc_switches_gga(:))/=2) &
-              CALL gcxc( length, rho(:,1), sigma, ex, ec, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )  
+              CALL gcxc( length, rho_lxc, sigma, ex, ec, v1x(:,1), v2x(:,1), v1c(:,1), v2c(:,1) )  
   !
   ! --- GGA EXCHANGE
   !

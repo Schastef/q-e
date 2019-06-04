@@ -661,7 +661,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
     !
     !
     !^^^
-    REAL(DP), ALLOCATABLE :: sign_v(:), arho(:), grad2_v(:)
+    REAL(DP), ALLOCATABLE :: arho(:), grad2_v(:)
     REAL(DP), ALLOCATABLE :: r_vec(:,:) !, rh(:), zeta(:) !, grhor(:,:), grhoud(:), grh2(:)
     !
     REAL(DP), DIMENSION(i%m,nspin_gga) :: v1x, v2x, v1c, v2c  !workspace
@@ -744,7 +744,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
         !
         !     GGA case
         !
-        ALLOCATE( arho(i%m), sign_v(i%m), grad2_v(i%m) )
+        ALLOCATE( arho(i%m), grad2_v(i%m) )
         ALLOCATE( gradx(3,i%m,1))
         !
 !$omp do
@@ -756,7 +756,6 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
            !
            DO k = 1, i%m
               arho(k) = rho_rad(k,1)*g(i%t)%rm2(k) + rho_core(k)
-!               sign_v(k) = SIGN(1._DP,arho(k))
               arho(k) = ABS(arho(k))
               gradx(:,k,1) = grad(k,:,1)
            ENDDO
@@ -764,11 +763,10 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
            CALL xc_gcx( i%m, 1, arho, gradx, sx, sc, v1x, v2x, v1c, v2c )
            !
            DO k = 1, i%m
-              !vnull = ABS(sign_v(k))
               IF ( PRESENT(energy) ) &
-                 e_rad(k)     = e2 * (sx(k)+sc(k)) * g(i%t)%r2(k) !* sign_v(k)
-              gc_rad(k,ix,1)  = (v1x(k,1)+v1c(k,1)) !*vnull  !*g(i%t)%rm2(k)
-              h_rad(k,:,ix,1) = (v2x(k,1)+v2c(k,1))*grad(k,:,1)*g(i%t)%r2(k) !*vnull
+                 e_rad(k)     = e2 * (sx(k)+sc(k)) * g(i%t)%r2(k)
+              gc_rad(k,ix,1)  = (v1x(k,1)+v1c(k,1))  !*g(i%t)%rm2(k)
+              h_rad(k,:,ix,1) = (v2x(k,1)+v2c(k,1))*grad(k,:,1)*g(i%t)%r2(k)
            ENDDO
            !
            ! integrate energy (if required)
@@ -780,7 +778,7 @@ SUBROUTINE PAW_gcxc_potential(i, rho_lm,rho_core, v_lm, energy)
         ENDDO
 !$omp end do
         !
-        DEALLOCATE( arho, sign_v, grad2_v ) 
+        DEALLOCATE( arho, grad2_v ) 
         DEALLOCATE( gradx )
         !
         !
