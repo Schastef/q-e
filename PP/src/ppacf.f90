@@ -96,10 +96,8 @@ PROGRAM do_ppacf
   REAL(DP) :: ec_l, ecgc_l, Ec_nl
   REAL(DP) :: etxccc, etxcccnl, etxcccnlp, etxcccnlm, vtxccc, vtxccc_buf, vtxcccnl 
   !
-  REAL(DP) :: vtt(1)
-  !
   REAL(DP) :: grho2(2), sx(1), sc(1), scp, scm, &
-              etxcgc, vtxcgc, segno, fac, rh, grh2(1), amag, indx
+              etxcgc, vtxcgc, segno, rh, grh2(1)
   REAL(DP) :: v1x(1), v2x(1), v1c(1), v2c(1), v1cs(1,2), v1xs(1,2), v2xs(1,2)
   REAL(DP) :: dq0_dq  ! The derivative of the saturated
   REAL(DP) :: grid_cell_volume
@@ -277,32 +275,36 @@ PROGRAM do_ppacf
   ! ... calculate the gradient of rho + rho_core in real space
   ! ... note: input rho is (tot,magn), output rhoout, grho are (up,down)
   !
-  fac = 1.D0 / DBLE(nspin)
+  IF ( nspin == 1 ) THEN
+     !
+     rhoout (:,1) = rho_core(:)  + rho%of_r(:,1) 
+     rhogsum(:,1) = rhog_core(:) + rho%of_g(:,1)
+     !
+  ELSE IF ( nspin == 2 ) THEN
+     !
+     rhoout (:,1) = (rho_core(:)  + rho%of_r(:,1) + rho%of_r(:,2) )/2.0_dp
+     rhoout (:,2) = (rho_core(:)  + rho%of_r(:,1) - rho%of_r(:,2) )/2.0_dp
+     rhogsum(:,1) = (rhog_core(:) + rho%of_g(:,1) + rho%of_g(:,2) )/2.0_dp
+     rhogsum(:,2) = (rhog_core(:) + rho%of_g(:,1) - rho%of_g(:,2) )/2.0_dp
+     !
+  END IF
   !
   DO is = 1, nspin
-     indx = DBLE( nspin/2 * (1-2*(is/2)) ) ! +1 if is=1, -1 if is=2
-     rhoout(:,is)  = fac * ( rho_core(:)  + rho%of_r(:,1) + indx * rho%of_r(:,2) )
-     rhogsum(:,is) = fac * ( rhog_core(:) + rho%of_g(:,1) + indx * rho%of_g(:,2) )
-     !
-     CALL fft_gradient_g2r( dfftp, rhogsum(1,is), g, grho(1,1,is) )
-  ENDDO
+     CALL fft_gradient_g2r( dfftp, rhogsum(1,is), g, grho(1,1,is))
+  END DO
   !
   DEALLOCATE( rhogsum )
   !
-  IF (nspin == 1) THEN
-     tot_rho(:) = rhoout(:,1)
-  ELSEIF (nspin == 2) THEN
-     tot_rho(:) = rhoout(:,1)+rhoout(:,2)
-  ENDIF
+  tot_rho (:) = rho_core(:)  + rho%of_r(:,1) 
   !
-  CALL create_scf_type( exlda )
-  exlda%of_r(:,:) = 0._DP
-  CALL create_scf_type( eclda )
-  eclda%of_r(:,:) = 0._DP
-  CALL create_scf_type( tclda )
-  tclda%of_r(:,:) = 0._DP
-  CALL create_scf_type( exgc )
-  exgc%of_r(:,:) = 0._DP
+  CALL create_scf_type(exlda)
+  exlda%of_r(:,:)=0._DP
+  CALL create_scf_type(eclda)
+  eclda%of_r(:,:)=0._DP
+  CALL create_scf_type(tclda)
+  tclda%of_r(:,:)=0._DP
+  CALL create_scf_type(exgc)
+  exgc%of_r(:,:)=0._DP
   IF (dft_is_nonlocc()) THEN
      CALL create_scf_type( ecnl )
      CALL create_scf_type( tcnl )
