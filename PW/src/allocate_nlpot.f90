@@ -24,7 +24,6 @@ SUBROUTINE allocate_nlpot
   !     nqx           !  number of points of the interpolation table
   !     nqxq          !  as above, for q-function interpolation table
   !
-  !
   USE control_flags,    ONLY : tqr
   USE ions_base,        ONLY : nat, nsp
   USE cellmd,           ONLY : cell_factor
@@ -35,8 +34,8 @@ SUBROUTINE allocate_nlpot
   USE gvecw,            ONLY : ecutwfc
   USE us,               ONLY : qrad, tab, tab_d2y, tab_at, dq, nqx, &
                                nqxq, spline_ps
-  USE uspp,             ONLY : indv, nhtol, nhtolm, ijtoh, qq_at, qq_nt, dvan, &
-                               deeq, indv_ijkb0, okvan, nhtoj, &
+  USE uspp,             ONLY : indv, nhtol, nhtolm, ijtoh, qq_at, qq_nt, &
+                               dvan, deeq, indv_ijkb0, okvan, nhtoj, &
                                becsum, ebecsum, qq_so,dvan_so, deeq_nc
   USE uspp_param,       ONLY : upf, lmaxq, lmaxkb, nh, nhm, nbetam
   USE spin_orb,         ONLY : lspinorb, fcoef
@@ -44,7 +43,6 @@ SUBROUTINE allocate_nlpot
   IMPLICIT NONE
   !
   INTEGER :: nwfcm
-  !
   !
   ! Note: computation of the number of beta functions for
   ! each atomic type and the maximum number of beta functions
@@ -99,4 +97,3 @@ SUBROUTINE allocate_nlpot
 
   RETURN
 END SUBROUTINE allocate_nlpot
-

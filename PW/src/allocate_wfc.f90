@@ -10,25 +10,20 @@
 SUBROUTINE allocate_wfc()
   !----------------------------------------------------------------------------
   !
-  ! ... dynamical allocation of arrays: wavefunctions, projectors, kinetc energy
-  ! ... computes npwx as well (requires 
+  ! ... dynamical allocation of arrays: wavefunctions
+  ! ... Requires dimensions: npwx, nbnd, npol,natomwfc, nwfcU
   !
   USE io_global,        ONLY : stdout
-  USE wvfct,            ONLY : npwx, nbnd, g2kin
+  USE wvfct,            ONLY : npwx, nbnd
   USE basis,            ONLY : natomwfc, swfcatom
   USE fixed_occ,        ONLY : one_atom_occupations
   USE ldaU,             ONLY : wfcU, nwfcU, lda_plus_u, U_projection
-  USE noncollin_module, ONLY : noncolin, npol
+  USE noncollin_module, ONLY : npol
   USE wavefunctions,    ONLY : evc
   USE wannier_new,      ONLY : use_wannier
-  USE klist,            ONLY : xk, wk, nks
-  USE gvect,            ONLY : ngm, g
-  USE gvecw,            ONLY : gcutw
-  USE uspp,             ONLY : vkb, nkb, nkbus
   !
-  INTEGER, EXTERNAL :: n_plane_waves
+  IMPLICIT NONE
   !
-  npwx = n_plane_waves (gcutw, nks, xk, g, ngm)
   !
   ALLOCATE( evc( npwx*npol, nbnd ) )    
   IF ( one_atom_occupations .OR. use_wannier ) &
@@ -36,11 +31,40 @@ SUBROUTINE allocate_wfc()
   IF ( lda_plus_u .AND. (U_projection.NE.'pseudo') ) &
        ALLOCATE( wfcU(npwx*npol, nwfcU) )
   !
-  !   g2kin contains the kinetic energy \hbar^2(k+G)^2/2m
-  !
-  ALLOCATE (g2kin ( npwx ) )
-  ALLOCATE (vkb( npwx,  nkb))
-  !
   RETURN
   !
 END SUBROUTINE allocate_wfc
+!
+!----------------------------------------------------------------------------
+SUBROUTINE allocate_pw()
+  !----------------------------------------------------------------------------
+  !
+  ! ... dynamical allocation of arrays: wavefunctions, betas, kinetic energy
+  ! ... computes npwx, requires dimensions nbnd, npol, natomwfc, nwfcU
+  !
+  USE wvfct,            ONLY : npwx, g2kin
+  USE uspp,             ONLY : vkb, nkb
+  USE gvecw,            ONLY : gcutw
+  USE gvect,            ONLY : ngm, g
+  USE klist,            ONLY : xk, nks
+  IMPLICIT NONE
+  !
+  INTEGER, EXTERNAL :: n_plane_waves
+  !
+  !   calculate number of PWs for all kpoints
+  !
+  npwx = n_plane_waves (gcutw, nks, xk, g, ngm)
+  !
+  CALL allocate_wfc ( )
+  !
+  !   beta functions
+  !
+  ALLOCATE ( vkb(npwx,nkb) )
+  !
+  !   g2kin contains the kinetic energy \hbar^2(k+G)^2/2m
+  !
+  ALLOCATE ( g2kin(npwx) )
+  !
+  RETURN
+  !
+END SUBROUTINE allocate_pw
