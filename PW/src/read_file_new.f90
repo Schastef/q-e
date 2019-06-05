@@ -300,10 +300,9 @@ SUBROUTINE post_xml_init (  )
   IF (do_comp_esm) CALL esm_init()
   IF (do_cutoff_2D) CALL cutoff_fact()
   !
-  ! ... allocate the potential and wavefunctions
+  ! ... allocate local and nonlocal potential terms
   !
   CALL allocate_locpot()
-  ! NB: allocate_nlpot uses k-points to compute npwx and to allocate vkb
   CALL allocate_nlpot()
   IF (okpaw) THEN
      CALL allocate_paw_internals()
