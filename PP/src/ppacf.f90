@@ -185,8 +185,6 @@ PROGRAM do_ppacf
   lecnl_qxln = .FALSE.
   lecnl_qx = .FALSE.
   !
-  CALL init_xc( 'ALL' )
-  !
   IF (ionode) THEN
      !
      CALL input_from_file()
@@ -319,6 +317,8 @@ PROGRAM do_ppacf
      tcgc%of_r(:,:) = 0._DP
   ENDIF
   ttclda = 0._DP
+  !
+  CALL init_xc( 'ALL' )
   !
   ! ... coupling constant > 0
   ! 
@@ -531,7 +531,7 @@ PROGRAM do_ppacf
      ! 
      grid_cell_volume = omega/DBLE(dfftp%nr1*dfftp%nr2*dfftp%nr3)
      etx = etx * grid_cell_volume
-     etc = etx * grid_cell_volume
+     etc = etc * grid_cell_volume
      etxlda = etxlda * grid_cell_volume
      etclda = etclda * grid_cell_volume
      etxgc = etxgc * grid_cell_volume
