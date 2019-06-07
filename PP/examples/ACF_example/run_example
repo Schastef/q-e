@@ -1,0 +1,14 @@
+
+PW_COMMAND=mpirun -np 8 ../../../bin/pw.x
+ACF_COMMAND=mpirun -np 2 ../../src/ppacf.x
+
+for dir in pbe vdw-df-cx; do
+    cd $dir
+    mkdir results_$dir
+    cd results_$dir
+    $PW_COMMAND  -i ../reference_$dir/atoms.in > atoms.out
+    $ACF_COMMAND -i ../reference_$dir/ppacf_scale.in > ppacf_scale.out
+    $ACF_COMMAND -i ../reference_$dir/ppacf_plot.in  > ppacf_plot.out
+    $ACF_COMMAND -i ../reference_$dir/ppacf_fock.in  > ppacf_fock.out
+    cd ..
+done
