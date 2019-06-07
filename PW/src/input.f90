@@ -1639,6 +1639,7 @@ SUBROUTINE iosys()
   CALL xc_f90_func_init( xc_func, xc_info, igcx, 1 )  
   family = xc_f90_info_family( xc_info )
   IF (family == XC_FAMILY_HYB_GGA) CALL xc_f90_hyb_exx_coef( xc_func, exx_fraction )
+  CALL xc_f90_func_end( xc_func )
 #endif
   IF (exx_fraction >= 0.0_DP) CALL set_exx_fraction (exx_fraction)
   !
