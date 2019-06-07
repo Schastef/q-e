@@ -26,7 +26,7 @@ PROGRAM benchmark_libxc
   INTEGER, PARAMETER :: DP = SELECTED_REAL_KIND(14,200)
   INTEGER, PARAMETER :: nnr = 6
   CHARACTER(LEN=120) :: aprx, e_q, f_q
-  INTEGER :: ii, ns, np, quit, i_sub
+  INTEGER :: ii, ns, np, quit, i_sub, family
   REAL(DP) :: exx_frctn
   LOGICAL :: LDA, GGA, POLARIZED, ENERGY_ONLY, DF_OK
   REAL(DP), PARAMETER :: null = 0.0_DP, pi34 = 0.6203504908994_DP
