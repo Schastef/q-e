@@ -62,7 +62,7 @@ MODULE funct
   PUBLIC  :: init_dft_exxrpa, enforce_dft_exxrpa
   !
   ! driver subroutines computing XC
-  PUBLIC  :: init_xc !init_lda_xc, init_gga_xc
+  PUBLIC  :: init_xc, is_libxc
   PUBLIC  :: tau_xc , tau_xc_spin
   PUBLIC  :: tau_xc_array, tau_xc_array_spin
   PUBLIC  :: nlc
@@ -70,7 +70,6 @@ MODULE funct
   ! PRIVATE variables defining the DFT functional
   !
   PRIVATE :: dft, iexch, icorr, igcx, igcc, imeta, inlc
-  PRIVATE :: is_libxc
   PRIVATE :: discard_input_dft
   PRIVATE :: isgradient, ismeta, ishybrid
   PRIVATE :: exx_fraction, exx_started
