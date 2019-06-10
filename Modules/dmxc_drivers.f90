@@ -133,10 +133,7 @@ SUBROUTINE dmxc( length, sr_d, rho_in, dmuxc )
   SELECT CASE( sr_d )
   CASE( 1 )
      !
-     CALL dmxc_lda( length, rho_aux(:,1), dmuxc(:,1,1) )
-     !
-     dmuxc(:,1,1) = dmuxc(:,1,1) * SIGN(1.d0, rho_in(:,1))
-     DEALLOCATE( rho_aux(length,1) )
+     CALL dmxc_lda( length, rho_in(:,1), dmuxc(:,1,1) )
      !
   CASE( 2 )
      !
