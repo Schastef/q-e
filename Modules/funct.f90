@@ -626,7 +626,6 @@ CONTAINS
        inlc  = matching( 6, dftout, ncnl,  nonlocc, is_libxc(6) )
     ENDIF
     !
-    !
     !----------------------------------------------------------------
     ! Last check
     ! No more defaults, the code exits if the dft is not defined
@@ -685,6 +684,8 @@ CONTAINS
        WRITE (stdout,*) inlc, save_inlc
        CALL errore( 'set_dft_from_name', ' conflicting values for inlc',  1 )
     ENDIF
+    !
+    CALL init_xc( 'ALL' )
     !
     RETURN
     !
@@ -957,12 +958,14 @@ CONTAINS
      IF (.NOT. ishybrid) &
         CALL errore( 'start_exx', 'dft is not hybrid, wrong call', 1 )
      exx_started = .TRUE.
+     CALL init_xc( 'ALL' )
   END SUBROUTINE start_exx
   !-----------------------------------------------------------------------
   SUBROUTINE stop_exx
      IF (.NOT. ishybrid) &
         CALL errore( 'stop_exx', 'dft is not hybrid, wrong call', 1 )
      exx_started = .FALSE.
+     CALL init_xc( 'ALL' )
   END SUBROUTINE stop_exx
   !-----------------------------------------------------------------------
   SUBROUTINE dft_force_hybrid( request )
@@ -1349,9 +1352,9 @@ SUBROUTINE init_xc( family )
                                                    & indexes not well defined', 1 )
      !
      ! hybrid exchange vars
-     exx_started_l  = exx_is_active()
+     exx_started_l  = exx_started !is_active()
      exx_fraction_l = 0._DP
-     IF ( exx_started ) exx_fraction_l = get_exx_fraction()
+     IF ( exx_started_l ) exx_fraction_l = get_exx_fraction()
      !
      ! finite size correction vars
      CALL get_finite_size_cell_volume( is_there_finite_size_corr, &
@@ -1370,9 +1373,9 @@ SUBROUTINE init_xc( family )
                                                   & indexes not well defined', 2 )     
      !
      ! hybrid exchange vars
-     exx_started_g  = exx_is_active()
+     exx_started_g  = exx_started !is_active()
      exx_fraction_g = 0._DP
-     IF ( exx_started ) exx_fraction_g = get_exx_fraction()
+     IF ( exx_started_g ) exx_fraction_g = get_exx_fraction()
      !
      screening_parameter_l = get_screening_parameter()
      gau_parameter_l = get_gau_parameter()
