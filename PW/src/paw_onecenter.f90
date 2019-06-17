@@ -1721,7 +1721,7 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
     REAL(DP)                :: div_h(i%m,i%l**2,nspin_gga)  ! div(hamiltonian)
     !
     !^^^ 
-    REAL(DP), ALLOCATABLE :: r(:,:), rh(:), rho(:), zeta(:), arho(:), grh2(:), sign_v(:)
+    REAL(DP), ALLOCATABLE :: r(:,:), rh(:), rho(:), zeta(:), arho(:), grh2(:)
     REAL(DP), ALLOCATABLE :: v1x(:,:), v2x(:,:), v1c(:,:)
     REAL(DP), ALLOCATABLE :: vrrx(:,:), vsrx(:,:), vssx(:,:), &
                              vrrc(:,:), vsrc(:,:), vssc(:), vrzc(:,:)
@@ -1758,7 +1758,7 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
        !
        !     GGA case - no spin polarization
        !
-       ALLOCATE( arho(i%m), sign_v(i%m) )
+       ALLOCATE( arho(i%m) )
        !
        DO ix = ix_s, ix_e
           !
@@ -1767,20 +1767,11 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
           CALL PAW_lm2rad(i, ix, drho_lm, drho_rad, nspin_mag)
           CALL PAW_gradient(i, ix, drho_lm, drho_rad, zero, dgrad2, dgrad)
           !
-          sign_v = 1._DP
-          !
           DO k = 1, i%m
              !
              ! ... arho_v is the absolute value of real charge, sgn is its sign
              arho(k) = rho_rad(k,1)*g(i%t)%rm2(k) + rho_core(k)
              arho(k) = ABS(arho(k))
-             !
-             ! ... using grad(rho)**2 here, so its eps has to be eps**2
-             IF ( arho(k)<eps .OR. grad2(k,1)<eps2 ) THEN
-                arho(k) = 0.5_DP
-                grad2(k,1) = 0.2_DP
-                sign_v(k)  = 0.0_DP
-             ENDIF
              !
           ENDDO
           !
@@ -1801,17 +1792,17 @@ SUBROUTINE PAW_dgcxc_potential(i,rho_lm,rho_core, drho_lm, v_lm)
              dvxc_s  = v2x(k,1)  + v2c(k)
              !
              gc_rad(k,ix,1)  = dvxc_rr * drho_rad(k,1) * g(i%t)%rm2(k) &
-                               + dvxc_sr * s1 * sign_v(k)
+                               + dvxc_sr * s1
              !
              h_rad(k,:,ix,1) = ( (dvxc_sr * drho_rad(k,1) * g(i%t)%rm2(k) + &
                                   dvxc_ss*s1) * grad(k,:,1) + &
-                                  dvxc_s*dgrad(k,:,1) ) * g(i%t)%r2(k) * sign_v(k)
+                                  dvxc_s*dgrad(k,:,1) ) * g(i%t)%r2(k)
              !
           ENDDO
           !
        ENDDO
        !
-       DEALLOCATE( arho, sign_v )
+       DEALLOCATE( arho )
        !
        !
     ELSEIF ( nspin_mag==2 .OR. nspin_mag==4 ) THEN
