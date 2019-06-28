@@ -306,7 +306,7 @@ SUBROUTINE check_initial_status(auxdyn)
      ! ... each q /= gamma works on a different directory. We create them
      ! here and copy the charge density inside
      !
-     IF ((.NOT.lgamma.OR. newgrid).AND.lqdir) THEN
+     IF ((.NOT.lgamma.OR. newgrid .OR. (qplot .AND. iq /=1)) .AND.lqdir) THEN
         tmp_dir_phq= trimcheck ( TRIM (tmp_dir_ph) // TRIM(prefix) // &
                                 & '.q_' // int_to_char(iq) ) 
         filename=TRIM(tmp_dir_phq)//TRIM(prefix)//postfix//'charge-density.dat'
