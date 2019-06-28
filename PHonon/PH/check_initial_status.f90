@@ -309,7 +309,11 @@ SUBROUTINE check_initial_status(auxdyn)
      IF ((.NOT.lgamma.OR. newgrid .OR. (qplot .AND. iq /=1)) .AND.lqdir) THEN
         tmp_dir_phq= trimcheck ( TRIM (tmp_dir_ph) // TRIM(prefix) // &
                                 & '.q_' // int_to_char(iq) ) 
+#if defined(__HDF5)
+        filename=TRIM(tmp_dir_phq)//TRIM(prefix)//postfix//'charge-density.hdf5' 
+#else
         filename=TRIM(tmp_dir_phq)//TRIM(prefix)//postfix//'charge-density.dat'
+#endif 
         IF (ionode) inquire (file =TRIM(filename), exist = exst)
         !
         CALL mp_bcast( exst, ionode_id, intra_image_comm )
