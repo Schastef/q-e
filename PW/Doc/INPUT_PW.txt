@@ -3,7 +3,7 @@
 ------------------------------------------------------------------------
 INPUT FILE DESCRIPTION
 
-Program: pw.x / PWscf / Quantum Espresso (version: svn)
+Program: pw.x / PWscf / Quantum Espresso (version: git)
 ------------------------------------------------------------------------
 
 
@@ -66,6 +66,7 @@ if (automatic)
 if (not automatic)
    nks
    xk_x, xk_y, xk_z,  wk
+if (tpipa_b or crystal_b in a 'bands' calculation) see Doc/brillouin_zones.pdf
 
 [ CELL_PARAMETERS { alat | bohr | angstrom }
    v1(1) v1(2) v1(3)
@@ -486,7 +487,16 @@ NAMELIST: &SYSTEM
                      see below for the other parameters.
                      For ibrav=0 specify the lattice vectors in "CELL_PARAMETERS",
                      optionally the lattice parameter alat = celldm(1) (in a.u.)
-                     or = A (in Angstrom), or else it is taken from "CELL_PARAMETERS"
+                     or = A (in Angstrom). If not specified, the lattice parameter is
+                     taken from "CELL_PARAMETERS"
+                     IMPORTANT NOTICE 1:
+                     with ibrav=0 lattice vectors must be given with a sufficiently large
+                     number of digits and with the correct symmetry, or else symmetry
+                     detection may fail and strange problems may arise in symmetrization.
+                     IMPORTANT NOTICE 2:
+                     do not use celldm(1) or A as a.u. to Ang conversion factor,
+                     use the true lattice parameters or nothing,
+                     specify units in "CELL_PARAMETERS" and "ATOMIC_POSITIONS"
                    
                    ibrav      structure                   celldm(2)-celldm(6)
                                                         or: b,c,cosbc,cosac,cosab
@@ -2686,7 +2696,7 @@ NAMELIST: &CELL
                         all axis and angles are moved
     
                    'ibrav' :
-                        all axis and angles are moved, but the lattice but be representable with the initial ibrav choice
+                        all axis and angles are moved, but the lattice remains consistent with the initial ibrav choice
     
                    'x' :
                         only the x component of axis 1 (v1_x) is moved
@@ -3017,7 +3027,8 @@ CARD: K_POINTS { tpiba | automatic | crystal | gamma | tpiba_b | crystal_b | tpi
        
                       tpiba_b :
                            Used for band-structure plots.
-                           k-points are in units of  2 pi/a.
+                           See Doc/brillouin_zones.pdf for usage of BZ labels;
+                           otherwise, k-points are in units of  2 pi/a.
                            nks points specify nks-1 lines in reciprocal space.
                            Every couple of points identifies the initial and
                            final point of a line. pw.x generates N intermediate
@@ -3025,6 +3036,7 @@ CARD: K_POINTS { tpiba | automatic | crystal | gamma | tpiba_b | crystal_b | tpi
        
                       crystal_b :
                            As tpiba_b, but k-points are in crystal coordinates.
+                           See Doc/brillouin_zones.pdf for usage of BZ labels.
        
                       tpiba_c :
                            Used for band-structure contour plots.
@@ -3336,4 +3348,4 @@ CARD: ATOMIC_FORCES
 ===END OF CARD==========================================================
 
 
-This file has been created by helpdoc utility on Fri Mar 01 18:05:30 CET 2019
+This file has been created by helpdoc utility on Wed Jul 10 12:00:28 CEST 2019

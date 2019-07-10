@@ -483,6 +483,11 @@ and for thermalization using velocity rescaling are available.
 Remember: this is MD on the electronic ground state, not
 Car-Parrinello MD.
 See example 3.
+During molecular dynamics simulations the number of ionic steps may easily become very large and 
+printing all of them in the xml data file may be unfeasible, for this reasone if you plan to run a 
+MD trajectory  with many thousands of time steps it is better before running to set the environment
+variable \texttt{MAX\_XML\_STEPS} to a small number. The time steps printed in the xml file will be 
+distributed uniformly along the trajectory always including the first and the last step.   
 
 \paragraph{Free-energy surface calculations}
 
