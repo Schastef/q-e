@@ -315,7 +315,6 @@ SUBROUTINE write_lowdin ( filproj, nat, lmax_wfc, nspin, charges, charges_lm )
      !
      DO na = 1, nat
         DO is = 1, nspin
-          WRITE(stdout, *) is, nspin, charges(na,0:lmax_wfc,is)
           totcharge(is) = SUM(charges(na,0:lmax_wfc,is))
         ENDDO
         IF ( nspin == 1) THEN
