@@ -44,7 +44,7 @@ MODULE noncollin_module
       vtcon,               &!  contribution of the constraining fields to
                             !  the total energy
       r_m(ntypx) = 0.0d0,  &!  Radius for local integrations for each type
-      lambda                !  prefactor in the penalty functional 
+      lambda(ntypx)         !  prefactor in the penalty functional 
                             !  for constraints
   !
   REAL (DP), ALLOCATABLE :: &

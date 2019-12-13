@@ -12,7 +12,7 @@ MODULE parameters
   SAVE
 
   INTEGER, PARAMETER :: &
-       ntypx  = 10,     &! max number of different types of atom
+       ntypx  = 50,     &! max number of different types of atom
        npsx   = ntypx,  &! max number of different PPs (obsolete)
        nsx    = ntypx,  &! max number of atomic species (CP)
        npk    = 40000,  &! max number of k-points               

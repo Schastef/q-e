@@ -21,6 +21,9 @@ SUBROUTINE add_bfield( v, rho )
   ! 
   !! NB: So far, the contribution of the orbital currents 
   !! to the magnetization is not included.
+  !! 
+  !!@Note lambda become atomic type dependent, lambda(1) is use for all the c
+  !!      constraints on total magnetization. 
   !
   USE kinds,            ONLY : DP
   USE constants,        ONLY : pi
@@ -76,7 +79,7 @@ SUBROUTINE add_bfield( v, rho )
            m2(1:npol,na) = m_loc(1:npol,na) - mcons(1:npol,nt)
            !
            DO ipol = 1, npol
-              etcon = etcon + lambda * m2(ipol,na)*m2(ipol,na) 
+              etcon = etcon + lambda(nt) * m2(ipol,na)*m2(ipol,na) 
            ENDDO
            !
         ELSEIF (i_cons==2) THEN
@@ -99,7 +102,7 @@ SUBROUTINE add_bfield( v, rho )
            m2(2,na) = - xx*m_loc(2,na)*m_loc(3,na) / (ma*ma*ma)
            m2(3,na) =   xx*(-m_loc(3,na)*m_loc(3,na) / (ma*ma*ma) + 1.d0/ma)
            !
-           etcon = etcon + lambda * (m_loc(3,na)/ma - mcons(3,nt))**2
+           etcon = etcon + lambda(nt) * (m_loc(3,na)/ma - mcons(3,nt))**2
            !
         ENDIF
         !
@@ -109,7 +112,7 @@ SUBROUTINE add_bfield( v, rho )
         !
         DO ir = 1, dfftp%nnr
            IF (pointlist(ir) == 0 ) CYCLE
-           fact = 2.D0*lambda*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
+           fact = 2.D0*lambda(pointlist(ir))*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
            DO ipol = 1,3
               v(ir,ipol+1) = v(ir,ipol+1) + fact*m2(ipol,pointlist(ir))
            ENDDO       ! ipol
@@ -119,7 +122,7 @@ SUBROUTINE add_bfield( v, rho )
         !
         DO ir = 1, dfftp%nnr
            IF (pointlist(ir) == 0 ) CYCLE
-           fact = 2.D0*lambda*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
+           fact = 2.D0*lambda(pointlist(ir))*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
            v(ir,1) = v(ir,1) + fact*m2(1,pointlist(ir))
            v(ir,2) = v(ir,2) - fact*m2(1,pointlist(ir))
         ENDDO      ! points
@@ -142,14 +145,14 @@ SUBROUTINE add_bfield( v, rho )
      !
      IF (i_cons==3) THEN
        IF (npol==1) THEN
-          fact = 2.D0*lambda
+          fact = 2.D0*lambda(1)
           bfield(1) = -fact*(m1(1) - mcons(1,1))
           DO ir = 1, dfftp%nnr
              v(ir,1) = v(ir,1) - bfield(1)
              v(ir,2) = v(ir,2) + bfield(1)
           ENDDO
        ELSE
-          fact = 2.D0*lambda
+          fact = 2.D0*lambda(1)
           DO ipol=1,3
              bfield(ipol) = -fact*(m1(ipol) - mcons(ipol,1))
              DO ir = 1, dfftp%nnr
@@ -188,8 +191,8 @@ SUBROUTINE add_bfield( v, rho )
        ENDIF
        fact1(3) = - SQRT(1.D0 - (m1(3)/ma)**2)/ma
        !
-       etcon = lambda * xx**2
-       bfield(:) = 2.D0 * lambda * xx * fact1(:)
+       etcon = lambda(1) * xx**2
+       bfield(:) = 2.D0 * lambda (1)* xx * fact1(:)
        !
        DO ipol = 1, 3
           DO ir = 1, dfftp%nnr
@@ -206,7 +209,7 @@ SUBROUTINE add_bfield( v, rho )
        ! magnetizations will coincide (and so will do the polar angles).
        WRITE(stdout,'(5x,"theta (target): ",F10.5,"     (",F10.5,")")') &
               ACOS(m1(3)/ma)*180.d0/pi, mcons(3,1)
-       WRITE(stdout,'(5x,"E_constraint:  ",F15.9," (lambda:",F15.9,")")') etcon, lambda
+       WRITE(stdout,'(5x,"E_constraint:  ",F15.9," (lambda:",F15.9,")")') etcon, lambda(1) 
        WRITE(stdout,'(5x,"External magnetic field: ", 3F12.6)') bfield(1:npol)
        ! WRITE(stdout,'(5x,"Magnetization          : ", 3F12.6)') m1(1:npol)
        !

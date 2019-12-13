@@ -1248,6 +1248,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
        USE constants, ONLY : eps8
        INTEGER, INTENT (IN) :: printout
        !
+       INTEGER              :: isp 
    
        IF ( printout == 0 ) RETURN
        IF ( ( conv_elec .OR. MOD(iter,iprint) == 0 ) .AND. printout > 1 ) THEN
@@ -1335,8 +1336,13 @@ SUBROUTINE electrons_scf ( printout, exxen )
        !
        IF ( i_cons == 3 .OR. i_cons == 4 )  &
             WRITE( stdout, 9071 ) bfield(1), bfield(2), bfield(3)
-       IF ( i_cons /= 0 .AND. i_cons < 4 ) &
-            WRITE( stdout, 9073 ) lambda
+       IF ( i_cons ==1  .OR. i_cons == 2  ) THEN 
+          DO isp = 1, nsp
+             IF (lambda(isp) > 0._DP ) WRITE (stdout, 9173) isp, lambda(isp) 
+          END DO
+       ELSE IF (i_cons == 3 .OR. i_cons == 6) THEN 
+          WRITE( stdout, 9073 ) lambda
+       END IF 
        !
        FLUSH( stdout )
        !
@@ -1379,6 +1385,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
 9084 FORMAT( '     estimated scf accuracy    <',1PE17.1,' Ry' )
 9085 FORMAT(/'     total all-electron energy =',0PF17.6,' Ry' )
 9170 FORMAT( '     internal energy E=F+TS    =',0PF17.8,' Ry' )
+9173 FORMAT( '     lambda(',I3,')            =',0PF17.8,' Ry' )
   END SUBROUTINE print_energies
   !
 END SUBROUTINE electrons_scf

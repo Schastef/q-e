@@ -528,11 +528,11 @@
  
      CASE ("total","total direction") 
           obj%spin_constraints_ispresent=.TRUE.
-          CALL qexsd_init_spin_constraints(obj%spin_constraints, constrained_magnetization,lambda,&
+          CALL qexsd_init_spin_constraints(obj%spin_constraints, constrained_magnetization,lambda(1),&
                                           fixed_magnetization)
      CASE ("atomic", "atomic direction")
           obj%spin_constraints_ispresent=.TRUE.
-          CALL qexsd_init_spin_constraints(obj%spin_constraints, constrained_magnetization, lambda )
+          CALL qexsd_init_spin_constraints(obj%spin_constraints, constrained_magnetization, lambda(1) )
      CASE default 
           obj%spin_constraints_ispresent=.FALSE.
   END SELECT

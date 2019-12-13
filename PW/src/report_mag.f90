@@ -18,7 +18,7 @@ SUBROUTINE report_mag
       USE io_global,        ONLY: stdout
       use constants,        ONLY: pi
       USE scf,              ONLY: rho
-      USE noncollin_module, ONLY: noncolin, mcons, i_cons
+      USE noncollin_module, ONLY: noncolin, mcons, i_cons, lambda
       USE lsda_mod,         ONLY: nspin
       !
       IMPLICIT NONE
@@ -76,9 +76,9 @@ SUBROUTINE report_mag
             WRITE( stdout,1012) (m1_loc(ipol,iat),ipol=1,3)
             WRITE( stdout,1018) (m1_loc(ipol,iat)/r1_loc(iat),ipol=1,3)
             WRITE( stdout,1013) norm,theta,phi
-            IF (i_cons==1) THEN
+            IF (i_cons==1 .AND. lambda(ityp(iat)) > 0._DP)  THEN
                WRITE( stdout,1015) (mcons(ipol,ityp(iat)),ipol=1,3)
-            ELSEIF (i_cons==2) THEN
+            ELSEIF (i_cons==2 .AND. lambda(ityp(iat)) > 0._DP) THEN
                WRITE( stdout,1017) 180.d0 * ACOS(mcons(3,ityp(iat)))/pi
             ENDIF
             WRITE( stdout,1010)

@@ -467,7 +467,7 @@ MODULE input_parameters
         LOGICAL  :: lspinorb = .false.
         LOGICAL  :: lforcet=.FALSE.
         LOGICAL  :: starting_spin_angle=.FALSE.
-        REAL(DP) :: lambda = 1.0_DP
+        REAL(DP) :: lambda(nsx)  = 0.0_DP
         REAL(DP) :: fixed_magnetization(3) = 0.0_DP
         REAL(DP) :: angle1(nsx) = 0.0_DP
         REAL(DP) :: angle2(nsx) = 0.0_DP

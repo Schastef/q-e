@@ -254,7 +254,7 @@ MODULE read_namelists_module
        lforcet = .FALSE.
        starting_spin_angle=.FALSE.
        noncolin = .FALSE.
-       lambda = 1.0_DP
+       lambda = 0.0_DP
        constrained_magnetization= 'none'
        fixed_magnetization = 0.0_DP
        B_field = 0.0_DP

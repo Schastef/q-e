@@ -655,6 +655,10 @@ SUBROUTINE iosys()
      !
   CASE( 'atomic' )
      !
+     IF (ALL(lambda == 0._DP)) &
+        CALL errore('input.f90/iosys:', &
+        'for the constraint on atomic magnetization one has to specify lambda for at least one species', 1) 
+
      IF ( nspin == 1 ) &
         CALL errore( 'iosys','constrained atomic magnetizations ' // &
                    & 'require nspin=2 or 4 ', 1 )
@@ -687,6 +691,9 @@ SUBROUTINE iosys()
      !
   CASE( 'atomic direction' )
      !
+     IF (ALL(lambda == 0._DP)) &
+        CALL errore('input.f90/iosys:', &
+        'for the atomic direction constraint one has to specify lambda for at least one species', 1) 
      IF ( nspin == 1 ) &
         CALL errore( 'iosys','constrained atomic magnetization ' // &
                    & 'directions require nspin=2 or 4 ', 1 )
@@ -705,6 +712,9 @@ SUBROUTINE iosys()
      !
   CASE( 'total' )
      !
+     IF (ALL(lambda==0._DP)) THEN 
+        lambda(1) = 1.0_DP 
+     END IF 
      IF ( nspin == 4 ) THEN
         !
         i_cons = 3
