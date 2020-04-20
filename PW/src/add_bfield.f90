@@ -112,7 +112,7 @@ SUBROUTINE add_bfield( v, rho )
         !
         DO ir = 1, dfftp%nnr
            IF (pointlist(ir) == 0 ) CYCLE
-           fact = 2.D0*lambda(pointlist(ir))*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
+           fact = 2.D0*lambda(ityp(pointlist(ir)))*factlist(ir)*omega/(dfftp%nr1*dfftp%nr2*dfftp%nr3)
            DO ipol = 1,3
               v(ir,ipol+1) = v(ir,ipol+1) + fact*m2(ipol,pointlist(ir))
            ENDDO       ! ipol
