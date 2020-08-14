@@ -155,6 +155,20 @@ pgi cuda9 v100 CP:
     - make clean
     - make run-tests-cp-serial
 
+
+pgi cuda10 v100 power:
+  tags: [marconi100]
+  script:
+    - module purge
+    - module load pgi/19.10--binary cuda/10.1 spectrum_mpi/10.3.1--binary  python/3.8.2
+    - ./configure CC=pgcc F77=pgf90 FC=pgf90 F90=pgf90 MPIF90=mpipgifort --enable-openmp --with-cuda=$CUDA_ROOT --with-cuda-runtime=10.1 --with-cuda-cc=70
+    - make -j pw cp
+    - if [ -z ${SLURM_CPUS_PER_TASK} ]; then export OMP_NUM_THREADS=1; else export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK; fi
+    - echo "Using $OMP_NUM_THREADS threads"
+    - cd test-suite
+    - make clean
+    - make run-tests-pw-parallel
+
 #pgi cuda9.2 p100 nollvm:
 #  tags: [p100]
 #  script:
