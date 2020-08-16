@@ -156,7 +156,7 @@ pgi cuda9 v100 CP:
     - make run-tests-cp-serial
 
 
-pgi cuda10 v100 power:
+pgi191 cuda10 v100 power:
   tags: [marconi100]
   script:
     - module purge
@@ -166,7 +166,24 @@ pgi cuda10 v100 power:
     - ./configure CC=pgcc F77=pgf90 FC=pgf90 F90=pgf90 MPIF90=mpipgifort --enable-openmp --with-cuda=$CUDA_ROOT --with-cuda-runtime=10.1 --with-cuda-cc=70
     - make -j pw cp
     - salloc --nodes=1 --ntasks-per-node=4 --ntasks-per-socket=2 --cpus-per-task=32 --gres=gpu:4 --mem=230000MB --time 01:00:00 -A $CINECA_QE_ACCOUNT -p m100_usr_prod
-    - if [ -z ${SLURM_CPUS_PER_TASK} ]; then export OMP_NUM_THREADS=1; else export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK; fi
+    - if [ -z ${SLURM_CPUS_PER_TASK} ]; then export OMP_NUM_THREADS=1; else export OMP_NUM_THREADS=8; fi
+    - echo "Using $OMP_NUM_THREADS threads"
+    - cd test-suite
+    - make clean
+    - make run-tests-pw-parallel
+    - exit
+
+pgi207 cuda10 v100 power:
+  tags: [marconi100]
+  script:
+    - module purge
+    - module load profile/global hpc-sdk/2020--binary cuda/10.1 spectrum_mpi/10.3.1--binary python/3.8.2
+    - pwd
+    - cd ..
+    - ./configure CC=pgcc F77=pgf90 FC=pgf90 F90=pgf90 MPIF90=mpipgifort --enable-openmp --with-cuda=$CUDA_ROOT --with-cuda-runtime=10.1 --with-cuda-cc=70
+    - make -j pw cp
+    - salloc --nodes=1 --ntasks-per-node=4 --ntasks-per-socket=2 --cpus-per-task=32 --gres=gpu:4 --mem=230000MB --time 01:00:00 -A $CINECA_QE_ACCOUNT -p m100_usr_prod
+    - if [ -z ${SLURM_CPUS_PER_TASK} ]; then export OMP_NUM_THREADS=1; else export OMP_NUM_THREADS=8; fi
     - echo "Using $OMP_NUM_THREADS threads"
     - cd test-suite
     - make clean
