@@ -212,6 +212,9 @@ SUBROUTINE iosys()
   USE gcscf_module,          ONLY : gcscf_iosys
 
   USE vlocal,        ONLY : starting_charge_ => starting_charge
+
+  USE no_source_mod,        ONLY : no_source_ => no_source, &
+                                    ssxc_ => ssxc
   !
   ! ... CONTROL namelist
   !
@@ -260,7 +263,7 @@ SUBROUTINE iosys()
                                esm_bc, esm_efield, esm_w, esm_nfit, esm_a,    &
                                lgcscf,                                        &
                                zgate, relaxz, block, block_1, block_2,        &
-                               block_height
+                               block_height, ssxc, no_source
   !
   ! ... ELECTRONS namelist
   !
@@ -1666,6 +1669,11 @@ SUBROUTINE iosys()
   ! ... set variables for GC-SCF (this must be after FCP, to check condition)
   !
   CALL gcscf_iosys(lgcscf)
+  !
+  ! ... no source options
+  !
+  ssxc_ = ssxc
+  no_source_ = no_source
   !
   ! ... End of reading input parameters
   !

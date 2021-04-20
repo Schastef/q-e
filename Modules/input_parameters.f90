@@ -629,6 +629,12 @@ MODULE input_parameters
         !! in rhombohedral axes. If FALSE in hexagonal axes, that are
         !! converted internally in rhombohedral axes.  
         !
+        REAL(DP) :: ssxc = 1.0d0
+        !! scale spin part of exchange correlation potential
+        !
+        LOGICAL :: no_source = .FALSE.
+        !! remove source from exchange-correlation field
+        !
 
 
 
@@ -664,7 +670,8 @@ MODULE input_parameters
              lgcscf, gcscf_ignore_mun, gcscf_mu, gcscf_conv_thr,              &
              gcscf_gk, gcscf_gh, gcscf_beta,                                  &
              space_group, uniqueb, origin_choice, rhombohedral,               &
-             zgate, relaxz, block, block_1, block_2, block_height
+             zgate, relaxz, block, block_1, block_2, block_height,            &
+             ssxc, no_source
 
 !=----------------------------------------------------------------------------=!
 !  ELECTRONS Namelist Input Parameters

@@ -354,6 +354,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   USE scf,              ONLY : scf_type
   USE mp_bands,         ONLY : intra_bgrp_comm
   USE mp,               ONLY : mp_sum
+  USE no_source_mod,    ONLY : ssxc, no_source
   !
   IMPLICIT NONE
   !
@@ -391,6 +392,8 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
     ! counter on mesh points
     ! counter on nspin
   !
+  REAL(DP), ALLOCATABLE :: vns(:,:)
+  LOGICAL :: scale_bxc
   REAL(DP), PARAMETER :: vanishing_charge = 1.D-10, &
                          vanishing_mag    = 1.D-20
   !
@@ -427,10 +430,27 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   ELSEIF ( nspin == 2 ) THEN
      ! ... spin-polarized case
      !
+     scale_bxc = (ABS(ssxc -1.d0) > eps8)
+     !
+     IF (scale_bxc) rho%of_r(:,2) = rho%of_r(:,2) * ssxc
+     !
      CALL xc( dfftp%nnr, 2, 2, rho%of_r, ex, ec, vx, vc )
+     !
+     IF (scale_bxc) rho%of_r(:,2) = rho%of_r(:,2) * (1.d0/ssxc)
      !
      DO ir = 1, dfftp%nnr   !OMP ?
         v(ir,:) = e2*( vx(ir,:) + vc(ir,:) )
+        !
+        IF (scale_bxc) THEN
+            ! remove some spin polarization
+            vs = 0.5D0*( v(ir,1) - v(ir,2) ) * (1.d0 - ssxc)
+            !vs =(v(ir,1) - v(ir,2)) * (1.d0 - ssxc)
+            !v(ir,1) = v(ir,1) - 0.5 * vs
+            !v(ir,2) = v(ir,2) + 0.5 * vs
+            v(ir,1) = v(ir,1) - vs
+            v(ir,2) = v(ir,2) + vs
+        ENDIF
+        !
         etxc = etxc + e2*( (ex(ir) + ec(ir))*rho%of_r(ir,1) )
         rho%of_r(ir,1) = rho%of_r(ir,1) - rho_core(ir)
         vtxc = vtxc + ( ( v(ir,1) + v(ir,2) )*rho%of_r(ir,1) + &
@@ -449,17 +469,35 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   ELSE IF ( nspin == 4 ) THEN
      ! ... noncolinear case
      !
+     scale_bxc = (ABS(ssxc -1.d0) > eps8)
+     !
+     IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * ssxc
+     !
      CALL xc( dfftp%nnr, 4, 2, rho%of_r, ex, ec, vx, vc )
+     !
+     IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * (1/ssxc)
+     !
+     IF (no_source) THEN
+         ALLOCATE(vns(3,dfftp%nnr))
+         CALL remove_xc_source(rho%of_r, vx, vc, vns)
+     ENDIF
      !
      DO ir = 1, dfftp%nnr  !OMP ?
         arho = ABS( rho%of_r(ir,1) )
         IF ( arho < vanishing_charge ) CYCLE
         vs = 0.5D0*( vx(ir,1) + vc(ir,1) - vx(ir,2) - vc(ir,2) )
+        !
+        IF (scale_bxc) vs = vs * ssxc
+        !
         v(ir,1) = e2*( 0.5D0*( vx(ir,1) + vc(ir,1) + vx(ir,2) + vc(ir,2) ) )
         !
         amag = SQRT( SUM( rho%of_r(ir,2:4)**2 ) )
         IF ( amag > vanishing_mag ) THEN
            v(ir,2:4) = e2 * vs * rho%of_r(ir,2:4) / amag
+           !
+           ! remove contribution from source. vns is (possibly) already scaled by ssxc in remove_xc_source.
+           IF (no_source) v(ir,2:4) = v(ir,2:4) + e2 * vns(:,ir)
+           !
            vtxc = vtxc + SUM( v(ir,2:4) * rho%of_r(ir,2:4) )
         ENDIF
         etxc = etxc + e2*( ex(ir) + ec(ir) ) * arho
@@ -470,6 +508,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
         vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
      ENDDO
      !
+     IF (no_source) DEALLOCATE(vns)
      !
   ENDIF
   !
@@ -1485,3 +1524,153 @@ SUBROUTINE gradv_h_of_rho_r( rho, gradv )
   RETURN
   !
 END SUBROUTINE gradv_h_of_rho_r
+
+SUBROUTINE remove_xc_source(rho, vx, vc, vsc)
+    !!
+    !! This implements https://pubs.acs.org/doi/10.1021/acs.jctc.7b01049
+    !!
+    !! Here we compute the source of Bxc and the term to be later added
+    !! to remove the source
+    !
+    USE kinds,            ONLY : DP
+    USE constants,        ONLY : e2, eps8, fpi, tpi
+    USE gvect,            ONLY : ngm,g, gg, gstart
+    USE lsda_mod,         ONLY : nspin
+    USE cell_base,        ONLY : omega, tpiba,tpiba2
+    USE fft_interfaces,    ONLY : invfft, fwfft
+    USE fft_base,          ONLY : dfftp
+    USE no_source_mod, ONLY : ssxc
+    USE fft_types,        ONLY : fft_index_to_3d
+
+
+    IMPLICIT NONE
+    REAL( DP ), INTENT(IN)    :: rho(dfftp%nnr, 4)
+    REAL( DP ), INTENT(IN)    :: vx(dfftp%nnr,2), vc(dfftp%nnr,2)
+    REAL(DP), INTENT(OUT) :: vsc(3, dfftp%nnr)
+    !
+    INTEGER :: ir, ig
+    INTEGER :: i,j,k, ipol
+    LOGICAL :: offrange
+    !
+    REAL(DP) :: vxcup, vxcdn, amag, abxc
+    REAL(DP), ALLOCATABLE :: bxc(:,:),div_bxc(:)
+    COMPLEX(DP), ALLOCATABLE :: rho_bxc(:), aux(:)
+    !
+#if defined(__SIMPLE_TEST)
+    ! Here is just a few lines to play with scalar and vector fields in QE
+    ! this is the code I used to debug what is reported below.
+    !
+    REAL(DP), ALLOCATABLE :: vsc2(:,:), lapla(:)
+    !
+    ALLOCATE(bxc(3,dfftp%nnr))
+    !
+    bxc = 0.d0
+    !
+    !
+    ! define a field, call it A, make it irrotational if you want to compare with the laplacian of A
+    DO ir = 1, dfftp%nnr
+        CALL fft_index_to_3d(ir, dfftp, i,j,k, offrange)
+        if (.not. offrange ) THEN
+           bxc(1,ir) = 0.d0
+           bxc(2,ir) = SIN((DBLE(j)/dfftp%nr2)*tpi)
+           bxc(3,ir) = 0.d0
+           print *, i, j, k, bxc(:,ir)
+        endif
+    ENDDO
+    !
+    !
+    ALLOCATE(div_bxc(dfftp%nnr))
+    ALLOCATE(rho_bxc(dfftp%nnr), aux(dfftp%nnr))
+    !
+    ! evaluate nabla dot bxc, the divergence
+    CALL fft_graddot(dfftp, bxc, g, div_bxc)
+    !
+    print *, 'Step 11111 - the divergence'
+    DO ir = 1, dfftp%nnr
+        CALL fft_index_to_3d(ir, dfftp, i,j,k, offrange)
+        if (.not. offrange ) print *, i, j, k, div_bxc(ir)
+    enddo
+    !
+    ! Now the gradient, in real space.
+    !
+    ! if Nabla x A = 0, grad ( div A ) = Laplacian A = (Laplacian A_x, Laplacian A_y, Laplacian A_z)
+    !
+    vsc = 0.d0
+    CALL fft_gradient_r2r( dfftp, div_bxc, g, vsc )
+    !
+    !
+    ! Now we do the same with the other subroutine
+    !
+    ! transform div_bxc to reciprocal space, to do so you need to make it complex
+    rho_bxc = CMPLX( div_bxc(:), 0.0_dp, kind=DP)
+    CALL fwfft ('Rho', rho_bxc, dfftp)
+    !
+    ! This is still not enough, data as a function of g vectors is supposed to
+    ! be ordered, we use an auxiliary variable for that purpose
+    aux = (0.d0, 0.d0)
+    DO ig = gstart, ngm
+        aux(ig) = rho_bxc(dfftp%nl(ig))
+    ENDDO
+    !
+    ! finally call gradient in g space and store it in vsc2
+    !
+    ALLOCATE(vsc2(3,dfftp%nnr)); vsc2 = 0.d0
+    CALL fft_gradient_g2r(dfftp, aux, g, vsc2)
+    !
+    ! if you wrote an irrotational field, this whould be the Laplacian, let's check this
+    !
+    print *, 'Step 22222 - check'
+    DO ipol = 1, 3 ! x, y , z
+        print *, 'IPOL ', ipol
+        div_bxc = 0.d0
+        div_bxc(:) = bxc(ipol,:)
+        !
+        CALL fft_laplacian(dfftp, div_bxc , gg, div_bxc )
+        !
+        DO ir = 1, dfftp%nnr
+            CALL fft_index_to_3d(ir, dfftp, i,j,k, offrange)
+            if (.not. offrange ) print *, i, j, k, div_bxc(ir), vsc(ipol, ir), vsc2(ipol, ir)
+        ENDDO
+    ENDDO
+    RETURN
+#endif
+    !
+    ALLOCATE(bxc(3,dfftp%nnr))
+    !
+    bxc = 0.d0
+    !
+    DO ir = 1, dfftp%nnr
+        vxcup = vx(ir,1) + vc(ir,1)
+        vxcdn = vx(ir,2) + vc(ir,2)
+        ! reduce by ssxc if required
+        abxc = 0.5D0*( vxcup - vxcdn )* ssxc
+        amag = SQRT( SUM( rho(ir,2:4)**2 ) )
+        ! in the direction of m
+        IF ( amag > 1.d-20 ) bxc(:,ir) = abxc * rho(ir,2:4) / amag
+    ENDDO
+    !
+    ALLOCATE(div_bxc(dfftp%nnr))
+    !
+    CALL fft_graddot(dfftp, bxc, g, div_bxc)
+    !
+    ALLOCATE(rho_bxc(dfftp%nnr), aux(dfftp%nnr))
+    !
+    rho_bxc = CMPLX( div_bxc(:), 0.0_dp, kind=DP)
+    !
+    CALL fwfft ('Rho', rho_bxc, dfftp)
+    !
+    ! Poisson
+    aux = (0.d0, 0.d0)
+    DO ig = gstart, ngm
+        aux(ig) = rho_bxc(dfftp%nl(ig)) / (gg(ig) * tpiba2)
+    ENDDO
+    !
+    !aux = aux * fpi ! <- should multiply and later divide by 4pi, we do nothing instead
+    !
+    CALL fft_gradient_g2r(dfftp, aux, g, vsc)
+    !
+    !vsc = vsc / fpi
+    !
+    DEALLOCATE(bxc,div_bxc,rho_bxc,aux)
+    !
+END SUBROUTINE remove_xc_source

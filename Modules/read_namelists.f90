@@ -325,6 +325,11 @@ MODULE read_namelists_module
        origin_choice = 1
        rhombohedral = .TRUE.
        !
+       ! ... SSXC and nosource
+       !
+       no_source = .FALSE.
+       ssxc = 1.d0
+       !
        RETURN
        !
      END SUBROUTINE
@@ -966,6 +971,11 @@ MODULE read_namelists_module
        CALL mp_bcast( block_1,            ionode_id, intra_image_comm )
        CALL mp_bcast( block_2,            ionode_id, intra_image_comm )
        CALL mp_bcast( block_height,       ionode_id, intra_image_comm )
+       !
+       ! XC scaling and no source
+       !
+       CALL mp_bcast( ssxc,               ionode_id, intra_image_comm )
+       CALL mp_bcast( no_source,          ionode_id, intra_image_comm )
 
        RETURN
        !

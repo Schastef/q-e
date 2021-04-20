@@ -476,6 +476,22 @@ END MODULE spin_orb
 !
 !
 !
+MODULE no_source_mod
+  !
+  !! Variables needed for calculations with spin-orbit
+  !
+  USE kinds,      ONLY : DP
+  !
+  SAVE
+  LOGICAL :: no_source
+  !! if .TRUE. remove source from B_xc
+  REAL(DP) :: ssxc
+  !! scaling of the spin part of exchange and correlation
+  !
+END MODULE no_source_mod
+!
+!
+!
 MODULE pwcom
   !
   USE klist
@@ -488,5 +504,6 @@ MODULE pwcom
   USE cellmd
   USE fixed_occ
   USE spin_orb
+  USE no_source_mod
   !
 END MODULE pwcom
