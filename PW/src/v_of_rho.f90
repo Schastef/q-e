@@ -444,9 +444,6 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
         IF (scale_bxc) THEN
             ! remove some spin polarization
             vs = 0.5D0*( v(ir,1) - v(ir,2) ) * (1.d0 - ssxc)
-            !vs =(v(ir,1) - v(ir,2)) * (1.d0 - ssxc)
-            !v(ir,1) = v(ir,1) - 0.5 * vs
-            !v(ir,2) = v(ir,2) + 0.5 * vs
             v(ir,1) = v(ir,1) - vs
             v(ir,2) = v(ir,2) + vs
         ENDIF
@@ -479,7 +476,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
      !
      IF (no_source) THEN
          ALLOCATE(vns(3,dfftp%nnr))
-         CALL remove_xc_source(rho%of_r, vx, vc, vns)
+         CALL remove_Bxc_source(rho%of_r, vx, vc, vns)
      ENDIF
      !
      DO ir = 1, dfftp%nnr  !OMP ?
@@ -495,7 +492,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
         IF ( amag > vanishing_mag ) THEN
            v(ir,2:4) = e2 * vs * rho%of_r(ir,2:4) / amag
            !
-           ! remove contribution from source. vns is (possibly) already scaled by ssxc in remove_xc_source.
+           ! remove contribution from source. vns is (possibly) already scaled by ssxc in remove_Bxc_source.
            IF (no_source) v(ir,2:4) = v(ir,2:4) + e2 * vns(:,ir)
            !
            vtxc = vtxc + SUM( v(ir,2:4) * rho%of_r(ir,2:4) )
@@ -1525,28 +1522,36 @@ SUBROUTINE gradv_h_of_rho_r( rho, gradv )
   !
 END SUBROUTINE gradv_h_of_rho_r
 
-SUBROUTINE remove_xc_source(rho, vx, vc, vsc)
+SUBROUTINE remove_Bxc_source(rho, vx, vc, vsc)
     !!
-    !! This implements https://pubs.acs.org/doi/10.1021/acs.jctc.7b01049
+    !! Source free exchange and correlation magnetic field.
     !!
-    !! Here we compute the source of Bxc and the term to be later added
-    !! to remove the source
+    !! This subroutine implements equations 10 and 11 in
+    !!  https://pubs.acs.org/doi/10.1021/acs.jctc.7b01049
+    !!
+    !! Here we compute the source of Bxc and the term to be added in v_xc
+    !! to remove the source parte.
     !
     USE kinds,            ONLY : DP
-    USE constants,        ONLY : e2, eps8, fpi, tpi
-    USE gvect,            ONLY : ngm,g, gg, gstart
-    USE lsda_mod,         ONLY : nspin
+    USE constants,        ONLY : eps8, fpi, tpi
+    USE gvect,            ONLY : ngm, g, gg, gstart
     USE cell_base,        ONLY : omega, tpiba,tpiba2
-    USE fft_interfaces,    ONLY : invfft, fwfft
-    USE fft_base,          ONLY : dfftp
-    USE no_source_mod, ONLY : ssxc
+    USE fft_interfaces,   ONLY : invfft, fwfft
+    USE fft_base,         ONLY : dfftp
+    USE no_source_mod,    ONLY : ssxc
+    ! For the test, to be removed
     USE fft_types,        ONLY : fft_index_to_3d
-
-
+    !
     IMPLICIT NONE
     REAL( DP ), INTENT(IN)    :: rho(dfftp%nnr, 4)
-    REAL( DP ), INTENT(IN)    :: vx(dfftp%nnr,2), vc(dfftp%nnr,2)
-    REAL(DP), INTENT(OUT) :: vsc(3, dfftp%nnr)
+    !! the density, only spin part will be considered
+    REAL( DP ), INTENT(IN)    :: vx(dfftp%nnr,2)
+    !! exchange potential
+    REAL( DP ), INTENT(IN)    :: vc(dfftp%nnr,2)
+    !! correlation potential
+    REAL( DP ), INTENT(OUT)   :: vsc(3, dfftp%nnr)
+    !! $1/(4 \pi) B_{xc}^{source}$, the term in B_{xc} originating from sources.
+    !
     !
     INTEGER :: ir, ig
     INTEGER :: i,j,k, ipol
@@ -1557,15 +1562,25 @@ SUBROUTINE remove_xc_source(rho, vx, vc, vsc)
     COMPLEX(DP), ALLOCATABLE :: rho_bxc(:), aux(:)
     !
 #if defined(__SIMPLE_TEST)
-    ! Here is just a few lines to play with scalar and vector fields in QE
-    ! this is the code I used to debug what is reported below.
+    !
+    ! These are just a few lines to play with scalar and vector fields in QE.
+    ! This is the code I used to debug this subroutine and I think it can be useful
+    ! to let novice like myself understand how data is organized in real and reciprocal space.
+    !
+    ! Below we check
+    ! $$
+    !  \nabla \left(\nabla \cdot \mathbf {A} \right)-\nabla \times \left(\nabla \times \mathbf {A} \right)=\nabla ^{2}\mathbf {A}
+    ! $$
+    !
+    ! where, in Cartesian coordinates, $\nabla ^{2}{\mathbf  {A}}=(\nabla ^{2}A_{x},\nabla ^{2}A_{y},\nabla ^{2}A_{z})$.
+    !
+    ! Data creation only works for orthogonal lattices. Should be improved to take case of actual dimensions, i.e. alat.
     !
     REAL(DP), ALLOCATABLE :: vsc2(:,:), lapla(:)
     !
     ALLOCATE(bxc(3,dfftp%nnr))
     !
     bxc = 0.d0
-    !
     !
     ! define a field, call it A, make it irrotational if you want to compare with the laplacian of A
     DO ir = 1, dfftp%nnr
@@ -1632,7 +1647,9 @@ SUBROUTINE remove_xc_source(rho, vx, vc, vsc)
             if (.not. offrange ) print *, i, j, k, div_bxc(ir), vsc(ipol, ir), vsc2(ipol, ir)
         ENDDO
     ENDDO
+    DEALLOCATE(bxc, vsc2, aux, div_bxc, rho_bxc)
     RETURN
+    !
 #endif
     !
     ALLOCATE(bxc(3,dfftp%nnr))
@@ -1653,6 +1670,8 @@ SUBROUTINE remove_xc_source(rho, vx, vc, vsc)
     !
     CALL fft_graddot(dfftp, bxc, g, div_bxc)
     !
+    DEALLOCATE(bxc)
+    !
     ALLOCATE(rho_bxc(dfftp%nnr), aux(dfftp%nnr))
     !
     rho_bxc = CMPLX( div_bxc(:), 0.0_dp, kind=DP)
@@ -1671,6 +1690,6 @@ SUBROUTINE remove_xc_source(rho, vx, vc, vsc)
     !
     !vsc = vsc / fpi
     !
-    DEALLOCATE(bxc,div_bxc,rho_bxc,aux)
+    DEALLOCATE(div_bxc,rho_bxc,aux)
     !
-END SUBROUTINE remove_xc_source
+END SUBROUTINE remove_Bxc_source

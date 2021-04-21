@@ -1670,9 +1670,11 @@ SUBROUTINE iosys()
   !
   CALL gcscf_iosys(lgcscf)
   !
-  ! ... no source options
+  ! ... Source free exchange-correlation field
   !
   ssxc_ = ssxc
+  IF ( no_source .AND. (nspin /= 4) ) CALL errore( 'iosys', &
+              'Source free Bxc requires non collinear description', 1 )
   no_source_ = no_source
   !
   ! ... End of reading input parameters
