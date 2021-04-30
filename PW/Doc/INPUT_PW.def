@@ -2010,7 +2010,7 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
                 }
             }
         }
-        var no_source -type LOGICAL {
+        var source_free_xc -type LOGICAL {
             default { .FALSE. }
             info {
                 if .TRUE. a source-free exchange and correlation field will be used.
@@ -2021,7 +2021,7 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
             default { 1.0 }
             info {
                 The exchange and correlation field will be scaled by the ssxc factor.
-                See PRB 86, 064437 (2012), and  no_source option.
+                See PRB 86, 064437 (2012), and  source_free_xc option.
             }
         }
     }

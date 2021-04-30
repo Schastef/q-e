@@ -213,7 +213,7 @@ SUBROUTINE iosys()
 
   USE vlocal,        ONLY : starting_charge_ => starting_charge
 
-  USE no_source_mod,        ONLY : no_source_ => no_source, &
+  USE source_free_xc_mod,    ONLY : source_free_xc_ => source_free_xc, &
                                     ssxc_ => ssxc
   !
   ! ... CONTROL namelist
@@ -263,7 +263,7 @@ SUBROUTINE iosys()
                                esm_bc, esm_efield, esm_w, esm_nfit, esm_a,    &
                                lgcscf,                                        &
                                zgate, relaxz, block, block_1, block_2,        &
-                               block_height, ssxc, no_source
+                               block_height, ssxc, source_free_xc
   !
   ! ... ELECTRONS namelist
   !
@@ -1673,9 +1673,9 @@ SUBROUTINE iosys()
   ! ... Source free exchange-correlation field
   !
   ssxc_ = ssxc
-  IF ( no_source .AND. (nspin /= 4) ) CALL errore( 'iosys', &
+  IF ( source_free_xc .AND. (nspin /= 4) ) CALL errore( 'iosys', &
               'Source free Bxc requires non collinear description', 1 )
-  no_source_ = no_source
+  source_free_xc_ = source_free_xc
   !
   ! ... End of reading input parameters
   !

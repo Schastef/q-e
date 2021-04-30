@@ -354,7 +354,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   USE scf,              ONLY : scf_type
   USE mp_bands,         ONLY : intra_bgrp_comm
   USE mp,               ONLY : mp_sum
-  USE no_source_mod,    ONLY : ssxc, no_source
+  USE source_free_xc_mod,    ONLY : ssxc, source_free_xc
   !
   IMPLICIT NONE
   !
@@ -474,7 +474,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
      !
      IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * (1/ssxc)
      !
-     IF (no_source) THEN
+     IF (source_free_xc) THEN
          ALLOCATE(vns(3,dfftp%nnr))
          CALL remove_Bxc_source(rho%of_r, vx, vc, vns)
      ENDIF
@@ -493,7 +493,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
            v(ir,2:4) = e2 * vs * rho%of_r(ir,2:4) / amag
            !
            ! remove contribution from source. vns is (possibly) already scaled by ssxc in remove_Bxc_source.
-           IF (no_source) v(ir,2:4) = v(ir,2:4) + e2 * vns(:,ir)
+           IF (source_free_xc) v(ir,2:4) = v(ir,2:4) + e2 * vns(:,ir)
            !
            vtxc = vtxc + SUM( v(ir,2:4) * rho%of_r(ir,2:4) )
         ENDIF
@@ -505,7 +505,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
         vtxc = vtxc + v(ir,1) * rho%of_r(ir,1)
      ENDDO
      !
-     IF (no_source) DEALLOCATE(vns)
+     IF (source_free_xc) DEALLOCATE(vns)
      !
   ENDIF
   !
@@ -1532,15 +1532,13 @@ SUBROUTINE remove_Bxc_source(rho, vx, vc, vsc)
     !! Here we compute the source of Bxc and the term to be added in v_xc
     !! to remove the source parte.
     !
-    USE kinds,            ONLY : DP
-    USE constants,        ONLY : eps8, fpi, tpi
-    USE gvect,            ONLY : ngm, g, gg, gstart
-    USE cell_base,        ONLY : omega, tpiba,tpiba2
-    USE fft_interfaces,   ONLY : invfft, fwfft
-    USE fft_base,         ONLY : dfftp
-    USE no_source_mod,    ONLY : ssxc
-    ! For the test, to be removed
-    USE fft_types,        ONLY : fft_index_to_3d
+    USE kinds,              ONLY : DP
+    USE constants,          ONLY : eps8, fpi, tpi
+    USE gvect,              ONLY : ngm, g, gg, gstart
+    USE cell_base,          ONLY : omega, tpiba,tpiba2
+    USE fft_interfaces,     ONLY : invfft, fwfft
+    USE fft_base,           ONLY : dfftp
+    USE source_free_xc_mod, ONLY : ssxc
     !
     IMPLICIT NONE
     REAL( DP ), INTENT(IN)    :: rho(dfftp%nnr, 4)

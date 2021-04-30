@@ -325,9 +325,9 @@ MODULE read_namelists_module
        origin_choice = 1
        rhombohedral = .TRUE.
        !
-       ! ... SSXC and nosource
+       ! ... SSXC and source_free_xc
        !
-       no_source = .FALSE.
+       source_free_xc = .FALSE.
        ssxc = 1.d0
        !
        RETURN
@@ -975,7 +975,7 @@ MODULE read_namelists_module
        ! XC scaling and no source
        !
        CALL mp_bcast( ssxc,               ionode_id, intra_image_comm )
-       CALL mp_bcast( no_source,          ionode_id, intra_image_comm )
+       CALL mp_bcast( source_free_xc,     ionode_id, intra_image_comm )
 
        RETURN
        !

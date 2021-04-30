@@ -632,7 +632,7 @@ MODULE input_parameters
         REAL(DP) :: ssxc = 1.0d0
         !! scale spin part of exchange correlation potential
         !
-        LOGICAL :: no_source = .FALSE.
+        LOGICAL :: source_free_xc = .FALSE.
         !! remove source from exchange-correlation field
         !
 
@@ -671,7 +671,7 @@ MODULE input_parameters
              gcscf_gk, gcscf_gh, gcscf_beta,                                  &
              space_group, uniqueb, origin_choice, rhombohedral,               &
              zgate, relaxz, block, block_1, block_2, block_height,            &
-             ssxc, no_source
+             ssxc, source_free_xc
 
 !=----------------------------------------------------------------------------=!
 !  ELECTRONS Namelist Input Parameters
