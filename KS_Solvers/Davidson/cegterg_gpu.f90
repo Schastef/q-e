@@ -101,6 +101,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   attributes(DEVICE) :: ew_d
 #endif
   COMPLEX(DP), ALLOCATABLE :: hl(:,:), sl(:,:), vl(:,:)
+  COMPLEX(DP), ALLOCATABLE, DEVICE :: hl_d(:,:), sl_d(:,:), vl_d(:,:)
     ! Hamiltonian on the reduced basis
     ! S matrix on the reduced basis
     ! eigenvectors of the Hamiltonian
@@ -204,29 +205,29 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      ! only procs involved in the diagonalization need to allocate local 
      ! matrix block.
      !
-     ALLOCATE( vl( nx , nx ), STAT=ierr )
+     ALLOCATE( vl_d( nx , nx ), STAT=ierr )
      IF( ierr /= 0 ) &
-        CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
+        CALL errore( ' pcegterg ',' cannot allocate vl_d ', ABS(ierr) )
      !
-     ALLOCATE( sl( nx , nx ), STAT=ierr )
+     ALLOCATE( sl_d( nx , nx ), STAT=ierr )
      IF( ierr /= 0 ) &
-        CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
+        CALL errore( ' pcegterg ',' cannot allocate sl_d ', ABS(ierr) )
      !
-     ALLOCATE( hl( nx , nx ), STAT=ierr )
+     ALLOCATE( hl_d( nx , nx ) , STAT=ierr )
      IF( ierr /= 0 ) &
-        CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
+        CALL errore( ' pcegterg ',' cannot allocate hl_d ', ABS(ierr) )
      !
   ELSE
      !
-     ALLOCATE( vl( 1 , 1 ), STAT=ierr )
+     ALLOCATE( vl_d( 1 , 1 ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
      !
-     ALLOCATE( sl( 1 , 1 ), STAT=ierr )
+     ALLOCATE( sl_d( 1 , 1 ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
      !
-     ALLOCATE( hl( 1 , 1 ), STAT=ierr )
+     ALLOCATE( hl_d( 1 , 1 ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
      !
@@ -263,26 +264,26 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   ! ... here are never allocated
   !
   CALL start_clock( 'cegterg:init' )
-
-  CALL compute_distmat_gpu( hl, psi_d, hpsi_d )
+ 
+  CALL compute_distmat_gpu( hl_d, psi_d, hpsi_d )
   !
   IF ( uspp ) THEN
      !
-     CALL compute_distmat_gpu( sl, psi_d, spsi_d )
+     CALL compute_distmat_gpu( sl_d, psi_d, spsi_d )
      !
   ELSE
      !
-     CALL compute_distmat_gpu( sl, psi_d, psi_d )
+     CALL compute_distmat_gpu( sl_d, psi_d, psi_d )
      !
   END IF
   CALL stop_clock( 'cegterg:init' )
   !
   IF ( lrot ) THEN
      !
-     CALL set_e_from_h()
-     e_d = e
+     CALL set_e_from_h_gpu()
+     e = e_d
      !
-     CALL set_to_identity( vl, idesc )
+     CALL set_to_identity_gpu( vl_d, idesc )
      !
   ELSE
      !
@@ -292,13 +293,13 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      CALL start_clock( 'cegterg:diag' )
      IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg ew and vl are the same across ortho_parent_comm
         ! only the first bgrp performs the diagonalization
-        IF( my_bgrp_id == root_bgrp_id ) CALL pdiaghg( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
         IF( nbgrp > 1 ) THEN ! results must be brodcast to the other band groups
-           CALL mp_bcast( vl, root_bgrp_id, inter_bgrp_comm )
+           CALL mp_bcast( vl_d, root_bgrp_id, inter_bgrp_comm )
            CALL mp_bcast( ew, root_bgrp_id, inter_bgrp_comm )
         ENDIF
      ELSE
-        CALL pdiaghg( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+        CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
      END IF
      CALL stop_clock( 'cegterg:diag' )
      !
@@ -388,39 +389,42 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
 
         !  redistribute hl and sl (see dsqmred), since the dimension of the subspace has changed
         !
-        vl = hl
-        DEALLOCATE( hl )
+        ALLOCATE(vl, source=hl_d) !        vl = hl
+        DEALLOCATE( hl_d )
+        !
         ALLOCATE( hl( nx , nx ), STAT=ierr )
         IF( ierr /= 0 ) &
            CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
 
         CALL laxlib_zsqmred( nbase, vl, idesc_old(LAX_DESC_NRCX), idesc_old, nbase+notcnv, hl, nx, idesc )
 
-        vl = sl
-        DEALLOCATE( sl )
+        vl = sl_d
+        DEALLOCATE( sl_d )
         ALLOCATE( sl( nx , nx ), STAT=ierr )
         IF( ierr /= 0 ) &
            CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
 
         CALL laxlib_zsqmred( nbase, vl, idesc_old(LAX_DESC_NRCX), idesc_old, nbase+notcnv, sl, nx, idesc )
 
-        DEALLOCATE( vl )
-        ALLOCATE( vl( nx , nx ), STAT=ierr )
+        DEALLOCATE( vl_d )
+        ALLOCATE( vl_d( nx , nx ), STAT=ierr )
         IF( ierr /= 0 ) &
            CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
-
+        allocate(hl_d,source=hl)
+        allocate(sl_d,source=sl)
+        deallocate(vl,sl,hl)
      END IF
      !
      !
-     CALL update_distmat_gpu( hl, psi_d, hpsi_d )
+     CALL update_distmat_gpu( hl_d, psi_d, hpsi_d )
      !
      IF ( uspp ) THEN
         !
-        CALL update_distmat_gpu( sl, psi_d, spsi_d )
+        CALL update_distmat_gpu( sl_d, psi_d, spsi_d )
         !
      ELSE
         !
-        CALL update_distmat_gpu( sl, psi_d, psi_d )
+        CALL update_distmat_gpu( sl_d, psi_d, psi_d )
         !
      END IF
      !
@@ -434,13 +438,15 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      CALL start_clock( 'cegterg:diag' )
      IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg ew and vl are the same across ortho_parent_comm
         ! only the first bgrp performs the diagonalization
-        IF( my_bgrp_id == root_bgrp_id ) CALL pdiaghg( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
         IF( nbgrp > 1 ) THEN ! results must be brodcast to the other band groups
-           CALL mp_bcast( vl, root_bgrp_id, inter_bgrp_comm )
+           CALL mp_bcast( vl_d, root_bgrp_id, inter_bgrp_comm )
            CALL mp_bcast( ew, root_bgrp_id, inter_bgrp_comm )
         ENDIF
      ELSE
-        CALL pdiaghg( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+
+        CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
+
      END IF
      CALL stop_clock( 'cegterg:diag' )
      !
@@ -517,23 +523,23 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
            ! note that nx has been changed by desc_init
            ! we need to re-alloc with the new size.
            !
-           DEALLOCATE( vl, hl, sl )
-           ALLOCATE( vl( nx, nx ), STAT=ierr )
+           DEALLOCATE( vl_d, hl_d, sl_d )
+           ALLOCATE( vl_d( nx, nx ), STAT=ierr )
            IF( ierr /= 0 ) &
               CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
-           ALLOCATE( hl( nx, nx ), STAT=ierr )
+           ALLOCATE( hl_d( nx, nx ), STAT=ierr )
            IF( ierr /= 0 ) &
               CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
-           ALLOCATE( sl( nx, nx ), STAT=ierr )
+           ALLOCATE( sl_d( nx, nx ), STAT=ierr )
            IF( ierr /= 0 ) &
               CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
            !
         END IF
         !
-        CALL set_h_from_e( )
+        CALL set_h_from_e_gpu( )
         !
-        CALL set_to_identity( vl, idesc )
-        CALL set_to_identity( sl, idesc )
+        CALL set_to_identity_gpu( vl_d, idesc )
+        CALL set_to_identity_gpu( sl_d, idesc )
         !
         CALL stop_clock( 'cegterg:last' )
         !
@@ -541,7 +547,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
   END DO iterate
   !
-  DEALLOCATE( vl, hl, sl )
+  DEALLOCATE( vl_d, hl_d, sl_d )
   !
   DEALLOCATE( rank_ip )
   DEALLOCATE( ic_notcnv )
@@ -577,7 +583,24 @@ CONTAINS
      RETURN
   END SUBROUTINE set_to_identity
   !
-  !
+  SUBROUTINE set_to_identity_gpu( distmat, idesc )
+     INTEGER, INTENT(IN)  :: idesc(LAX_DESC_SIZE)
+     COMPLEX(DP), INTENT(OUT) :: distmat(:,:)
+#if defined(__CUDA)
+     attributes(device) :: distmat
+#endif
+     INTEGER :: i,nd
+     distmat = ( 0_DP , 0_DP )
+     IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) .AND. idesc(LAX_DESC_ACTIVE_NODE) > 0 ) THEN
+        nd =  idesc(LAX_DESC_NC)
+        !$cuf kernel do
+        DO i = 1, nd
+           distmat( i, i ) = ( 1_DP , 0_DP )
+        END DO
+     END IF 
+     RETURN
+  END SUBROUTINE set_to_identity_gpu
+   !
   SUBROUTINE reorder_v()
      !
      INTEGER :: ipc
@@ -619,7 +642,7 @@ CONTAINS
                  !
                  IF ( npl /= nl ) THEN
                     IF( la_proc .AND. idesc(LAX_DESC_MYC) == ipc-1 ) THEN
-                       vl( :, npl) = vl( :, nl )
+                       vl_d( :, npl) = vl_d( :, nl )
                     END IF
                  END IF
                  !
@@ -676,9 +699,9 @@ CONTAINS
               ir = irc_ip( ipr )
               !
               root = rank_ip( ipr, ipc )
-
+! FIXME
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
-                 vtmp(:,1:notcl) = vl(:,1:notcl)
+                 vtmp(:,1:notcl) = vl_d(:,1:notcl)
               END IF
 
               CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
@@ -739,7 +762,6 @@ CONTAINS
      !
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
-     COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
      COMPLEX(DP) :: beta
      !
      COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
@@ -749,8 +771,6 @@ CONTAINS
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
-     !
-     ALLOCATE( vtmp( nx, nx ) )
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -774,9 +794,9 @@ CONTAINS
                  !
                  !  this proc sends his block
                  !
-                 CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
+                 CALL mp_bcast( vl_d(:,1:nc), root, ortho_parent_comm )
                  !
-                 work_d(:,1:nc) = vl(:,1:nc)
+                 work_d(:,1:nc) = vl_d(:,1:nc) ! FIXME!
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           psi_d(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
@@ -785,9 +805,7 @@ CONTAINS
                  !
                  !  all other procs receive
                  !
-                 CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 !
-                 work_d(:,1:nc) = vtmp(:,1:nc)
+                 CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           psi_d(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
@@ -801,8 +819,6 @@ CONTAINS
         END IF
         !
      END DO
-     !
-     DEALLOCATE( vtmp )
      !
      DEALLOCATE( work_d )
      !
@@ -818,7 +834,6 @@ CONTAINS
      !
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
-     COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
      COMPLEX(DP) :: beta
      !
      COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
@@ -828,8 +843,6 @@ CONTAINS
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
-     !
-     ALLOCATE( vtmp( nx, nx ) )
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -853,9 +866,9 @@ CONTAINS
                  !
                  !  this proc sends his block
                  !
-                 CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
+                 CALL mp_bcast( vl_d(:,1:nc), root, ortho_parent_comm )
                  !
-                 work_d(:,1:nc) = vl(:,1:nc)
+                 work_d(:,1:nc) = vl_d(:,1:nc)
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           spsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
@@ -864,9 +877,7 @@ CONTAINS
                  !
                  !  all other procs receive
                  !
-                 CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 !
-                 work_d(:,1:nc) = vtmp(:,1:nc)
+                 CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           spsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
@@ -888,8 +899,6 @@ CONTAINS
         END DO
      END DO
      !
-     DEALLOCATE( vtmp )
-
      DEALLOCATE( work_d )
 
      RETURN
@@ -904,7 +913,6 @@ CONTAINS
      !
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
-     COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
      COMPLEX(DP) :: beta
      !
      COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
@@ -916,8 +924,6 @@ INTEGER :: i, j
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
-     !
-     ALLOCATE( vtmp( nx, nx ) )
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -941,9 +947,9 @@ INTEGER :: i, j
                  !
                  !  this proc sends his block
                  !
-                 CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
+                 CALL mp_bcast( vl_d(:,1:nc), root, ortho_parent_comm )
                  !
-                 work_d(:,1:nc) = vl(:,1:nc)
+                 work_d(:,1:nc) = vl_d(:,1:nc)
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
@@ -952,9 +958,7 @@ INTEGER :: i, j
                  !
                  !  all other procs receive
                  !
-                 CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 !
-                 work_d(:,1:nc) = vtmp(:,1:nc)
+                 CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
@@ -968,8 +972,6 @@ INTEGER :: i, j
         END IF
         !
      END DO
-     !
-     DEALLOCATE( vtmp )
      !
      !$cuf kernel do(2) <<<*,*>>>
      DO j = 1, nvec
@@ -997,20 +999,14 @@ INTEGER :: i, j
      INTEGER :: nr, nc, ir, ic, root
      COMPLEX(DP), INTENT(OUT) :: dm( :, : )
      COMPLEX(DP), INTENT(IN) :: v(:,:), w(:,:)
-     COMPLEX(DP), ALLOCATABLE :: work( :, : )
-     !
      COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
 #if defined(__CUDA)
-     attributes(DEVICE) :: v, w, work_d
+     attributes(DEVICE) :: v, w, work_d, dm
 #endif
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
      !
-     ALLOCATE( work( nx, nx ) )
-     !
-     work = ZERO
-
      !
      !  Only upper triangle is computed, then the matrix is hermitianized
      !
@@ -1033,22 +1029,25 @@ INTEGER :: i, j
            CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE , &
                        v(1,ir), kdmx, w(1,ic), kdmx, ZERO, work_d, nx )
            !
-           work = work_d
-           !
            ! accumulate result on dm of root proc.
            !
-           CALL mp_root_sum( work, dm, root, ortho_parent_comm )
+           CALL mp_root_sum( work_d, dm, root, ortho_parent_comm )
 
         END DO
         !
      END DO
-     if (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) dm = dm/nbgrp
+     if (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) then
+             !$cuf kernel do(2)
+             do ir = 1, nx
+             do ic = 1, nx
+             dm(ir,ic) = dm(ir,ic)/nbgrp
+             enddo
+             enddo
+     endif
      !
      !  The matrix is hermitianized using upper triangle
      !
      CALL laxlib_zsqmher( nbase, dm, nx, idesc )
-     !
-     DEALLOCATE( work )
      !
      DEALLOCATE( work_d )
      !
@@ -1066,19 +1065,15 @@ INTEGER :: i, j
      INTEGER :: nr, nc, ir, ic, root, icc, ii
      COMPLEX(DP) :: dm( :, : )
      COMPLEX(DP), INTENT(IN) :: v(:,:), w(:,:)
-     COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
      !
      COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
 #if defined(__CUDA)
-     attributes(DEVICE) :: v, w, work_d
+     attributes(DEVICE) :: v, w, work_d, dm
 #endif
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
      !
-     ALLOCATE( vtmp( nx, nx ) )
-     !
-     vtmp = ZERO
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -1109,15 +1104,14 @@ INTEGER :: i, j
               CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE, v(1, ir), &
                           kdmx, w(1,ii), kdmx, ZERO, work_d, nx )
               !
-              vtmp(:,1:nc) = work_d(:,1:nc)
               !
-              IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) vtmp = vtmp/nbgrp
+              IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) work_d = work_d/nbgrp
               !
               IF(  (idesc(LAX_DESC_ACTIVE_NODE) > 0) .AND. &
                    (ipr-1 == idesc(LAX_DESC_MYR)) .AND. (ipc-1 == idesc(LAX_DESC_MYC)) ) THEN
-                 CALL mp_root_sum( vtmp(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
+                 CALL mp_root_sum( work_d(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
               ELSE
-                 CALL mp_root_sum( vtmp(:,1:nc), dm, root, ortho_parent_comm )
+                 CALL mp_root_sum( work_d(:,1:nc), dm, root, ortho_parent_comm )
               END IF
 
            END DO
@@ -1128,40 +1122,41 @@ INTEGER :: i, j
      !
      CALL laxlib_zsqmher( nbase+notcnv, dm, nx, idesc )
      !
-     DEALLOCATE( vtmp )
      DEALLOCATE( work_d )
      RETURN
   END SUBROUTINE update_distmat_gpu
   !
   !
-  SUBROUTINE set_e_from_h()
+  SUBROUTINE set_e_from_h_gpu()
      INTEGER :: nc, ic, i
-     e(1:nbase) = 0_DP
+     e_d(1:nbase) = 0_DP
      IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) .AND. la_proc ) THEN
         nc = idesc(LAX_DESC_NC)
         ic = idesc(LAX_DESC_IC)
+        !$cuf kernel do
         DO i = 1, nc
-           e( i + ic - 1 ) = REAL( hl( i, i ) )
+           e_d( i + ic - 1 ) = REAL( hl_d( i, i ) )
         END DO
      END IF
-     CALL mp_sum( e(1:nbase), ortho_parent_comm )
+     CALL mp_sum( e_d(1:nbase), ortho_parent_comm )
      RETURN
-  END SUBROUTINE set_e_from_h
+  END SUBROUTINE set_e_from_h_gpu
   !
-  SUBROUTINE set_h_from_e()
+  SUBROUTINE set_h_from_e_gpu()
      INTEGER :: nc, ic, i
      IF( la_proc ) THEN
-        hl = ZERO
+        hl_d = ZERO
         IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) ) THEN
            nc = idesc(LAX_DESC_NC)
            ic = idesc(LAX_DESC_IC)
+           !$cuf kernel do
            DO i = 1, nc
-              hl(i,i) = CMPLX( e( i + ic - 1 ), 0_DP ,kind=DP)
+              hl_d(i,i) = CMPLX( e_d( i + ic - 1 ), 0_DP ,kind=DP)
            END DO
         END IF
      END IF
      RETURN
-  END SUBROUTINE set_h_from_e
+  END SUBROUTINE set_h_from_e_gpu
   !
 END SUBROUTINE pcegterg_gpu
 #endif
