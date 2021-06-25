@@ -1613,6 +1613,10 @@ SUBROUTINE laxlib_zsqmher_gpu_x( n, a, lda, idesc )
    COMPLEX(DP), ALLOCATABLE :: tst1(:,:)
    COMPLEX(DP), ALLOCATABLE :: tst2(:,:)
    COMPLEX(DP), ALLOCATABLE :: a_h(:,:)
+   COMPLEX(DP), ALLOCATABLE :: b(:,:)
+#if defined(__CUDA)
+   attributes(device) :: b
+#endif
 
 #if defined __MPI
 
@@ -1680,20 +1684,20 @@ SUBROUTINE laxlib_zsqmher_gpu_x( n, a, lda, idesc )
       IF( ierr /= 0 ) &
          CALL lax_error__( " zsqmher ", " in mpi_recv ", ABS( ierr ) )
       !
-      !$cuf kernel do
+      allocate(b(lda,lda))
+      !$cuf kernel do(2)
       DO j = 1, lda
-         DO i = j + 1, lda
-            atmp   = a(i,j)
-            a(i,j) = a(j,i)
-            a(j,i) = atmp
+         DO i = 1, lda
+            b(j,i)   = a(i,j)
          END DO
       END DO
       !$cuf kernel do(2)
       DO j = 1, nc
          DO i = 1, nr
-            a(i,j)  = CONJG( a(i,j) )
+            a(i,j)  = CONJG(b(i,j) )
          END DO
       END DO
+      deallocate(b)
       !
    END IF
 
@@ -2954,9 +2958,9 @@ SUBROUTINE sqr_zmm_cannon_gpu_x( transa, transb, n, alpha, a, lda, b, ldb, beta,
    !! 'C' or 'c',  op( B ) = B**T.
    INTEGER, INTENT(IN) :: n
    !! global dimension
-   REAL(DP), INTENT(IN) :: alpha
+   COMPLEX(DP), INTENT(IN) :: alpha
    !! scalar alpha
-   REAL(DP), INTENT(IN) :: beta
+   COMPLEX(DP), INTENT(IN) :: beta
    !! scalar beta
    INTEGER, INTENT(IN) :: lda
    !! leading dimension of A
@@ -2964,11 +2968,11 @@ SUBROUTINE sqr_zmm_cannon_gpu_x( transa, transb, n, alpha, a, lda, b, ldb, beta,
    !! leading dimension of B
    INTEGER, INTENT(IN) :: ldc
    !! leading dimension of C
-   REAL(DP), DEVICE :: a(lda,*)
+   COMPLEX(DP), DEVICE :: a(lda,*)
    !! matrix A
-   REAL(DP), DEVICE :: b(ldb,*)
+   COMPLEX(DP), DEVICE :: b(ldb,*)
    !! matrix B
-   REAL(DP), DEVICE :: c(ldc,*)
+   COMPLEX(DP), DEVICE :: c(ldc,*)
    !! matrix C
    INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
    !! integer laxlib descriptor

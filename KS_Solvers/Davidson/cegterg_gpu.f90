@@ -135,6 +135,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   REAL(DP), EXTERNAL :: KSddot
   !
   EXTERNAL  h_psi_gpu, s_psi_gpu, g_psi_gpu
+  INTEGER :: idx1, idx2
     ! h_psi(npwx,npw,nvec,psi,hpsi)
     !     calculates H|psi> 
     ! s_psi(npwx,npw,nvec,psi,spsi)
@@ -358,12 +359,14 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      ew_d(1:notcnv) = ew(1:notcnv)
 
-!$cuf kernel do(3) <<<*,*>>>
+!$cuf kernel do(3)  <<<*,*>>>
      DO i = 1, notcnv
-        DO ipol = 1, npol
-           DO k = 1, npw
-             psi_d(k + (ipol-1)*npwx,nbase+i) = psi_d(k+(ipol-1)*npwx,nbase+i)/SQRT( ew_d(i) )
-           END DO
+        DO ipol = 0, npol -1 
+          DO k = 1, npw
+            idx1 = k + npwx* ipol 
+            idx2 = nbase+i
+            psi_d(idx1, idx2) = psi_d(idx1,idx2)/SQRT( ew_d(i) )
+          END DO
         END DO
      END DO
      !

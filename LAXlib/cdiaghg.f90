@@ -689,7 +689,7 @@ SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
   USE laxlib_parallel_include
   USE laxlib_descriptor,      ONLY : la_descriptor, laxlib_intarray_to_desc
   USE laxlib_processors_grid, ONLY : ortho_parent_comm
-  USE laxlib_processors_grid, ONLY : ortho_cntx, me_blacs, np_ortho, me_ortho, ortho_comm
+  USE laxlib_processors_grid, ONLY : ortho_cntx, np_ortho, me_ortho, ortho_comm
 #if defined __ELPAGPU
   USE zhpev_module,           ONLY : pzheevd_drv
   use elpa
@@ -793,8 +793,8 @@ SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
      !call eh%set("gpu", 0, info)
      !call eh%set("complex_kernel", ELPA_2STAGE_COMPLEX_GENERIC, info)
 
-     !GPU
-     call eh%set("gpu", 1, info)
+     !GPU (Still failing!)
+     ! call eh%set("gpu", 1, info) 
      !call eh%set("complex_kernel", ELPA_2STAGE_COMPLEX_GPU, info)
 
      !call eh%generalized_eigenvectors(hh, ss, e, v, .true., info)
@@ -822,7 +822,6 @@ SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
      CALL sqr_setmat( 'H', n, ZERO, hh, size(hh,1), idesc )
      !
      ! Go back to the CPU to comply with ELPA APIs
-     ss_h = ss
      !
      allocate(hh_h, source=hh)
      allocate(v_h, source=v)

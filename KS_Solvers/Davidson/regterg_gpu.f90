@@ -1034,7 +1034,7 @@ CONTAINS
                        v(1,ir), npwx2, w(1,ic), npwx2, 0.D0, work_d, nx )
 
            IF ( gstart == 2 ) &
-              CALL KScudaDGER( nr, nc, -1.D0, v(1,ir), npwx2, w(1,ic), npwx2, work_d, nx )
+              CALL myDGER( nr, nc, -1.D0, v(1,ir), npwx2, w(1,ic), npwx2, work_d, nx )
 
            work = work_d
 
@@ -1108,7 +1108,7 @@ CONTAINS
                           npwx2, w(1,ii), npwx2, 0.D0, work_d, nx )
               !
               IF ( gstart == 2 ) &
-                 CALL KScudaDGER( nr, nc, -1.D0, v( 1, ir ), npwx2, w(1,ii), npwx2, work_d, nx )
+                 CALL myDGER( nr, nc, -1.D0, v( 1, ir ), npwx2, w(1,ii), npwx2, work_d, nx )
               !
               vtmp(:,1:nc) = work_d(:,1:nc)
               !
