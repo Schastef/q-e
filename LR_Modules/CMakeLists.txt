@@ -1,5 +1,6 @@
 set(sources
     adddvscf.f90
+    adddvhubscf.f90
     addusdbec.f90
     addusdbec_nc.f90
     apply_dpot.f90
@@ -46,14 +47,19 @@ set(sources
     mix_pot.f90
     lrcom.f90
     lr_dot.f90
+    lr_dot_magnons.f90
     lanczos_pseudohermitian.f90
     lanczos_nonhermitian.f90
+    lanczos_pseudohermitian_c.f90
+    lanczos_nonhermitian_c.f90
     set_kplusq_nc.f90
     lr_sym_mod.f90
     ccg_psi.f90
     ccgsolve_all.f90
     ch_psi_all_complex.f90
-    addusddenseq.f90)
+    addusddenseq.f90
+    response_kernels.f90
+    efermi_shift.f90)
 
 qe_add_library(qe_lr_modules ${sources})
 target_link_libraries(qe_lr_modules

@@ -77,7 +77,7 @@ MODULE control_lr
   REAL(DP) :: tr2_ph  ! threshold for phonon calculation
   REAL(DP) :: alpha_mix(100)  ! the mixing parameter
   INTEGER :: niter_ph         ! maximum number of iterations (read from input)
-
+  INTEGER :: nbnd_occx        ! maximun value of nbnd_occ(:)
   !
 END MODULE control_lr
 !
@@ -200,6 +200,27 @@ MODULE units_lr
   INTEGER :: iuwfc,   & ! unit for wavefunctions
              lrwfc,   & ! the length of wavefunction record
              iuatwfc, & ! unit for atomic wavefunctions
-             iuatswfc   ! unit for atomic wavefunctions * S
+             iuatswfc,& ! unit for atomic wavefunctions * S
+             iudwf,   & ! unit with D psi
+             lrdwf      ! length of D psi record
   !
 END MODULE units_lr
+
+MODULE ldaU_lr
+  !
+  USE kinds,      ONLY : DP
+  USE parameters, ONLY : ntypx
+  !
+  REAL(DP) :: effU(ntypx)
+  ! effective Hubbard parameter: effU = Hubbard_U - Hubbard_J0
+  ! TODO: Can be moved to PW/ldaU
+  !
+  COMPLEX(DP), ALLOCATABLE :: dnsscf(:,:,:,:,:)
+  !! SCF derivative of ns
+  !
+  COMPLEX(DP), ALLOCATABLE, TARGET :: swfcatomk(:,:)
+  !! S * atomic wfc at k
+  COMPLEX(DP), POINTER :: swfcatomkpq(:,:)
+  !! S * atomic wfc at k+q
+  !
+END MODULE ldaU_lr

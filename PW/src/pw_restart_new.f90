@@ -48,7 +48,7 @@ MODULE pw_restart_new
   !
   CHARACTER(LEN=6), EXTERNAL :: int_to_char
   PRIVATE
-  PUBLIC :: pw_write_schema, pw_write_binaries
+  PUBLIC :: pw_write_schema, write_collected_wfc
   PUBLIC :: read_xml_file, read_collected_wfc
   !
   CONTAINS
@@ -103,13 +103,13 @@ MODULE pw_restart_new
                                        Hubbard_alpha, Hubbard_alpha_back, nsg, &
                                        Hubbard_J0, Hubbard_beta, Hubbard_U_back, &
                                        is_hubbard, is_hubbard_back, backall
-      USE spin_orb,             ONLY : lspinorb, domag
+      USE spin_orb,             ONLY : lspinorb
       USE symm_base,            ONLY : nrot, nsym, invsym, s, ft, irt, &
                                        t_rev, sname, time_reversal, no_t_rev,&
                                        spacegroup
       USE lsda_mod,             ONLY : nspin, isk, lsda, starting_magnetization, magtot, absmag
       USE noncollin_module,     ONLY : angle1, angle2, i_cons, mcons, bfield, magtot_nc, &
-                                       lambda
+                                       lambda, domag
       USE funct,                ONLY : get_dft_short, get_nonlocc_name, dft_is_nonlocc
       
       USE scf,                  ONLY : rho
@@ -145,12 +145,13 @@ MODULE pw_restart_new
       !
       USE wvfct_gpum,           ONLY : using_et, using_wg
       USE wavefunctions_gpum,   ONLY : using_evc
+      USE qexsd_module,         ONLY : qexsd_add_all_clocks 
       !
       IMPLICIT NONE
       !
       LOGICAL, INTENT(IN) :: only_init, wf_collect
       !
-      CHARACTER(LEN=32)     :: dft_name
+      CHARACTER(LEN=37)     :: dft_name
       CHARACTER(LEN=8)      :: smearing_loc
       CHARACTER(LEN=8), EXTERNAL :: schema_smearing
       CHARACTER(LEN=20)     :: occupations
@@ -680,6 +681,9 @@ MODULE pw_restart_new
          ENDIF
          NULLIFY ( bp_obj_ptr) 
 !-------------------------------------------------------------------------------
+! ... CLOCKS
+         CALL qexsd_add_all_clocks()
+!-------------------------------------------------------------------------------
 ! ... ACTUAL WRITING
 !-------------------------------------------------------------------------------
  10      CONTINUE
@@ -733,7 +737,7 @@ MODULE pw_restart_new
     END SUBROUTINE pw_write_schema
     !
     !------------------------------------------------------------------------
-    SUBROUTINE pw_write_binaries( )
+    SUBROUTINE write_collected_wfc( )
       !------------------------------------------------------------------------
       !
       USE mp,                   ONLY : mp_sum, mp_max
@@ -748,13 +752,12 @@ MODULE pw_restart_new
       USE klist,                ONLY : nks, nkstot, xk, ngk, igk_k
       USE gvect,                ONLY : ngm, g, mill
       USE fft_base,             ONLY : dfftp
-      USE basis,                ONLY : natomwfc
       USE wvfct,                ONLY : npwx, et, wg, nbnd
       USE lsda_mod,             ONLY : nspin, isk, lsda
       USE mp_pools,             ONLY : intra_pool_comm, inter_pool_comm
       USE mp_bands,             ONLY : me_bgrp, root_bgrp, intra_bgrp_comm, &
                                        root_bgrp_id, my_bgrp_id
-      USE wrappers,             ONLY : f_mkdir_safe
+      USE clib_wrappers,        ONLY : f_mkdir_safe
       !
       USE wavefunctions_gpum,   ONLY : using_evc
       USE wvfct_gpum,           ONLY : using_et
@@ -874,7 +877,7 @@ MODULE pw_restart_new
       !
       RETURN
       !
-    END SUBROUTINE pw_write_binaries
+    END SUBROUTINE write_collected_wfc
     !
     !-----------------------------------------------------------------------
     SUBROUTINE gk_l2gmap_kdip( npw_g, ngk_g, ngk, igk_l2g, igk_l2g_kdip, igwk )
@@ -1016,8 +1019,8 @@ MODULE pw_restart_new
            lxdm, ts_vdw, mbd_vdw
       USE Coul_cut_2D,     ONLY : do_cutoff_2D
       USE noncollin_module,ONLY : noncolin, npol, angle1, angle2, bfield, &
-           nspin_lsda, nspin_gga, nspin_mag
-      USE spin_orb,        ONLY : domag, lspinorb
+              nspin_lsda, nspin_gga, nspin_mag, domag
+      USE spin_orb,        ONLY : lspinorb
       USE lsda_mod,        ONLY : nspin, isk, lsda, starting_magnetization,&
            current_spin
       USE realus,          ONLY : real_space
@@ -1033,7 +1036,7 @@ MODULE pw_restart_new
       !
       INTEGER  :: i, is, ik, ierr, dum1,dum2,dum3
       LOGICAL  :: magnetic_sym, lvalid_input, lfixed
-      CHARACTER(LEN=32) :: dft_name
+      CHARACTER(LEN=37) :: dft_name
       CHARACTER(LEN=20) :: vdw_corr, occupations
       CHARACTER(LEN=320):: filename
       REAL(dp) :: exx_fraction, screening_parameter
@@ -1210,7 +1213,7 @@ MODULE pw_restart_new
       USE lsda_mod,             ONLY : nspin, isk
       USE noncollin_module,     ONLY : noncolin, npol
       USE klist,                ONLY : nkstot, nks, xk, ngk, igk_k
-      USE wvfct,                ONLY : npwx, g2kin, et, wg, nbnd
+      USE wvfct,                ONLY : npwx, et, wg, nbnd
       USE gvect,                ONLY : ig_l2g
       USE mp_bands,             ONLY : root_bgrp, intra_bgrp_comm
       USE mp_pools,             ONLY : me_pool, root_pool, &

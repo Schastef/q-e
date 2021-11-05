@@ -1359,6 +1359,31 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
             }
         }        
 
+        var dmft -type LOGICAL { 
+            default { .FALSE. }
+            status {
+                Requires compilation with hdf5 support
+            }
+            info { 
+                If true, nscf calculation will exit in restart mode, scf calculation
+                will restart from there if DMFT updates are provided as hdf5 archive.
+                Scf calculation should be used only with @ref electron_maxstep = 1.
+                @ref K_POINTS have to be identical and given explicitly with @ref nosym.
+            }
+        }
+
+        var dmft_prefix -type CHARACTER { 
+            default { @ref prefix }
+            info {
+                prepended to hdf5 archive: dmft_prefix.h5
+
+                DMFT update should be provided in group/dataset as:
+                - dft_misc_input/band_window with dimension [1, number of k-points, 2 (real + complex)] 
+                - dft_update/delta_N with dimension [number of k-points, number of correlated orbitals,
+                number of correlated orbitals, 2 (real + complex)]
+            }
+        }
+
         var ensemble_energies -type LOGICAL {
             default { .false. }
             info {
@@ -2150,6 +2175,15 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
                 opt -val {'paro', 'ParO'} {
                     ParO iterative diagonalization
                 }
+               
+                opt -val {'rmm-davidson', 'rmm-paro'} {
+                    RMM-DIIS iterative diagonalization.  
+                    To stabilize the SCF loop 
+                    RMM-DIIS is alternated with calls to Davidson or
+                    ParO  solvers depending on the string used. 
+                    Other variables that can be used to tune the behavior of 
+                    RMM-DIIS are:  @ref diago_rmm_ndim and @ref diago_rmm_conv
+                }
             }
         }
 
@@ -2197,7 +2231,21 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
                 total energy, forces, and other ground-state properties).
             }
         }
-
+        
+        var diago_rmm_ndim -type INTEGER {
+           default {4}
+           info {
+               Max dimension  of the iterative subspace for RMM-DIIS diagonalization 
+           }
+        }
+       
+       var diago_rmm_conv -type LOGICAL {
+          default { .FALSE. }
+          info {
+             If .TRUE. during the SCF loop the RMM-DIIS is reiterated until all bands 
+             are converged or up to a max of 8 times. 
+          }
+       }
         var efield -type REAL {
             default { 0.D0 }
             info {
@@ -3319,11 +3367,41 @@ hexagonal cells, but will never converge for cubic ones.  }
     # card ADDITIONAL_K_POINTS
     #
     card ADDITIONAL_K_POINTS {
-        label { Optional card. Adds a list of k-points with zero weight, after those used for the scf calculation.
-                When doing an EXX calculation and nq1x, nq2x or nq3x are different from one, also include the 
-                required k+q points. The main use of this card is do band plots with EXX. }
-        syntax { message { Same as K_POINTS, but does not accept 'automatic'. } } 
+        message {
+            Optional card. Adds a list of k-points with zero weight, after those used for
+            the scf calculation. When doing an EXX calculation and @ref nq1x, @ref nq2x or @ref nq3x are
+            different from one, also include the required @b k+q points. The main use of this
+            card is to do band plots with EXX.
         }
+        flag additional_kpoints_type -use optional {
+            enum { tpiba | crystal | gamma | tpiba_b | crystal_b | tpiba_c | crystal_c }
+            default { tbipa }
+            info {
+                for the explanation of the K_POINTS' options, see @ref K_POINTS
+            }
+        }
+
+        syntax -flag {tpiba | crystal | tpiba_b | crystal_b | tpiba_c | crystal_c } {
+            line { 
+                var nks_add -type INTEGER {
+                    info {Number of supplied "additional" k-points.}
+                }
+            }
+            table kpoints {
+                rows -start 1 -end nks_add {
+                    colgroup -type REAL {
+                        col k_x 
+                        col k_y
+                        col k_z
+                        col wk_
+                        info {
+                            for the respective explanation, see the @ref xk_x, @ref xk_y, @ref xk_z, @ref wk
+                        }
+                    }
+                }               
+            }
+        }
+    }
  
 
     #

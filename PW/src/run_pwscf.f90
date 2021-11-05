@@ -58,6 +58,7 @@ SUBROUTINE run_pwscf( exit_status )
   USE xc_lib,               ONLY : xclib_dft_is, stop_exx
   USE beef,                 ONLY : beef_energies
   USE ldaU,                 ONLY : lda_plus_u
+  USE add_dmft_occ,         ONLY : dmft
   !
   USE device_fbuff_m,             ONLY : dev_buf
   !
@@ -78,6 +79,8 @@ SUBROUTINE run_pwscf( exit_status )
   ! ions_status =  2  converged, restart with nonzero magnetization
   ! ions_status =  1  converged, final step with current cell needed
   ! ions_status =  0  converged, exiting
+  !
+  LOGICAL :: optimizer_failed = .FALSE.
   !
   INTEGER :: ierr
   ! collect error codes
@@ -127,18 +130,18 @@ SUBROUTINE run_pwscf( exit_status )
      CALL data_structure( gamma_only )
      CALL summary()
      CALL memory_report()
-     CALL qexsd_set_status(255)
-     CALL punch( 'config-init' )
      exit_status = 255
+     CALL qexsd_set_status( exit_status )
+     CALL punch( 'config-init' )
      RETURN
   ENDIF
   !
   CALL init_run()
   !
   IF ( check_stop_now() ) THEN
-     CALL qexsd_set_status( 255 )
-     CALL punch( 'config' )
      exit_status = 255
+     CALL qexsd_set_status( exit_status )
+     CALL punch( 'config' )
      RETURN
   ENDIF
   !
@@ -156,7 +159,11 @@ SUBROUTINE run_pwscf( exit_status )
      !
      IF ( check_stop_now() .OR. .NOT. conv_elec ) THEN
         IF ( check_stop_now() ) exit_status = 255
-        IF ( .NOT. conv_elec )  exit_status =  2
+        IF ( .NOT. conv_elec) THEN
+            IF (dmft) exit_status =  131
+        ELSE
+            exit_status = 2
+        ENDIF
         CALL qexsd_set_status(exit_status)
         CALL punch( 'config' )
         RETURN
@@ -198,7 +205,7 @@ SUBROUTINE run_pwscf( exit_status )
         !
         ! ... ionic step (for molecular dynamics or optimization)
         !
-        CALL move_ions ( idone, ions_status )
+        CALL move_ions ( idone, ions_status, optimizer_failed )
         conv_ions = ( ions_status == 0 ) .OR. &
                     ( ions_status == 1 .AND. treinit_gvecs )
         !
@@ -207,7 +214,8 @@ SUBROUTINE run_pwscf( exit_status )
         ! ... save restart information for the new configuration
         !
         IF ( idone <= nstep .AND. .NOT. conv_ions ) THEN
-            CALL qexsd_set_status( 255 )
+            exit_status = 255
+            CALL qexsd_set_status( exit_status )
             CALL punch( 'config-only' )
         END IF
         !
@@ -221,7 +229,7 @@ SUBROUTINE run_pwscf( exit_status )
      !
      ! ... exit condition (ionic convergence) is checked here
      !
-     IF ( conv_ions ) EXIT main_loop
+     IF ( conv_ions .OR. optimizer_failed ) EXIT main_loop
      !
      ! ... receive new positions from MM code in QM/MM run
      !
@@ -286,6 +294,15 @@ SUBROUTINE run_pwscf( exit_status )
      !
   ENDDO main_loop
   !
+  ! Set correct exit_status
+  !
+  IF ( .NOT. conv_ions .OR. optimizer_failed ) THEN
+      exit_status =  3
+  ELSE
+      ! All good
+      exit_status = 0
+   END IF
+  !
   ! ... save final data file
   !
   CALL qexsd_set_status( exit_status )
@@ -294,7 +311,6 @@ SUBROUTINE run_pwscf( exit_status )
   !
   CALL qmmm_shutdown()
   !
-  IF ( .NOT. conv_ions )  exit_status =  3
   RETURN
   !
 9010 FORMAT( /,5X,'Current dimensions of program PWSCF are:', &
@@ -425,8 +441,7 @@ SUBROUTINE reset_starting_magnetization()
   USE ions_base,          ONLY : nsp, ityp, nat
   USE lsda_mod,           ONLY : nspin, starting_magnetization
   USE scf,                ONLY : rho
-  USE spin_orb,           ONLY : domag
-  USE noncollin_module,   ONLY : noncolin, angle1, angle2
+  USE noncollin_module,   ONLY : noncolin, angle1, angle2, domag
   !
   IMPLICIT NONE
   !

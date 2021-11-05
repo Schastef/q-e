@@ -1,4 +1,4 @@
-# Copyright (C) 2001 Quantum ESPRESSO
+
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,7 +15,7 @@ default :
 	@echo ' '
 	@echo 'where <target> identifies an action'
 	@echo ' run-tests                   : run-tests-serial (default)'
-	@echo ' run-tests-serial            : run all tests in SERIAL' 
+	@echo ' run-tests-serial            : run all tests in SERIAL'
 	@echo ' run-tests-XX-serial         : run tests for XX={pw,cp,ph,epw,hp,tddfpt} only, as above'
 	@echo ' run-tests-parallel          : run all tests in PARALLEL (4 MPI)'
 	@echo ' run-tests-XX-parallel       : run tests for XX={pw,cp,ph,epw,hp,tddfpt} only, as above'
@@ -38,6 +38,7 @@ pseudo :
 	@./check_pseudo.sh tddfpt_
 	@./check_pseudo.sh hp_
 	@./check_pseudo.sh ph_
+	@./check_pseudo.sh QEHeat_
 
 run-tests : run-tests-serial
 
@@ -47,11 +48,11 @@ run-tests-parallel : run-tests-pw-parallel run-tests-cp-parallel run-tests-ph-pa
 
 
 run-tests-cp-serial : prolog pseudo
-	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi
 	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=cp_all
 
 run-tests-cp-parallel : prolog pseudo
-	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi
 	env QE_USE_MPI=1 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=cp_all
 
 run-tests-pw-serial : prolog pseudo
@@ -96,6 +97,15 @@ run-tests-tddfpt-serial : prolog pseudo
 run-tests-tddfpt-parallel : prolog pseudo
 	env QE_USE_MPI=1 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=tddfpt_all
 
+run-tests-all_currents-serial : prolog pseudo
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
+	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=all_currents_all
+
+run-tests-all_currents-parallel : prolog pseudo
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
+	env QE_USE_MPI=1 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=all_currents_all
+
+
 run-travis : clean prolog pseudo
 	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --verbose --category=epw_base
 
@@ -118,7 +128,7 @@ run-tests-xsd-pw-serial : prolog pseudo
     done ; cd ..
 
 create-reference-cp : pseudo prolog
-	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi 
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi
 	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --category=cp_all make-benchmarks
 
 create-reference-pw : pseudo prolog
@@ -127,8 +137,13 @@ create-reference-pw : pseudo prolog
 create-reference-epw : pseudo prolog
 	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --category=epw_all make-benchmarks
 
+create-reference-all_currents : pseudo prolog
+	@if ! test -d $(ESPRESSO_TMPDIR); then mkdir $(ESPRESSO_TMPDIR); fi
+	env QE_USE_MPI=0 ${TESTCODE_DIR}/bin/testcode.py --category=all_currents_all make-benchmarks
 
-compare : compare-cp compare-pw compare-ph compare-epw compare-tddfpt compare-hp
+
+
+compare : compare-cp compare-pw compare-ph compare-epw compare-tddfpt compare-hp compare-all_currents
 
 compare-cp : prolog
 	${TESTCODE_DIR}/bin/testcode.py --category=cp_all  --verbose compare 2>&1 | tee out.CP.`date +%Y%m%d_%H%M%S`
@@ -147,6 +162,10 @@ compare-tddfpt : prolog
 
 compare-hp : prolog
 	${TESTCODE_DIR}/bin/testcode.py --category=hp_all  --verbose compare 2>&1 | tee out.HP.`date +%Y%m%d_%H%M%S`
+
+compare-all_currents : prolog pseudo
+	${TESTCODE_DIR}/bin/testcode.py --category=all_currents_all  --verbose compare 2>&1 | tee out.ALL_CURRENTS.`date +%Y%m%d_%H%M%S`
+
 
 clean:
 # output files
@@ -180,7 +199,7 @@ clean:
 		hp_*/*HubbardV* hp_*/*mix* hp_*/*parameters.out
 # Cleaning EPW final files
 	@rm -rf epw_*/_ph0 epw_*/*.save epw_*/*.wfc* epw_*/*.dyn* \
-		epw_*/*.qdos_* epw_*/*.P epw_*/*.wout epw_*/*.fmt epw_*/*.pade* \
+		epw_*/*.qdos_* epw_*/*.P epw_*/*.wout epw_*/crystal.fmt epw_*/*.pade* \
 		epw_*/*.epmat_wanep epw_*/*.kgmap epw_*/*.nnkp epw_*/*.epmatwp* \
 		epw_*/*.acon_iso_* epw_*/*.a2f* epw_*/*.phdos* epw_*/*.lambda \
 		epw_*/*.kmap epw_*/*.lambda_k_pairs epw_*/*.ukk epw_*/*.imag_aniso* \
@@ -195,8 +214,11 @@ clean:
 		epw_*/*.Fin_restart* epw_*/*.Fin_restartcb* epw_*/*.acon_iso_* \
 		epw_*/*.bvec epw_*/*.fc epw_*/*.xml epw_*/*.labelinfo.dat \
 		epw_*/Fepmatkq1 epw_*/Fepmatkqcb1 epw_*/Fsparse epw_*/Fsparsecb \
-		epw_*/inv_taucb_tmp epw_*/inv_tau_tmp epw_*/*.cube epw_*/EPW.bib
- 
+		epw_*/inv_taucb_tmp epw_*/inv_tau_tmp epw_*/*.cube epw_*/EPW.bib \
+		epw_*/*_hr.dat epw_*/*_wsvec.dat epw_*/epwdata.fmt epw_*/IBTEvel_sup.fmt \
+		epw_*/inv_taucb.fmt epw_*/inv_tau.fmt epw_*/restart.fmt epw_*/vmedata.fmt \
+		epw_*/selecq.fmt epw_*/dmedata.fmt
+
 # Special cases for EPW
 	@rm -rf epw_base/save epw_super/save epw_pl/save/ epw_polar/save/ \
                 epw_trev/save epw_trev_uspp/save epw_trev_paw/save \
@@ -205,12 +227,18 @@ clean:
 # Cleaning ZG final files
 	@rm -f zg_conf/equil_pos.txt zg_conf/ZG-*_0.020.dat
 
-	@rm -f userconfig
-
 # Cleaning TDDFPT final files
 	@rm -rf tddfpt_*/*.plot_chi.dat tddfpt_*/*.plot_eps.dat tddfpt_*/out/ tddfpt_*/turbo_spectrum.out
+# all_currents files
+	@for x in `find QEHeat_* -name "test*"`; do rm -rf $$x; done
+	@for x in `find QEHeat_* -name "CRASH"`; do rm -rf $$x; done
+	@rm -rf QEHeat_*/save \
+                QEHeat_*/current_hz*
+	@rm -f userconfig
+
 
 # Calling 'purge' means remove all reference outputs... be careful!
 purge: clean
 	@for x in `find pw_* -name "benchmark*"`; do rm -rf $$x; done
 	@for x in `find cp_* -name "benchmark*"`; do rm -rf $$x; done
+	@for x in `find QEHeat_* -name "benchmark*"`; do rm -rf $$x; done

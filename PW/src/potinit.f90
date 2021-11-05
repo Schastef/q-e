@@ -33,7 +33,7 @@ SUBROUTINE potinit()
   USE fft_base,             ONLY : dfftp
   USE gvect,                ONLY : ngm, gstart, g, gg, ig_l2g
   USE gvecs,                ONLY : doublegrid
-  USE control_flags,        ONLY : lscf, gamma_only
+  USE control_flags,        ONLY : lscf, gamma_only, restart
   USE scf,                  ONLY : rho, rho_core, rhog_core, &
                                    vltot, v, vrs, kedtau
   USE xc_lib,               ONLY : xclib_dft_is
@@ -41,9 +41,9 @@ SUBROUTINE potinit()
   USE ldaU,                 ONLY : lda_plus_u, Hubbard_lmax, eth, &
                                    niter_with_fixed_ns, lda_plus_u_kind, &
                                    nsg, nsgnew
-  USE noncollin_module,     ONLY : noncolin, report
+  USE noncollin_module,     ONLY : noncolin, domag, report
   USE io_files,             ONLY : restart_dir, input_drho, check_file_exist
-  USE spin_orb,             ONLY : domag, lforcet
+  USE spin_orb,             ONLY : lforcet
   USE mp,                   ONLY : mp_sum
   USE mp_bands ,            ONLY : intra_bgrp_comm, root_bgrp
   USE io_global,            ONLY : ionode, ionode_id
@@ -88,11 +88,14 @@ SUBROUTINE potinit()
         !
         ! ... 'force theorem' calculation of MAE: read rho only from previous
         ! ... lsda calculation, set noncolinear magnetization from angles
+        ! ... (not if restarting! the charge density saved to file in that
+        ! ...  case has already the required magnetization direction)
         ! ... FIXME: why not calling read_scf also in this case?
         !
         CALL read_rhog ( filename, root_bgrp, intra_bgrp_comm, &
              ig_l2g, nspin, rho%of_g, gamma_only )
-        CALL nc_magnetization_from_lsda ( dfftp%ngm, nspin, rho%of_g )
+        IF ( .NOT. restart ) &
+           CALL nc_magnetization_from_lsda ( dfftp%ngm, nspin, rho%of_g )
      END IF
      !
      IF ( lscf ) THEN

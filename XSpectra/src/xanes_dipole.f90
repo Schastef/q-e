@@ -43,13 +43,13 @@ SUBROUTINE xanes_dipole(a,b,ncalcv,xnorm,core_wfn,paw_iltonhb,&
                               save_file_kind
   USE atom,            ONLY : rgrid, msh
   USE radin_mod
-  USE basis,           ONLY : natomwfc
   USE uspp,            ONLY : vkb, nkb, okvan !CG
   USE uspp_param,      ONLY : upf
   USE ldaU,            ONLY : lda_plus_u, init_lda_plus_u, lda_plus_u_kind 
   !<CG>
   USE xspectra_paw_variables, ONLY : xspectra_paw_nhm
   !</CG>
+  USE uspp_init,        ONLY : init_us_2
 
   IMPLICIT NONE
   !

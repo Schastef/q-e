@@ -755,7 +755,7 @@ MODULE paw_onecenter
 !$omp workshare
     gc_rad = 0.0d0
     h_rad  = 0.0d0
-!$omp end workshare nowait
+!$omp end workshare
     !
     IF (PRESENT(energy)) THEN
 !$omp single
@@ -1682,7 +1682,6 @@ MODULE paw_onecenter
     !!  potential in the spherical basis. It receives as input the charge
     !!  density and its variation.
     !
-    USE spin_orb,               ONLY : domag
     USE noncollin_module,       ONLY : nspin_mag
     USE lsda_mod,               ONLY : nspin
     USE atom,                   ONLY : g => rgrid

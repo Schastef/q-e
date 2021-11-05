@@ -6,32 +6,30 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------------------------
-! TB
-! included gate related forces
-!----------------------------------------------------------------------------
-!
-!----------------------------------------------------------------------------
 SUBROUTINE forces()
   !----------------------------------------------------------------------------
   !! This routine is a driver routine which computes the forces
   !! acting on the atoms. The complete expression of the forces
-  !! contains four parts which are computed by different routines:
+  !! contains many parts which are computed by different routines:
   !
-  !! a) force_lc: local contribution to the forces;  
-  !! b) force_cc: contribution due to NLCC;  
-  !! c) force_ew: contribution due to the electrostatic ewald term;  
-  !! d) force_us: contribution due to the non-local potential;  
-  !! e) force_corr: correction term for incomplete self-consistency;  
-  !! f) force_hub: contribution due to the Hubbard term;  
-  !! g) force_london: semi-empirical correction for dispersion forces;  
-  !! h) force_d3: Grimme-D3 (DFT-D3) correction to dispersion forces.
+  !! - force_lc: local potential contribution 
+  !! - force_us: non-local potential contribution
+  !! - (esm_)force_ew: (ESM) electrostatic ewald term
+  !! - force_cc: nonlinear core correction contribution
+  !! - force_corr: correction term for incomplete self-consistency
+  !! - force_hub: contribution due to the Hubbard term;
+  !! - force_london: Grimme DFT+D dispersion forces
+  !! - force_d3: Grimme-D3 (DFT-D3) dispersion forces
+  !! - force_xdm: XDM dispersion forces
+  !! - more terms from external electric fields, Martyna-Tuckerman, etc.
   !
   USE kinds,             ONLY : DP
   USE io_global,         ONLY : stdout
   USE cell_base,         ONLY : at, bg, alat, omega  
   USE ions_base,         ONLY : nat, ntyp => nsp, ityp, tau, zv, amass, extfor, atm
   USE fft_base,          ONLY : dfftp
-  USE gvect,             ONLY : ngm, gstart, ngl, igtongl, igtongl_d, g,  gg, gcutm
+  USE gvect,             ONLY : ngm, gstart, ngl, igtongl, igtongl_d, g, gg, &
+                                g_d, gcutm
   USE lsda_mod,          ONLY : nspin
   USE symme,             ONLY : symvector
   USE vlocal,            ONLY : strf, vloc
@@ -59,7 +57,6 @@ SUBROUTINE forces()
   !
   USE control_flags,     ONLY : use_gpu
   USE device_fbuff_m,          ONLY : dev_buf
-  USE gvect_gpum,        ONLY : g_d
   USE device_memcpy_m,     ONLY : dev_memcpy
   !
   IMPLICIT NONE
@@ -179,6 +176,7 @@ SUBROUTINE forces()
   !
   IF ( ldftd3 ) THEN
     !
+    CALL start_clock('force_dftd3')
     ALLOCATE( force_d3(3, nat) )
     force_d3(:,:) = 0.0_DP
     latvecs(:,:) = at(:,:)*alat
@@ -188,6 +186,7 @@ SUBROUTINE forces()
                           force_d3, stress_dftd3 )
     force_d3 = -2.d0*force_d3
     tau(:,:) = tau(:,:)/alat
+    CALL stop_clock('force_dftd3')
   ENDIF
   !
   !

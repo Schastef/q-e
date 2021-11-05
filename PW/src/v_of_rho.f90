@@ -349,7 +349,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   USE gvect,            ONLY : ngm
   USE lsda_mod,         ONLY : nspin
   USE cell_base,        ONLY : omega
-  USE spin_orb,         ONLY : domag
+  USE noncollin_module, ONLY : domag
   USE funct,            ONLY : nlc, dft_is_nonlocc
   USE scf,              ONLY : scf_type
   USE mp_bands,         ONLY : intra_bgrp_comm
@@ -781,9 +781,7 @@ SUBROUTINE v_hubbard( ns, v_hub, eth )
   ! Hubbard energy
   !
   IF ( iverbosity > 0 .AND. .NOT.dfpt_hub ) THEN
-     WRITE(stdout,*) '--- in v_hubbard ---'
-     WRITE(stdout,'("Hubbard energy ",f9.4)') eth
-     WRITE(stdout,*) '-------'
+     WRITE(stdout,'(/5x,"HUBBARD ENERGY = ",f9.4,1x," (Ry)")') eth
   ENDIF
   !
   RETURN
@@ -862,9 +860,7 @@ SUBROUTINE v_hubbard_b (ns, v_hub, eth)
   ! Hubbard energy
   !
   IF ( iverbosity > 0 .AND. .NOT.dfpt_hub ) THEN
-     WRITE(stdout,*) '--- in v_hubbard_b ---'
-     WRITE(stdout,'(''Hubbard_back energy '',f9.4)') eth
-     WRITE(stdout,*) '-------'
+     WRITE(stdout,'(/5x,"HUBBARD BACKGROUND ENERGY = ",f9.4,1x," (Ry)")') eth
   ENDIF
   !
   RETURN
@@ -999,9 +995,7 @@ SUBROUTINE v_hubbard_full( ns, v_hub, eth )
   ! Hubbard energy
   !
   IF ( iverbosity > 0 ) THEN
-     WRITE(stdout,*) '--- in v_hubbard ---'
-     WRITE(stdout,'("Hubbard energies (dc, U, total) ",3f9.4)') eth_dc, eth_u, eth
-     WRITE(stdout,*) '-------'
+     WRITE(stdout,'(/5x,"HUBBARD ENERGIES (dc, U, total) ",3f9.4,1x," (Ry)")') eth_dc, eth_u, eth
   ENDIF
   !
   DEALLOCATE (u_matrix)
@@ -1371,9 +1365,7 @@ SUBROUTINE v_hubbard_extended (nsg, v_hub, eth)
   ! Hubbard energy
   !
   IF ( iverbosity > 0 .AND. .NOT.dfpt_hub ) THEN
-     WRITE(stdout,*) '--- in v_hubbard_extended ---'
-     WRITE(stdout,'("Hubbard energy ",f9.4)') eth
-     WRITE(stdout,*) '-----------------------------'
+     WRITE(stdout,'(/5x,"HUBBARD ENERGY = ",f9.4,1x," (Ry)")') eth
   ENDIF
   !
   RETURN

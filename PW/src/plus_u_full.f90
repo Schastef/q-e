@@ -300,8 +300,6 @@ SUBROUTINE atomic_wfc_nc_updown( ik, wfcatom )
   USE wvfct,             ONLY : npwx, nbnd
   USE uspp_param,        ONLY : upf, nwfcm
   USE noncollin_module,  ONLY : noncolin, npol, angle1, angle2
-  USE spin_orb,          ONLY : lspinorb, rot_ylm, fcoef, domag, &
-                                starting_spin_angle
   !
   IMPLICIT NONE
   !
@@ -349,7 +347,7 @@ SUBROUTINE atomic_wfc_nc_updown( ik, wfcatom )
      qg(ig) = SQRT(qg(ig))*tpiba
   ENDDO
   !
-  CALL interp_at_wfc ( npw, qg, nwfcm, chiq )
+  CALL interp_atwfc ( npw, qg, nwfcm, chiq )
   !
   DEALLOCATE( qg, gk )
   ALLOCATE( aux(npw), sk(npw) )

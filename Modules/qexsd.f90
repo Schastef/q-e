@@ -39,8 +39,8 @@ MODULE qexsd_module
   !
   ! definitions for the fmt
   !
-  CHARACTER(5), PARAMETER :: fmt_name = "QEXSD"
-  CHARACTER(8), PARAMETER :: fmt_version = "20.04.20"
+  CHARACTER(5),  PARAMETER :: fmt_name = "QEXSD"
+  CHARACTER(8),  PARAMETER :: fmt_version = "21.07.16"
   !
   ! internal data to be set
   !
@@ -57,6 +57,11 @@ MODULE qexsd_module
   TYPE ( closed_type )                         :: qexsd_closed_element
   INTEGER                                      :: step_counter
   !
+  ! private vars used to set the list of clocks to be saved in the xml file
+  CHARACTER(:),dimension(:), ALLOCATABLE     :: clock_list
+  INTEGER                                    :: clock_list_dim =0
+  INTEGER                                    :: clock_list_last=0 
+  !
   ! end of declarations
   !
   PUBLIC :: qexsd_xf  
@@ -65,6 +70,9 @@ MODULE qexsd_module
   PUBLIC :: qexsd_step_addstep, qexsd_reset_steps
   PUBLIC :: qexsd_current_version, qexsd_default_version, qexsd_current_version_init
   PUBLIC :: qexsd_set_status
+  PUBLIC :: qexsd_allocate_clock_list
+  PUBLIC :: qexsd_add_label
+  PUBLIC :: qexsd_add_all_clocks 
   ! 
 CONTAINS
 !
@@ -78,7 +86,10 @@ CONTAINS
     !-------------------------------------------------------------------------------------------------
     IMPLICIT NONE
     !
-    INTEGER      :: status_int
+    INTEGER, INTENT(IN)      :: status_int
+    !
+    exit_status = status_int
+    !
     END SUBROUTINE qexsd_set_status
     !
 !
@@ -113,7 +124,7 @@ CONTAINS
       CALL xml_NewElement (XF=qexsd_xf, NAME = "qes:espresso")
       CALL xml_addAttribute(XF=qexsd_xf, NAME = "xsi:schemaLocation", &
                             VALUE = "http://www.quantum-espresso.org/ns/qes/qes-1.0 "//&
-                                    "http://www.quantum-espresso.org/ns/qes/qes_030920.xsd" )
+                                    "http://www.quantum-espresso.org/ns/qes/qes_210716.xsd" )
       CALL xml_addAttribute(XF=qexsd_xf, NAME="Units", VALUE="Hartree atomic units")
       CALL xml_addComment(XF = qexsd_xf, &
               COMMENT = "All quantities are in Hartree atomic units unless otherwise specified" ) 
@@ -229,9 +240,9 @@ CONTAINS
          CALL xml_EndElement(qexsd_xf, "status")          
          CALL qexsd_set_closed()
          IF (get_clock('PWSCF') > get_clock('CP'))  THEN 
-            CALL qexsd_init_clocks (qexsd_timing_, 'PWSCF       ' , ['electrons   '])
+            CALL qexsd_init_clocks (qexsd_timing_, 'PWSCF       ' , clock_list)
          ELSE 
-            CALL qexsd_init_clocks (qexsd_timing_, 'CP          ') 
+            CALL qexsd_init_clocks (qexsd_timing_, 'CP          ', clock_list) 
          END IF 
          CALL qes_write ( qexsd_xf, qexsd_timing_) 
          CALL qes_reset(qexsd_timing_) 
@@ -521,7 +532,7 @@ CONTAINS
           END DO
           DEALLOCATE (steps)
       END IF
-   END SUBROUTINE
+   END SUBROUTINE qexsd_reset_steps
     !
     !--------------------------------------------------------------------------------------------------
     SUBROUTINE qexsd_set_closed() 
@@ -548,8 +559,8 @@ SUBROUTINE qexsd_init_clocks (timing_, total_clock, partial_clocks)
       USE qes_libs_module, ONLY: qes_init, qes_reset 
       IMPLICIT NONE
       TYPE(timing_type),INTENT(INOUT)          :: timing_ 
-      CHARACTER(LEN=12),INTENT(IN)             :: total_clock 
-      CHARACTER(LEN=12),OPTIONAL,INTENT(IN)    :: partial_clocks(:) 
+      CHARACTER(LEN=*),INTENT(IN)             :: total_clock 
+      CHARACTER(LEN=*),OPTIONAL,INTENT(IN)    :: partial_clocks(:) 
       ! 
       TYPE (clock_type)                 :: total_
       TYPE(clock_type),ALLOCATABLE      :: partial_(:)  
@@ -565,7 +576,7 @@ SUBROUTINE qexsd_init_clocks (timing_, total_clock, partial_clocks)
          END FUNCTION get_cpu_and_wall 
       END INTERFACE
       ! 
-      IF (PRESENT(partial_clocks)) partial_ndim = SIZE (partial_clocks)
+      IF (PRESENT(partial_clocks)) partial_ndim = clock_list_last
       DO ic = 1, nclock
          IF ( TRIM(total_clock) == clock_label(ic) ) EXIT 
       END DO 
@@ -577,15 +588,15 @@ SUBROUTINE qexsd_init_clocks (timing_, total_clock, partial_clocks)
             match = clock_label(1:nclock) == TRIM(partial_clocks(ipar)) 
             IF ( ANY (match))  THEN
                nc = get_index(.TRUE., match)
+               IF (nc == ic) CYCLE
                t = get_cpu_and_wall(nc) 
                CALL qes_init(partial_(ipar), "partial", TRIM(clock_label(nc)), t(1), t(2),&
                              called(nc))
             ELSE 
                CALL qes_init (partial_(ipar), "partial", "not_found",  -1.d0, -1.d0, 0)  
-               CALL infomsg("add_xml_clocks_pw: label not found ", TRIM(partial_clocks(ipar))) 
                partial_(ipar)%lwrite=.FALSE. 
             END IF 
-            END DO
+         END DO
       END IF 
       CALL qes_init( timing_, "timing_info", total_, partial_)
       CALL qes_reset ( total_) 
@@ -609,5 +620,48 @@ SUBROUTINE qexsd_init_clocks (timing_, total_clock, partial_clocks)
          END FUNCTION get_index 
    END SUBROUTINE qexsd_init_clocks  
 
+   SUBROUTINE qexsd_allocate_clock_list(prog)
+     !! allocates the list of clock labels    
+     IMPLICIT NONE 
+     CHARACTER(*), INTENT(IN) :: prog
+     !! name of the program
+     IF (ALLOCATED(clock_list)) DEALLOCATE (clock_list) 
+     IF (prog == 'PW') THEN 
+      ALLOCATE(character(len=32) :: clock_list(100))
+      clock_list_dim = 100 
+     ELSE IF (prog == 'CPV') THEN 
+      ALLOCATE (character(len=32) :: clock_list(100))
+      clock_list_dim = 100 
+     END IF 
+   END SUBROUTINE qexsd_allocate_clock_list
 
+   SUBROUTINE qexsd_add_all_clocks()
+     !! allocates the list of clock labels copying all active clocks
+     USE mytime,  ONLY: nclock, clock_label
+     IMPLICIT NONE 
+     IF (ALLOCATED(clock_list))  DEALLOCATE (clock_list) 
+     ALLOCATE (clock_list, SOURCE=clock_label(1:nclock)) 
+     clock_list_dim = nclock
+     clock_list_last = nclock
+    
+   END SUBROUTINE qexsd_add_all_clocks
+
+   SUBROUTINE qexsd_add_label (label)
+      !! adds a clock label to the clock list that will be reported in the xml file
+      IMPLICIT NONE 
+      CHARACTER(LEN=*),INTENT(IN)  :: label
+      !! clock label to be added to the list 
+      !
+      IF (clock_list_dim == 0) THEN 
+         CALL infomsg("qexsd_add_label:", "trying to add label before allocation FIXME")
+         RETURN
+      END IF
+      IF ( clock_list_last .GE. clock_list_dim) THEN 
+        CALL infomsg("qexsd_add_label:", "too many clocks FIXME")
+        RETURN
+      END IF 
+      clock_list(clock_list_last+1) = label
+      clock_list_last = clock_list_last + 1 
+   END SUBROUTINE qexsd_add_label
+   !
 END MODULE qexsd_module
