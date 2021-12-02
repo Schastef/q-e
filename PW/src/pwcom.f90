@@ -373,6 +373,10 @@ MODULE force_mod
   !! norm of the gradient (forces)
   REAL(DP) :: sigma(3,3)
   !! the stress acting on the system
+  LOGICAL :: lforce
+  !! if .TRUE. compute the forces
+  LOGICAL :: lstres
+  !! if .TRUE. compute the stress
   REAL(DP), ALLOCATABLE :: eigenval(:)
   !! eigenvalues of the overlap matrix
   COMPLEX(DP), ALLOCATABLE :: eigenvect(:,:)
@@ -462,6 +466,22 @@ MODULE fixed_occ
 END MODULE fixed_occ
 !
 !
+!
+MODULE source_free_xc_mod
+  !
+  !! Variables needed for calculations with spin-orbit
+  !
+  USE kinds,      ONLY : DP
+  !
+  SAVE
+  LOGICAL :: source_free_xc
+  !! if .TRUE. remove source from B_xc
+  REAL(DP) :: ssxc
+  !! scaling of the spin part of exchange and correlation
+  !
+END MODULE source_free_xc_mod
+!
+!
 MODULE pwcom
   !
   USE klist
@@ -473,5 +493,6 @@ MODULE pwcom
   USE relax
   USE cellmd
   USE fixed_occ
+  USE source_free_xc_mod
   !
 END MODULE pwcom

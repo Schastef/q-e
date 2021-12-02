@@ -426,6 +426,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   USE mp_bands,         ONLY : intra_bgrp_comm
   USE mp,               ONLY : mp_sum
   USE control_flags,    ONLY : use_gpu
+  USE source_free_xc_mod,    ONLY : ssxc, source_free_xc
   !
   IMPLICIT NONE
   !
@@ -461,6 +462,10 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
     ! counter on mesh points
     ! counter on polarization components
     ! number of mesh points (=dfftp%nnr)
+  !
+  REAL(DP), ALLOCATABLE :: vns(:,:)
+  LOGICAL :: scale_bxc
+  !
   REAL(DP), PARAMETER :: vanishing_charge = 1.D-10, &
                          vanishing_mag    = 1.D-20
   !
@@ -500,13 +505,27 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   ELSEIF ( nspin == 2 ) THEN
      ! ... spin-polarized case
      !
+     scale_bxc = (ABS(ssxc -1.d0) > eps8)
+     !
+     IF (scale_bxc) rho%of_r(:,2) = rho%of_r(:,2) * ssxc
+     !
      CALL xc( dfftp%nnr, 2, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.TRUE. )
      !
+     IF (scale_bxc) rho%of_r(:,2) = rho%of_r(:,2) * (1.d0/ssxc)
+     !
      !$acc parallel loop reduction(+:etxc) reduction(+:vtxc) reduction(-:rhoneg1) &
-     !$acc&              reduction(-:rhoneg2) present(rho)
+     !$acc&              reduction(-:rhoneg2) present(rho) private(vs)
      DO ir = 1, dfftp%nnr
         v(ir,1) = e2*( vx(ir,1) + vc(ir,1) )
         v(ir,2) = e2*( vx(ir,2) + vc(ir,2) )
+        !
+        IF (scale_bxc) THEN
+            ! remove some spin polarization
+            vs = 0.5D0*( v(ir,1) - v(ir,2) ) * (1.d0 - ssxc)
+            v(ir,1) = v(ir,1) - vs
+            v(ir,2) = v(ir,2) + vs
+        ENDIF
+        !
         etxc = etxc + e2*( (ex(ir) + ec(ir))*rho%of_r(ir,1) )
         rho%of_r(ir,1) = rho%of_r(ir,1) - rho_core(ir)
         vtxc = vtxc + ( ( v(ir,1) + v(ir,2) )*rho%of_r(ir,1) + &
@@ -521,10 +540,22 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
    ELSEIF ( nspin == 4 ) THEN
       ! ... noncollinear case
       !
-      CALL xc( dfftp%nnr, 4, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.TRUE. )
+      scale_bxc = (ABS(ssxc -1.d0) > eps8)
       !
+      !$acc update host(rho) if(scale_bxc)
+      !
+      IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * ssxc
+      !
+      CALL xc( dfftp%nnr, 4, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.not. scale_bxc )
+      !
+      IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * (1/ssxc)
+      !
+      IF (source_free_xc) THEN
+         ALLOCATE(vns(3,dfftp%nnr))
+         CALL remove_Bxc_source(rho%of_r, vx, vc, vns)
+      ENDIF
       !$acc parallel loop reduction(+:etxc) reduction(+:vtxc) reduction(-:rhoneg1) &
-      !$acc&              reduction(+:rhoneg2) present(rho)
+      !$acc&              reduction(+:rhoneg2) present(rho) copyin(vns)
       DO ir = 1, dfftp%nnr
          arho = ABS( rho%of_r(ir,1) )
          IF ( arho < vanishing_charge ) THEN
@@ -533,6 +564,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
            CYCLE
          ENDIF
          vs = 0.5D0*( vx(ir,1) + vc(ir,1) - vx(ir,2) - vc(ir,2) )
+         !
+         IF (scale_bxc) vs = vs * ssxc
+         !
          v(ir,1) = e2*( 0.5D0*( vx(ir,1) + vc(ir,1) + vx(ir,2) + vc(ir,2) ) )
          !
          amag = SQRT( rho%of_r(ir,2)**2 + rho%of_r(ir,3)**2 + rho%of_r(ir,4)**2 )
@@ -540,6 +574,14 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
             v(ir,2) = e2 * vs * rho%of_r(ir,2) / amag
             v(ir,3) = e2 * vs * rho%of_r(ir,3) / amag
             v(ir,4) = e2 * vs * rho%of_r(ir,4) / amag
+            !
+            ! remove contribution from source. vns is (possibly) already scaled by ssxc in remove_Bxc_source.
+            IF (source_free_xc) THEN
+               v(ir,2) = v(ir,2) + e2 * vns(1,ir)
+               v(ir,3) = v(ir,3) + e2 * vns(2,ir)
+               v(ir,4) = v(ir,4) + e2 * vns(3,ir)
+            ENDIF
+            !
             vtxc24 = v(ir,2) * rho%of_r(ir,2) + v(ir,3) * rho%of_r(ir,3) + &
                      v(ir,4) * rho%of_r(ir,4)
          ELSE
@@ -553,6 +595,8 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
          IF (   amag / arho  > 1.D0 )  rhoneg2 = rhoneg2 + 1.D0/omega
          vtxc = vtxc + vtxc24 + v(ir,1) * rho%of_r(ir,1)
       ENDDO
+      !
+      IF (source_free_xc) DEALLOCATE(vns)
       !
   ENDIF
   !
@@ -1566,3 +1610,82 @@ SUBROUTINE gradv_h_of_rho_r( rho, gradv )
   RETURN
   !
 END SUBROUTINE gradv_h_of_rho_r
+
+SUBROUTINE remove_Bxc_source(rho, vx, vc, vsc)
+    !!
+    !! Source free exchange and correlation magnetic field.
+    !!
+    !! This subroutine implements equations 10 and 11 in
+    !!  https://pubs.acs.org/doi/10.1021/acs.jctc.7b01049
+    !!
+    !! Here we compute the source of Bxc and the term to be added in v_xc
+    !! to remove the source parte.
+    !
+    USE kinds,              ONLY : DP
+    USE constants,          ONLY : eps8, fpi, tpi
+    USE gvect,              ONLY : ngm, g, gg, gstart
+    USE cell_base,          ONLY : omega, tpiba,tpiba2
+    USE fft_interfaces,     ONLY : invfft, fwfft
+    USE fft_base,           ONLY : dfftp
+    USE source_free_xc_mod, ONLY : ssxc
+    !
+    IMPLICIT NONE
+    REAL( DP ), INTENT(IN)    :: rho(dfftp%nnr, 4)
+    !! the density, only spin part will be considered
+    REAL( DP ), INTENT(IN)    :: vx(dfftp%nnr,2)
+    !! exchange potential
+    REAL( DP ), INTENT(IN)    :: vc(dfftp%nnr,2)
+    !! correlation potential
+    REAL( DP ), INTENT(OUT)   :: vsc(3, dfftp%nnr)
+    !! $1/(4 \pi) B_{xc}^{source}$, the term in B_{xc} originating from sources.
+    !
+    !
+    INTEGER :: ir, ig
+    INTEGER :: i,j,k, ipol
+    LOGICAL :: offrange
+    !
+    REAL(DP) :: vxcup, vxcdn, amag, abxc
+    REAL(DP), ALLOCATABLE :: bxc(:,:),div_bxc(:)
+    COMPLEX(DP), ALLOCATABLE :: rho_bxc(:), aux(:)
+    !
+    ALLOCATE(bxc(3,dfftp%nnr))
+    !
+    bxc = 0.d0
+    !
+    DO ir = 1, dfftp%nnr
+        vxcup = vx(ir,1) + vc(ir,1)
+        vxcdn = vx(ir,2) + vc(ir,2)
+        ! reduce by ssxc if required
+        abxc = 0.5D0*( vxcup - vxcdn )* ssxc
+        amag = SQRT( SUM( rho(ir,2:4)**2 ) )
+        ! in the direction of m
+        IF ( amag > 1.d-20 ) bxc(:,ir) = abxc * rho(ir,2:4) / amag
+    ENDDO
+    !
+    ALLOCATE(div_bxc(dfftp%nnr))
+    !
+    CALL fft_graddot(dfftp, bxc, g, div_bxc)
+    !
+    DEALLOCATE(bxc)
+    !
+    ALLOCATE(rho_bxc(dfftp%nnr), aux(dfftp%nnr))
+    !
+    rho_bxc = CMPLX( div_bxc(:), 0.0_dp, kind=DP)
+    !
+    CALL fwfft ('Rho', rho_bxc, dfftp)
+    !
+    ! Poisson
+    aux = (0.d0, 0.d0)
+    DO ig = gstart, ngm
+        aux(ig) = rho_bxc(dfftp%nl(ig)) / (gg(ig) * tpiba2)
+    ENDDO
+    !
+    !aux = aux * fpi ! <- should multiply and later divide by 4pi, we do nothing instead
+    !
+    CALL fft_gradient_g2r(dfftp, aux, g, vsc)
+    !
+    !vsc = vsc / fpi
+    !
+    DEALLOCATE(div_bxc,rho_bxc,aux)
+    !
+END SUBROUTINE remove_Bxc_source

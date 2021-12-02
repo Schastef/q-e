@@ -2035,7 +2035,20 @@ input_description -distribution {Quantum Espresso} -package PWscf -program pw.x 
                 }
             }
         }
-
+        var source_free_xc -type LOGICAL {
+            default { .FALSE. }
+            info {
+                if .TRUE. a source-free exchange and correlation field will be used.
+                Requires noncollinear description. See J. Chem. Theory Comput. 14, 1247 (2018)
+            }
+        }
+        var ssxc -type REAL {
+            default { 1.0 }
+            info {
+                The exchange and correlation field will be scaled by the ssxc factor.
+                See PRB 86, 064437 (2012), and  source_free_xc option.
+            }
+        }
     }
 
     #

@@ -213,6 +213,9 @@ SUBROUTINE iosys()
   USE gcscf_module,          ONLY : gcscf_iosys
 
   USE vlocal,        ONLY : starting_charge_ => starting_charge
+
+  USE source_free_xc_mod,    ONLY : source_free_xc_ => source_free_xc, &
+                                    ssxc_ => ssxc
   !
   ! ... CONTROL namelist
   !
@@ -261,7 +264,7 @@ SUBROUTINE iosys()
                                esm_bc, esm_efield, esm_w, esm_nfit, esm_a,    &
                                lgcscf,                                        &
                                zgate, relaxz, block, block_1, block_2,        &
-                               block_height
+                               block_height, ssxc, source_free_xc
   !
   ! ... ELECTRONS namelist
   !
@@ -1700,6 +1703,13 @@ SUBROUTINE iosys()
   ! ... set variables for GC-SCF (this must be after FCP, to check condition)
   !
   CALL gcscf_iosys(lgcscf)
+  !
+  ! ... Source free exchange-correlation field
+  !
+  ssxc_ = ssxc
+  IF ( source_free_xc .AND. (nspin /= 4) ) CALL errore( 'iosys', &
+              'Source free Bxc requires non collinear description', 1 )
+  source_free_xc_ = source_free_xc
   !
   ! ... End of reading input parameters
   !
