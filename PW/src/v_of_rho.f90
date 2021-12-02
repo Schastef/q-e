@@ -456,6 +456,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   REAL(DP) :: arho, amag, vtxc24
   REAL(DP), ALLOCATABLE :: ex(:), ec(:)
   REAL(DP), ALLOCATABLE :: vx(:,:), vc(:,:)
+ !$acc declare device_resident( ex, ec, vx, vc )
   ! In order:
     ! the absolute value of the total charge
     ! the absolute value of the magnetization
@@ -464,7 +465,7 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
     ! local correlation energy
     ! local exchange potential
     ! local correlation potential
-  INTEGER :: ir, ipol
+    INTEGER :: ir, ipol
     ! counter on mesh points
     ! counter on polarization components
     ! number of mesh points (=dfftp%nnr)
@@ -485,7 +486,6 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !
   ALLOCATE( ex(dfftp%nnr), vx(dfftp%nnr,nspin) )
   ALLOCATE( ec(dfftp%nnr), vc(dfftp%nnr,nspin) )
-  !$acc data create( ex, ec, vx, vc )
   !
   !$acc host_data use_device( rho%of_r, rho%of_g, rho_core, rhog_core, v,&
   !$acc&                      ex, ec, vx, vc )
@@ -516,11 +516,19 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
      !
      scale_bxc = (ABS(ssxc -1.d0) > eps8)
      !
-     IF (scale_bxc) rho%of_r(:,2) = rho%of_r(:,2) * ssxc
+     IF (scale_bxc) THEN
+        !$acc kernels present(rho)
+        rho%of_r(:,2) = rho%of_r(:,2) * ssxc
+        !$acc end kernels
+     ENDIF
      !
      CALL xc( dfftp%nnr, 2, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.TRUE. )
      !
-     IF (scale_bxc) rho%of_r(:,2) = rho%of_r(:,2) * (1.d0/ssxc)
+     IF (scale_bxc) THEN
+        !$acc kernels present(rho)
+        rho%of_r(:,2) = rho%of_r(:,2) * (1.d0 / ssxc)
+        !$acc end kernels
+     ENDIF
      !
      !$acc parallel loop reduction(+:etxc) reduction(+:vtxc) reduction(-:rhoneg1) &
      !$acc&              reduction(-:rhoneg2) present(rho) private(vs)
@@ -551,13 +559,19 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
       !
       scale_bxc = (ABS(ssxc -1.d0) > eps8)
       !
-      !$acc update host(rho) if(scale_bxc)
+      IF (scale_bxc) THEN
+         !$acc kernels present(rho)
+         rho%of_r(:,2:4) = rho%of_r(:,2:4) * ssxc
+         !$acc end kernels
+      ENDIF
       !
-      IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * ssxc
+      CALL xc( dfftp%nnr, 4, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.true. )
       !
-      CALL xc( dfftp%nnr, 4, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.not. scale_bxc )
-      !
-      IF (scale_bxc) rho%of_r(:,2:4) = rho%of_r(:,2:4) * (1/ssxc)
+      IF (scale_bxc) THEN
+         !$acc kernels present(rho)
+         rho%of_r(:,2:4) = rho%of_r(:,2:4) * (1/ssxc)
+         !$acc end kernels
+      ENDIF
       !
       IF (source_free_xc) THEN
          ALLOCATE(vns(3,dfftp%nnr))
@@ -610,7 +624,6 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   ENDIF
   !
   !$acc end host_data
-  !$acc end data
   DEALLOCATE( ex, vx )
   DEALLOCATE( ec, vc )
   !
