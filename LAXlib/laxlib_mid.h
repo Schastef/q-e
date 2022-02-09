@@ -19,25 +19,3 @@ SUBROUTINE laxlib_pdsyevd_x( tv, n, idesc, hh, ldh, e )
          REAL(DP) :: e( n )
 END SUBROUTINE
 END INTERFACE
-
-INTERFACE laxlib_pdpotrf
-SUBROUTINE laxlib_pdpotrf_x( sll, ldx, n, idesc )
-   implicit none
-   include 'laxlib_param.fh'
-   include 'laxlib_kinds.fh'
-   integer  :: n, ldx
-   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
-   REAL(DP) :: sll( ldx, ldx )
-END SUBROUTINE
-END INTERFACE
-
-INTERFACE laxlib_pdtrtri
-SUBROUTINE laxlib_pdtrtri_x ( sll, ldx, n, idesc )
-   implicit none
-   include 'laxlib_param.fh'
-   include 'laxlib_kinds.fh'
-   INTEGER, INTENT( IN ) :: n, ldx
-   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
-   REAL(DP), INTENT( INOUT ) :: sll( ldx, ldx )
-END SUBROUTINE
-END INTERFACE

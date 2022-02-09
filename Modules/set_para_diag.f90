@@ -77,8 +77,9 @@ SUBROUTINE set_para_diag( nbnd, use_para_diag )
               & "(size of sub-group: ", I2, "*", I3, " procs)",/)') &
                np_ortho(1), np_ortho(2)
 #else
-        use_para_diag = .false.
-        WRITE( stdout, '(5X,"a serial algorithm will be used",/)' )
+        CALL errore('set_para_diag', 'ScaLAPACK not available, use "-nd 1"', 1)
+        ! use_para_diag = .false.
+        ! WRITE( stdout, '(5X,"a serial algorithm will be used",/)' )
 #endif
      ELSE
         WRITE( stdout, '(5X,"a serial algorithm will be used",/)' )
