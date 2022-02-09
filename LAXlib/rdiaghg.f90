@@ -487,13 +487,11 @@ SUBROUTINE laxlib_prdiaghg( n, h, s, ldh, e, v, idesc )
      CALL descinit( desch, n, n, desc%nrcx, desc%nrcx, 0, 0, ortho_cntx, SIZE( hh, 1 ) , info )
   
      IF( info /= 0 ) CALL lax_error__( ' rdiaghg ', ' descinit ', ABS( info ) )
-#endif
-     !
-#if defined(__SCALAPACK)
      CALL PDPOTRF( 'L', n, ss, 1, 1, desch, info )
      IF( info /= 0 ) CALL lax_error__( ' rdiaghg ', ' problems computing cholesky ', ABS( info ) )
 #else
-     CALL laxlib_pdpotrf( ss, nx, n, idesc )
+     !CALL laxlib_pdpotrf( ss, nx, n, idesc )
+     CALL lax_error__ (' rdiaghg', ' needs ScaLAPACK', 1)
 #endif
      !
   END IF
@@ -514,7 +512,8 @@ SUBROUTINE laxlib_prdiaghg( n, h, s, ldh, e, v, idesc )
      !
      IF( info /= 0 ) CALL lax_error__( ' rdiaghg ', ' problems computing inverse ', ABS( info ) )
 #else
-     CALL laxlib_pdtrtri ( ss, nx, n, idesc )
+     CALL lax_error__ (' rdiaghg', ' needs ScaLAPACK', 2)
+     ! CALL laxlib_pdtrtri ( ss, nx, n, idesc )
 #endif
      !
   END IF
@@ -548,7 +547,8 @@ SUBROUTINE laxlib_prdiaghg( n, h, s, ldh, e, v, idesc )
 #if defined(__SCALAPACK)
      CALL pdsyevd_drv( .true., n, desc%nrcx, hh, SIZE(hh,1), e, ortho_cntx, ortho_comm )
 #else
-     CALL laxlib_pdsyevd( .true., n, idesc, hh, SIZE(hh,1), e )
+     CALL lax_error__ (' rdiaghg', ' needs ScaLAPACK', 3)
+     ! CALL laxlib_pdsyevd( .true., n, idesc, hh, SIZE(hh,1), e )
 #endif
      !
   END IF
