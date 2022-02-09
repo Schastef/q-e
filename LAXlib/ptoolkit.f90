@@ -5429,57 +5429,6 @@ SUBROUTINE laxlib_pdsyevd_x( tv, n, idesc, hh, ldh, e )
 END SUBROUTINE
 
 
-
-SUBROUTINE laxlib_pzheevd_x( tv, n, idesc, hh, ldh, e )
-   !
-   !! Parallel version of the HOUSEHOLDER tridiagonalization Algorithm for simmetric matrix.
-   !! double precision complex(Z) version
-   !
-   IMPLICIT NONE
-   include 'laxlib_kinds.fh'
-   include 'laxlib_param.fh'
-   include 'laxlib_low.fh'
-   LOGICAL, INTENT(IN) :: tv
-   !! if true compute eigenvalues and eigenvectors (not used)
-   INTEGER, INTENT(IN) :: n
-   !! global dimensio of matrix 
-   INTEGER, INTENT(IN) :: ldh
-   !! leading dimension of hh
-   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
-   !! integer laxlib descriptor
-   COMPLEX(DP) :: hh( ldh, ldh )
-   !! matrix to be diagonalized and output eigenvectors
-   REAL(DP) :: e( n )
-   !! eigenvalues
-
-   INTEGER :: nrlx, nrl
-   COMPLEX(DP), ALLOCATABLE :: diag(:,:), vv(:,:)
-   CHARACTER :: jobv
-
-   nrl  = idesc(LAX_DESC_NRL)
-   nrlx = idesc(LAX_DESC_NRLX)
-   !
-   ALLOCATE( diag( nrlx, n ) )
-   ALLOCATE( vv( nrlx, n ) )
-   !
-   jobv = 'N'
-   IF( tv ) jobv = 'V'
-
-   CALL blk2cyc_redist( n, diag, nrlx, n, hh, ldh, ldh, idesc )
-   !
-   CALL zhpev_drv( jobv, diag, nrlx, e, vv, nrlx, nrl, n, &
-        idesc(LAX_DESC_NPC) * idesc(LAX_DESC_NPR), idesc(LAX_DESC_MYPE), idesc(LAX_DESC_COMM) )
-   !
-   if( tv ) CALL cyc2blk_redist( n, vv, nrlx, n, hh, ldh, ldh, idesc )
-   !
-   DEALLOCATE( vv ) 
-   DEALLOCATE( diag )
-
-   RETURN
-END SUBROUTINE
-
-
-
 SUBROUTINE sqr_dsetmat_x( what, n, alpha, a, lda, idesc )
    !
    !!

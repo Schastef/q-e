@@ -20,19 +20,6 @@ SUBROUTINE laxlib_pdsyevd_x( tv, n, idesc, hh, ldh, e )
 END SUBROUTINE
 END INTERFACE
 
-INTERFACE laxlib_pzheevd
-SUBROUTINE laxlib_pzheevd_x( tv, n, idesc, hh, ldh, e )
-   IMPLICIT NONE
-   include 'laxlib_param.fh'
-   include 'laxlib_kinds.fh'
-   LOGICAL, INTENT(IN) :: tv
-   INTEGER, INTENT(IN) :: n, ldh
-   INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
-   COMPLEX(DP) :: hh( ldh, ldh )
-   REAL(DP) :: e( n )
-END SUBROUTINE
-END INTERFACE
-
 INTERFACE laxlib_pdpotrf
 SUBROUTINE laxlib_pdpotrf_x( sll, ldx, n, idesc )
    implicit none
