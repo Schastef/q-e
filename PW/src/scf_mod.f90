@@ -19,7 +19,7 @@ MODULE scf
   USE buffers,         ONLY : open_buffer, close_buffer, get_buffer, save_buffer
   USE xc_lib,          ONLY : xclib_dft_is
   USE fft_base,        ONLY : dfftp
-  USE fft_interfaces,  ONLY : invfft
+  USE fft_rho,         ONLY : rho_g2r
   USE gvect,           ONLY : ngm
   USE gvecs,           ONLY : ngms
   USE ions_base,       ONLY : ntyp => nsp
@@ -308,9 +308,6 @@ CONTAINS
    !! It fills a \(\text{scf_type}\) object starting from a 
    !! \(\text{mix_type}\) one.
    !
-   USE wavefunctions,        ONLY : psic
-   USE control_flags,        ONLY : gamma_only
-   !
    IMPLICIT NONE
    !
    TYPE(mix_type), INTENT(IN) :: rho_m
@@ -319,26 +316,11 @@ CONTAINS
    INTEGER :: is
    !   
    rho_s%of_g(1:ngms,:) = rho_m%of_g(1:ngms,:)
-   ! define rho_s%of_r 
+   CALL rho_g2r( dfftp, rho_s%of_g, rho_s%of_r )
    !
-   DO is = 1, nspin
-      psic(:) = ( 0.D0, 0.D0 )
-      psic(dfftp%nl(:)) = rho_s%of_g(:,is)
-      IF ( gamma_only ) psic(dfftp%nlm(:)) = CONJG( rho_s%of_g(:,is) )
-      CALL invfft( 'Rho', psic, dfftp )
-      rho_s%of_r(:,is) = psic(:)
-   ENDDO
-   !
-   IF (xclib_dft_is('meta') .OR. lxdm) THEN
+   IF ( xclib_dft_is('meta') .OR. lxdm ) THEN
       rho_s%kin_g(1:ngms,:) = rho_m%kin_g(:,:)
-      ! define rho_s%kin_r 
-      DO is = 1, nspin
-         psic(:) = ( 0.D0, 0.D0 )
-         psic(dfftp%nl(:)) = rho_s%kin_g(:,is)
-         IF ( gamma_only ) psic(dfftp%nlm(:)) = CONJG( rho_s%kin_g(:,is) )
-         CALL invfft( 'Rho', psic, dfftp )
-         rho_s%kin_r(:,is) = psic(:)
-      ENDDO
+      CALL rho_g2r( dfftp, rho_s%kin_g, rho_s%kin_r )
    ENDIF
    !
    IF (lda_plus_u_nc)  rho_s%ns_nc(:,:,:,:) = rho_m%ns_nc(:,:,:,:)
@@ -466,9 +448,6 @@ CONTAINS
  SUBROUTINE high_frequency_mixing( rhoin, input_rhout, alphamix )
    !-------------------------------------------------------------------
    !
-   USE wavefunctions,    ONLY : psic
-   USE control_flags,    ONLY : gamma_only
-   !
    IMPLICIT NONE
    !
    TYPE (scf_type), INTENT(INOUT) :: rhoin
@@ -483,26 +462,12 @@ CONTAINS
       !
       rhoin%of_g = rhoin%of_g + alphamix * (input_rhout%of_g-rhoin%of_g)
       rhoin%of_g(1:ngms,1:nspin) = (0.d0,0.d0)
-      ! define rho_s%of_r 
-      DO is = 1, nspin
-         psic(:) = ( 0.D0, 0.D0 )
-         psic(dfftp%nl(:)) = rhoin%of_g(:,is)
-         IF ( gamma_only ) psic(dfftp%nlm(:)) = CONJG( rhoin%of_g(:,is) )
-         CALL invfft( 'Rho', psic, dfftp )
-         rhoin%of_r(:,is) = psic(:)
-      ENDDO
+      CALL rho_g2r( dfftp, rhoin%of_g, rhoin%of_r )
       !
       IF (xclib_dft_is('meta') .OR. lxdm) THEN
          rhoin%kin_g = rhoin%kin_g + alphamix * ( input_rhout%kin_g-rhoin%kin_g)
          rhoin%kin_g(1:ngms,1:nspin) = (0.d0,0.d0)
-         ! define rho_s%of_r 
-         DO is = 1, nspin
-            psic(:) = ( 0.D0, 0.D0 )
-            psic(dfftp%nl(:)) = rhoin%kin_g(:,is)
-            IF ( gamma_only ) psic(dfftp%nlm(:)) = CONJG( rhoin%kin_g(:,is) )
-            CALL invfft( 'Rho', psic, dfftp )
-            rhoin%kin_r(:,is) = psic(:)
-         ENDDO
+         CALL rho_g2r( dfftp, rhoin%kin_g, rhoin%kin_r )
       ENDIF
       !
    ELSE
@@ -836,7 +801,7 @@ FUNCTION ns_ddot( rho1, rho2 )
   !! of the self-consistency error on the DFT+U correction to the energy.
   !
   USE kinds,     ONLY : DP
-  USE ldaU,      ONLY : Hubbard_l, Hubbard_U, Hubbard_U_back, ldim_back, &
+  USE ldaU,      ONLY : Hubbard_l, Hubbard_U, Hubbard_U2, ldim_back, &
                         lda_plus_u_kind, is_hubbard, is_hubbard_back
   USE ions_base, ONLY : nat, ityp
   !
@@ -881,7 +846,7 @@ FUNCTION ns_ddot( rho1, rho2 )
         m1 = ldim_back(nt)
         m2 = ldim_back(nt)
         !
-        ns_ddot = ns_ddot + 0.5D0 * Hubbard_U_back(nt) * &
+        ns_ddot = ns_ddot + 0.5D0 * Hubbard_U2(nt) * &
                 SUM( rho1%nsb(:m1,:m2,:nspin,na)*rho2%nsb(:m1,:m2,:nspin,na) )
         !
      ENDIF
@@ -1001,21 +966,21 @@ FUNCTION local_tf_ddot( rho1, rho2, ngm0, g0 )
      !
      !$omp parallel do reduction(+:local_tf_ddot)
      DO ig = gstart, ngm0
-        local_tf_ddot = local_tf_ddot + REAL( CONJG(rho1(ig))*rho2(ig) ) / ( gg(ig) + gg0 )
+        local_tf_ddot = local_tf_ddot + DBLE( CONJG(rho1(ig))*rho2(ig) ) / ( gg(ig) + gg0 )
      END DO
      !$omp end parallel do
      !
      IF ( gamma_only ) local_tf_ddot = 2.D0 * local_tf_ddot
      !
      IF ( gstart == 2 ) THEN
-        local_tf_ddot = local_tf_ddot + REAL( CONJG(rho1(1))*rho2(1) ) / ( gg(1) + gg0 )
+        local_tf_ddot = local_tf_ddot + DBLE( CONJG(rho1(1))*rho2(1) ) / ( gg(1) + gg0 )
      END IF
      !
   ELSE
      !
      !$omp parallel do reduction(+:local_tf_ddot)
      DO ig = gstart, ngm0
-        local_tf_ddot = local_tf_ddot + REAL( CONJG(rho1(ig))*rho2(ig) ) / gg(ig)
+        local_tf_ddot = local_tf_ddot + DBLE( CONJG(rho1(ig))*rho2(ig) ) / gg(ig)
      END DO
      !$omp end parallel do
      !
@@ -1083,6 +1048,8 @@ SUBROUTINE rhoz_or_updw( rho, sp, dir )
   !
   IF ( nspin /= 2 ) RETURN
   !
+  !$acc data present_or_copy(rho)
+  !
   vi = 0._dp
   IF (dir == '->updw')  vi = 0.5_dp
   IF (dir == '->rhoz')  vi = 1.0_dp
@@ -1090,7 +1057,8 @@ SUBROUTINE rhoz_or_updw( rho, sp, dir )
   !
   IF ( sp /= 'only_g' ) THEN
      !
-     DO ir = 1, dfftp%nnr  
+     !$acc parallel loop present_or_copy(rho%of_r)
+     DO ir = 1, dfftp%nnr
         rho%of_r(ir,1) = ( rho%of_r(ir,1) + rho%of_r(ir,nspin) ) * vi
         rho%of_r(ir,nspin) = rho%of_r(ir,1) - rho%of_r(ir,nspin) * vi * 2._dp
      ENDDO
@@ -1098,12 +1066,15 @@ SUBROUTINE rhoz_or_updw( rho, sp, dir )
   ENDIF
   IF ( sp /= 'only_r' ) THEN
      !
+     !$acc parallel loop present_or_copy(rho%of_g)
      DO ir = 1, ngm
         rho%of_g(ir,1) = ( rho%of_g(ir,1) + rho%of_g(ir,nspin) ) * vi
         rho%of_g(ir,nspin) = rho%of_g(ir,1) - rho%of_g(ir,nspin) * vi * 2._dp
      ENDDO
      !
   ENDIF
+  !
+  !$acc end data
   !
   RETURN
   !

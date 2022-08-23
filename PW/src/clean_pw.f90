@@ -41,7 +41,7 @@ SUBROUTINE clean_pw( lflag )
   USE uspp_data,            ONLY : deallocate_uspp_data
   USE uspp_param,           ONLY : upf
   USE m_gth,                ONLY : deallocate_gth
-  USE ldaU,                 ONLY : deallocate_ldaU
+  USE ldaU,                 ONLY : deallocate_hubbard
   USE extfield,             ONLY : forcefield, forcegate
   USE fft_base,             ONLY : dfftp, dffts  
   USE fft_base,             ONLY : pstickdealloc
@@ -70,6 +70,12 @@ SUBROUTINE clean_pw( lflag )
   USE wavefunctions_gpum,   ONLY : deallocate_wavefunctions_gpu
   USE wvfct_gpum,           ONLY : deallocate_wvfct_gpu
   USE scf_gpum,             ONLY : deallocate_scf_gpu
+  !
+  USE rism_module,          ONLY : deallocate_rism
+#if defined (__ENVIRON)
+  USE plugin_flags,         ONLY : use_environ
+  USE environ_base_module,  ONLY : clean_environ
+#endif
   !
   IMPLICIT NONE
   !
@@ -112,7 +118,7 @@ SUBROUTINE clean_pw( lflag )
   !
   CALL deallocate_bp_efield()
   !
-  CALL deallocate_ldaU( lflag )
+  CALL deallocate_hubbard( lflag )
   !
   IF ( ALLOCATED( f_inp ) .AND. lflag )  DEALLOCATE( f_inp )
   !
@@ -155,6 +161,7 @@ SUBROUTINE clean_pw( lflag )
   !
   ! ... arrays allocated in init_run.f90 ( and never deallocated )
   !
+  !$acc exit data delete(g2kin)
   IF ( ALLOCATED( g2kin ) )      DEALLOCATE( g2kin )
   CALL deallocate_wvfct_gpu()
   IF ( ALLOCATED( et ) )         DEALLOCATE( et )
@@ -209,7 +216,14 @@ SUBROUTINE clean_pw( lflag )
   IF (ts_vdw .or. mbd_vdw) CALL tsvdw_finalize()
   IF (mbd_vdw) CALL clean_mbd()
   !
+  ! ... arrays for RISM
+  !
+  CALL deallocate_rism( lflag )
+  !
   CALL plugin_clean( 'PW', lflag )
+#if defined (__ENVIRON)
+  IF (use_environ) CALL clean_environ('PW', lflag)
+#endif
   !
   RETURN
   !

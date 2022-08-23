@@ -184,9 +184,9 @@
         CALL ggens( dffts, gamma_only, at, g, gg, mill, gcutms, ngms )
         !
       END IF
-!NOTE g and mill already allocate in the device they are initialized below. 
-!$acc data present(g, mill) 
-!$acc update device(g,mill) 
+!NOTE g, gg and mill already allocate in the device they are initialized below. 
+!$acc data present(g,gg,mill) 
+!$acc update device(g,gg,mill) 
 !$acc end data 
       !
       CALL gshells (.TRUE.)
@@ -400,6 +400,11 @@
       USE smallbox_subs,         ONLY : gcalb
       USE io_global,             ONLY : stdout, ionode
       !
+#if defined (__ENVIRON)
+      USE plugin_flags,          ONLY : use_environ
+      USE environ_base_module,   ONLY : update_environ_cell
+#endif
+      !
       implicit none
       !
       REAL(DP), INTENT(IN) :: h(3,3)
@@ -407,6 +412,10 @@
       !
       REAL(DP) :: rat1, rat2, rat3
       INTEGER :: ig, dfftp_ngm
+      !
+#if defined (__ENVIRON)
+      REAL(DP) :: at_scaled(3, 3)
+#endif
       !
       !WRITE( stdout, "(4x,'h from newinit')" )
       !do i=1,3
@@ -420,13 +429,13 @@
       !  re-calculate G-vectors and kinetic energy
       !
       dfftp_ngm = dfftp%ngm 
-!$acc parallel loop present(g, mill) copyin(bg) copyout(gg)  
+!$acc parallel loop present(g,gg,mill) copyin(bg)
       do ig = 1, dfftp_ngm
          g(:,ig)= mill(1,ig)*bg(:,1) + mill(2,ig)*bg(:,2) + mill(3,ig)*bg(:,3)
          gg(ig)=g(1,ig)**2 + g(2,ig)**2 + g(3,ig)**2 
       enddo
-!$acc end parallel loop 
-!$acc update host(g) 
+!$acc end parallel loop
+!$acc update host(g,gg)
       !
       call g2kin_init ( gg, tpiba2 )
       !
@@ -443,7 +452,12 @@
       !
       !   pass new cell parameters to plugins
       !
-      CALL plugin_init_cell( )
+#if defined (__ENVIRON)
+      IF (use_environ) THEN
+         at_scaled = at * alat
+         CALL update_environ_cell(at_scaled)
+      END IF
+#endif
       !
       return
     end subroutine newinit_x
