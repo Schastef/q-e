@@ -132,7 +132,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   INTEGER :: np_ortho(2), ortho_parent_comm
   LOGICAL :: do_distr_diag_inside_bgrp
   !
-  REAL(DP), EXTERNAL :: KSddot
+  REAL(DP), EXTERNAL :: myddot
   !
   EXTERNAL  h_psi_gpu, s_psi_gpu, g_psi_gpu
   INTEGER :: idx1, idx2
@@ -344,12 +344,12 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
         !
         IF ( npol == 1 ) THEN
            !
-           ew(n) = KSDdot( 2*npw, psi_d(1,nbn), 1, psi_d(1,nbn), 1 )
+           ew(n) = myddot( 2*npw, psi_d(1,nbn), 1, psi_d(1,nbn), 1 )
            !
         ELSE
            !
-           ew(n) = KSDdot( 2*npw, psi_d(1,nbn), 1, psi_d(1,nbn), 1 ) + &
-                   KSDdot( 2*npw, psi_d(npwx+1,nbn), 1, psi_d(npwx+1,nbn), 1 )
+           ew(n) = myddot( 2*npw, psi_d(1,nbn), 1, psi_d(1,nbn), 1 ) + &
+                   myddot( 2*npw, psi_d(npwx+1,nbn), 1, psi_d(npwx+1,nbn), 1 )
            !
         END IF
         !
