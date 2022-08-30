@@ -57,10 +57,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   INTEGER, PARAMETER :: blocksize = 256
   INTEGER :: numblock
     ! chunking parameters
-  COMPLEX(DP), INTENT(INOUT) :: evc_d(npwx*npol,nvec)
-#if defined(__CUDA)
-   attributes(DEVICE)   :: evc_d
-#endif
+  COMPLEX(DP), DEVICE, INTENT(INOUT) :: evc_d(npwx*npol,nvec)
     !  evc   contains the  refined estimates of the eigenvectors
   REAL(DP), INTENT(IN) :: ethr
     ! energy threshold for convergence: root improvement is stopped,
@@ -71,10 +68,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
     ! band type ( 1 = occupied, 0 = empty )
   LOGICAL, INTENT(IN) :: lrot
     ! .TRUE. if the wfc have already been rotated
-  REAL(DP), INTENT(OUT) :: e_d(nvec)
-#if defined(__CUDA)
-   attributes(DEVICE)   :: e_d
-#endif
+  REAL(DP), DEVICE, INTENT(OUT) :: e_d(nvec)
     ! contains the estimated roots.
   INTEGER, INTENT(OUT) :: dav_iter, notcnv
     ! integer  number of iterations performed
@@ -96,20 +90,13 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
     ! do-loop counters
   INTEGER :: i, j, k, ierr
   REAL(DP), ALLOCATABLE :: ew(:)
-  REAL(DP), POINTER :: ew_d(:)
-#if defined(__CUDA)
-  attributes(DEVICE) :: ew_d
-#endif
+  REAL(DP), DEVICE, POINTER :: ew_d(:)
   COMPLEX(DP), ALLOCATABLE :: hl(:,:), sl(:,:), vl(:,:)
-  COMPLEX(DP), ALLOCATABLE, DEVICE :: hl_d(:,:), sl_d(:,:), vl_d(:,:)
     ! Hamiltonian on the reduced basis
     ! S matrix on the reduced basis
     ! eigenvectors of the Hamiltonian
     ! eigenvalues of the reduced hamiltonian
-  COMPLEX(DP), POINTER :: psi_d(:,:), hpsi_d(:,:), spsi_d(:,:)
-#if defined(__CUDA)
-  attributes(DEVICE) ::  psi_d, hpsi_d, spsi_d
-#endif
+  COMPLEX(DP), DEVICE, POINTER :: psi_d(:,:), hpsi_d(:,:), spsi_d(:,:)
     ! work space, contains psi
     ! the product of H and psi
     ! the product of S and psi
@@ -146,7 +133,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
     !    the first nvec columns contain the trial eigenvectors
   !
   nhpsi = 0
-  CALL start_clock( 'cegterg' )
+  CALL start_clock( 'cegterg_gpu' )
   !
   CALL laxlib_getval( np_ortho = np_ortho, ortho_parent_comm = ortho_parent_comm, &
     do_distr_diag_inside_bgrp = do_distr_diag_inside_bgrp )
@@ -206,29 +193,33 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      ! only procs involved in the diagonalization need to allocate local 
      ! matrix block.
      !
-     ALLOCATE( vl_d( nx , nx ), STAT=ierr )
+     ALLOCATE( vl( nx , nx ), STAT=ierr )
+!$acc enter data create(vl) 
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate vl_d ', ABS(ierr) )
      !
-     ALLOCATE( sl_d( nx , nx ), STAT=ierr )
+     ALLOCATE( sl( nx , nx ), STAT=ierr )
+!$acc enter data create(sl)
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate sl_d ', ABS(ierr) )
      !
-     ALLOCATE( hl_d( nx , nx ) , STAT=ierr )
+     ALLOCATE( hl( nx , nx ) , STAT=ierr )
+!$acc enter data create(hl) 
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate hl_d ', ABS(ierr) )
      !
   ELSE
      !
-     ALLOCATE( vl_d( 1 , 1 ), STAT=ierr )
+     ALLOCATE( vl( 1 , 1 ), STAT=ierr )
+!$acc enter data create(vl) 
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
      !
-     ALLOCATE( sl_d( 1 , 1 ), STAT=ierr )
+     ALLOCATE( sl( 1 , 1 ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
      !
-     ALLOCATE( hl_d( 1 , 1 ), STAT=ierr )
+     ALLOCATE( hl( 1 , 1 ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
      !
@@ -264,45 +255,70 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   ! ... are all distributed across processors, global replicated matrixes
   ! ... here are never allocated
   !
-  CALL start_clock( 'cegterg:init' )
- 
-  CALL compute_distmat_gpu( hl_d, psi_d, hpsi_d )
+  CALL start_clock( 'cegterg_gpu:init' )
+!$acc host_data use_device(hl)  
+  CALL compute_distmat_gpu( hl, psi_d, hpsi_d )
+!$acc end host_data
   !
   IF ( uspp ) THEN
      !
-     CALL compute_distmat_gpu( sl_d, psi_d, spsi_d )
+!$acc host_data use_device(sl) 
+     CALL compute_distmat_gpu( sl, psi_d, spsi_d )
+!$acc end host_data
      !
   ELSE
      !
-     CALL compute_distmat_gpu( sl_d, psi_d, psi_d )
+!$acc host_data use_device(sl) 
+     CALL compute_distmat_gpu( sl, psi_d, psi_d )
+!$acc end host_data
      !
   END IF
-  CALL stop_clock( 'cegterg:init' )
+  CALL stop_clock( 'cegterg_gpu:init' )
   !
   IF ( lrot ) THEN
      !
      CALL set_e_from_h_gpu()
      e = e_d
      !
-     CALL set_to_identity_gpu( vl_d, idesc )
+!$acc host_data use_device(vl) 
+     CALL set_to_identity_gpu( vl, idesc )
+!$acc end host_data
      !
   ELSE
      !
      ! ... diagonalize the reduced hamiltonian
      !     Calling block parallel algorithm
      !
-     CALL start_clock( 'cegterg:diag' )
+     CALL start_clock( 'cegterg_gpu:diag' )
      IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg ew and vl are the same across ortho_parent_comm
         ! only the first bgrp performs the diagonalization
-        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
+#if defined (__SCALALAPACK) 
+!$acc update host(hl,sl,vl) 
+        IF ( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg( nbase, hl, sl, nx, ew, vl, idesc) 
+!$acc update device(vl) 
+#else 
+!$acc host_data use_device(vl,sl, hl) 
+        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg_gpu( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+!$acc end host_data
+#endif 
+!$acc host_data use_device(vl) 
         IF( nbgrp > 1 ) THEN ! results must be brodcast to the other band groups
-           CALL mp_bcast( vl_d, root_bgrp_id, inter_bgrp_comm )
+           CALL mp_bcast( vl, root_bgrp_id, inter_bgrp_comm )
            CALL mp_bcast( ew, root_bgrp_id, inter_bgrp_comm )
         ENDIF
+!$acc end host_data
      ELSE
-        CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
+#if defined (__SCALAPACK) 
+!$acc update host(vl,sl,hl) 
+        CALL laxlib_pcdiaghg( nbase, hl, sl, nx, ew, vl, idesc)
+!$acc update device(vl) 
+#else 
+!$acc host_data use_device(vl,sl, hl) 
+        CALL laxlib_pcdiaghg_gpu( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+!$acc end host_data
+#endif 
      END IF
-     CALL stop_clock( 'cegterg:diag' )
+     CALL stop_clock( 'cegterg_gpu:diag' )
      !
      e(1:nvec) = ew(1:nvec)
      e_d(1:nvec) = ew(1:nvec)
@@ -315,7 +331,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      dav_iter = kter
      !
-     CALL start_clock( 'cegterg:update' )
+     CALL start_clock( 'cegterg_gpu:update' )
      !
      CALL reorder_v()
      !
@@ -326,7 +342,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      ew_d = ew ! NB: ew_d is needed by hpsi_dot_v_gpu
      CALL hpsi_dot_v_gpu()
      !
-     CALL stop_clock( 'cegterg:update' )
+     CALL stop_clock( 'cegterg_gpu:update' )
      !
      ! ... approximate inverse iteration
      !
@@ -378,7 +394,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      ! ... update the reduced hamiltonian
      !
-     CALL start_clock( 'cegterg:overlap' )
+     CALL start_clock( 'cegterg_gpu:overlap' )
      !
      ! we need to save the old descriptor in order to redistribute matrices 
      !
@@ -392,66 +408,98 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
 
         !  redistribute hl and sl (see dsqmred), since the dimension of the subspace has changed
         !
-        ALLOCATE(vl, source=hl_d) !        vl = hl
-        DEALLOCATE( hl_d )
+
+!FIXME data should be copied directly from hl device to vl host 
+!$acc kernels 
+        vl = hl 
+!$acc end kernels 
+!$acc update host(vl) 
+!
+!$acc exit data finalize delete(hl) 
+        DEALLOCATE( hl)
         !
         ALLOCATE( hl( nx , nx ), STAT=ierr )
         IF( ierr /= 0 ) &
            CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
-
+!$acc enter data create(hl) 
+        !
         CALL laxlib_zsqmred( nbase, vl, idesc_old(LAX_DESC_NRCX), idesc_old, nbase+notcnv, hl, nx, idesc )
-
-        vl = sl_d
-        DEALLOCATE( sl_d )
+!$acc update device(hl) 
+!FIXME data should be copied directly from hl device to vl host  
+!$acc kernels 
+        vl = sl
+!$acc end kernels 
+!$acc update host(vl) 
+!
+!$acc exit data finalize delete(sl) 
+        DEALLOCATE( sl) 
         ALLOCATE( sl( nx , nx ), STAT=ierr )
+!$acc enter data create(sl) 
         IF( ierr /= 0 ) &
            CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
 
         CALL laxlib_zsqmred( nbase, vl, idesc_old(LAX_DESC_NRCX), idesc_old, nbase+notcnv, sl, nx, idesc )
-
-        DEALLOCATE( vl_d )
-        ALLOCATE( vl_d( nx , nx ), STAT=ierr )
+!$acc update device(sl) 
+!$acc exit data finalize delete(vl) 
+        DEALLOCATE( vl )
+        ALLOCATE( vl( nx , nx ), STAT=ierr )
+!$acc enter data create(vl) 
         IF( ierr /= 0 ) &
            CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
-        allocate(hl_d,source=hl)
-        allocate(sl_d,source=sl)
-        deallocate(vl,sl,hl)
      END IF
      !
      !
-     CALL update_distmat_gpu( hl_d, psi_d, hpsi_d )
+!$acc host_data use_device(hl, sl) 
+     CALL update_distmat_gpu( hl, psi_d, hpsi_d )
      !
      IF ( uspp ) THEN
         !
-        CALL update_distmat_gpu( sl_d, psi_d, spsi_d )
+        CALL update_distmat_gpu( sl, psi_d, spsi_d )
         !
      ELSE
         !
-        CALL update_distmat_gpu( sl_d, psi_d, psi_d )
+        CALL update_distmat_gpu( sl, psi_d, psi_d )
         !
      END IF
+!$acc end host_data
      !
-     CALL stop_clock( 'cegterg:overlap' )
+     CALL stop_clock( 'cegterg_gpu:overlap' )
      !
      nbase = nbase + notcnv
      !
      ! ... diagonalize the reduced hamiltonian
      !     Call block parallel algorithm
      !
-     CALL start_clock( 'cegterg:diag' )
+     CALL start_clock( 'cegterg_gpu:diag' )
      IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg ew and vl are the same across ortho_parent_comm
         ! only the first bgrp performs the diagonalization
-        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
+#if defined (__SCALAPACK) 
+!$acc update host(hl,sl,vl) 
+        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg( nbase, hl, sl, nx, ew, vl, idesc) 
+!$acc update device(vl) 
+#else 
+!$acc host_data use_device(hl, sl, vl) 
+        IF( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg_gpu( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+!$acc end host_data
+#endif 
+!$acc host_data use_device(vl) 
         IF( nbgrp > 1 ) THEN ! results must be brodcast to the other band groups
-           CALL mp_bcast( vl_d, root_bgrp_id, inter_bgrp_comm )
+           CALL mp_bcast( vl, root_bgrp_id, inter_bgrp_comm )
            CALL mp_bcast( ew, root_bgrp_id, inter_bgrp_comm )
         ENDIF
+!$acc end host_data 
      ELSE
-
-        CALL laxlib_pcdiaghg_gpu( nbase, hl_d, sl_d, nx, ew, vl_d, idesc, .false. )
-
+#if defined(__SCALAPACK) 
+!$acc update host(hl, vl, sl) 
+        CALL laxlib_pcdiaghg( nbase, hl, sl, nx, ew, vl, idesc)
+!$acc update device(vl) 
+#else  
+!$acc host_data use_device(hl, sl, vl) 
+        CALL laxlib_pcdiaghg_gpu( nbase, hl, sl, nx, ew, vl, idesc, .false. )
+!$acc end host_data 
+#endif
      END IF
-     CALL stop_clock( 'cegterg:diag' )
+     CALL stop_clock( 'cegterg_gpu:diag' )
      !
      ! ... test for convergence
      !
@@ -481,7 +529,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      IF ( notcnv == 0 .OR. nbase+notcnv > nvecx .OR. dav_iter == maxter ) THEN
         !
-        CALL start_clock( 'cegterg:last' )
+        CALL start_clock( 'cegterg_gpu:last' )
         !
         CALL refresh_evc_gpu()
         !
@@ -489,7 +537,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
            !
            ! ... all roots converged: return
            !
-           CALL stop_clock( 'cegterg:last' )
+           CALL stop_clock( 'cegterg_gpu:last' )
            !
            EXIT iterate
            !
@@ -497,7 +545,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
            !
            ! ... last iteration, some roots not converged: return
            !
-           CALL stop_clock( 'cegterg:last' )
+           CALL stop_clock( 'cegterg_gpu:last' )
            !
            EXIT iterate
            !
@@ -526,14 +574,18 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
            ! note that nx has been changed by desc_init
            ! we need to re-alloc with the new size.
            !
-           DEALLOCATE( vl_d, hl_d, sl_d )
-           ALLOCATE( vl_d( nx, nx ), STAT=ierr )
+!$acc exit data finalize delete(vl, hl, sl) 
+           DEALLOCATE( vl, hl, sl )
+           ALLOCATE( vl( nx, nx ), STAT=ierr )
+!$acc enter data create(vl) 
            IF( ierr /= 0 ) &
               CALL errore( ' pcegterg ',' cannot allocate vl ', ABS(ierr) )
-           ALLOCATE( hl_d( nx, nx ), STAT=ierr )
+           ALLOCATE( hl( nx, nx ), STAT=ierr )
+!$acc enter data create(hl) 
            IF( ierr /= 0 ) &
               CALL errore( ' pcegterg ',' cannot allocate hl ', ABS(ierr) )
-           ALLOCATE( sl_d( nx, nx ), STAT=ierr )
+           ALLOCATE( sl( nx, nx ), STAT=ierr )
+!$acc enter data create(sl) 
            IF( ierr /= 0 ) &
               CALL errore( ' pcegterg ',' cannot allocate sl ', ABS(ierr) )
            !
@@ -541,16 +593,19 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
         !
         CALL set_h_from_e_gpu( )
         !
-        CALL set_to_identity_gpu( vl_d, idesc )
-        CALL set_to_identity_gpu( sl_d, idesc )
+!$acc host_data use_device(vl,sl) 
+        CALL set_to_identity_gpu( vl, idesc )
+        CALL set_to_identity_gpu( sl, idesc )
+!$acc end host_data
         !
-        CALL stop_clock( 'cegterg:last' )
+        CALL stop_clock( 'cegterg_gpu:last' )
         !
      END IF
      !
   END DO iterate
   !
-  DEALLOCATE( vl_d, hl_d, sl_d )
+!$acc exit data finalize delete(vl,hl, sl) 
+  DEALLOCATE( vl, hl, sl )
   !
   DEALLOCATE( rank_ip )
   DEALLOCATE( ic_notcnv )
@@ -566,7 +621,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   CALL buffer%release_buffer(spsi_d, ierr)
   CALL buffer%release_buffer(ew_d, ierr)
   !
-  CALL stop_clock( 'cegterg' )
+  CALL stop_clock( 'cegterg_gpu' )
   !
   RETURN
   !
@@ -575,10 +630,8 @@ CONTAINS
   !
   SUBROUTINE set_to_identity_gpu( distmat, idesc )
      INTEGER, INTENT(IN)  :: idesc(LAX_DESC_SIZE)
-     COMPLEX(DP), INTENT(OUT) :: distmat(:,:)
-#if defined(__CUDA)
-     attributes(device) :: distmat
-#endif
+     COMPLEX(DP), DEVICE, INTENT(OUT) :: distmat(:,:)
+     ! 
      INTEGER :: i,nd
      distmat = ( 0_DP , 0_DP )
      IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) .AND. idesc(LAX_DESC_ACTIVE_NODE) > 0 ) THEN
@@ -593,6 +646,7 @@ CONTAINS
    !
   SUBROUTINE reorder_v()
      !
+     IMPLICIT NONE
      INTEGER :: ipc
      INTEGER :: nc, ic
      INTEGER :: nl, npl
@@ -632,7 +686,9 @@ CONTAINS
                  !
                  IF ( npl /= nl ) THEN
                     IF( la_proc .AND. idesc(LAX_DESC_MYC) == ipc-1 ) THEN
-                       vl_d( :, npl) = vl_d( :, nl )
+!$acc kernels 
+                       vl( :, npl) = vl( :, nl )
+!$acc end kernels 
                     END IF
                  END IF
                  !
@@ -653,26 +709,20 @@ CONTAINS
   !
   SUBROUTINE hpsi_dot_v_gpu()
      !
-#if defined(__CUDA)
      use cublas
-#endif
      !
+     IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, ir, ic, notcl, root, np, ipol, ib
-     COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
      COMPLEX(DP) :: beta
      !
-     COMPLEX(DP), ALLOCATABLE :: vtmp_d(:,:), ptmp_d(:,:)
-#if defined(__CUDA)
-     attributes(DEVICE) :: vtmp_d, ptmp_d
-#endif
+     COMPLEX(DP), DEVICE, ALLOCATABLE :: vtmp_d(:,:), ptmp_d(:,:)
      !
      ALLOCATE( vtmp_d( nx, nx ) )
      ALLOCATE( ptmp_d( npwx*npol, nx ) )
      vtmp_d = ZERO
      ptmp_d = ZERO
 
-     ALLOCATE( vtmp( nx, nx ) )
 
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -691,12 +741,13 @@ CONTAINS
               root = rank_ip( ipr, ipc )
 ! FIXME
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
-                 vtmp(:,1:notcl) = vl_d(:,1:notcl)
+!$acc kernels present(vtmp_d, vl)  
+                 vtmp_d(:,1:notcl) = vl(:,1:notcl)
+!$acc end kernels
               END IF
 
-              CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
+              CALL mp_bcast( vtmp_d(:,1:notcl), root, ortho_parent_comm )
               !
-              vtmp_d(:,1:notcl) = vtmp(:,1:notcl)
               !
               IF ( uspp ) THEN
                  !
@@ -735,7 +786,6 @@ CONTAINS
         !
      END DO
 
-     DEALLOCATE( vtmp )
 
      DEALLOCATE( vtmp_d )
      DEALLOCATE( ptmp_d )
@@ -746,18 +796,14 @@ CONTAINS
   !
   SUBROUTINE refresh_evc_gpu( )
      !
-#if defined(__CUDA)
      use cublas
-#endif
      !
+     IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
      COMPLEX(DP) :: beta
      !
-     COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
-#if defined(__CUDA)
-     attributes(DEVICE) :: work_d
-#endif
+     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
@@ -784,9 +830,13 @@ CONTAINS
                  !
                  !  this proc sends his block
                  !
-                 CALL mp_bcast( vl_d(:,1:nc), root, ortho_parent_comm )
+!$acc host_data use_device(vl) 
+                 CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
+!$acc end host_data 
                  !
-                 work_d(:,1:nc) = vl_d(:,1:nc) ! FIXME!
+!$acc kernels present(work_d, vl) 
+                 work_d(:,1:nc) = vl(:,1:nc) ! FIXME!
+!$acc end kernels 
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           psi_d(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
@@ -818,18 +868,14 @@ CONTAINS
   !
   SUBROUTINE refresh_spsi_gpu( )
      !
-#if defined(__CUDA)
      use cublas
-#endif
      !
+     IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
      COMPLEX(DP) :: beta
      !
-     COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
-#if defined(__CUDA)
-     attributes(DEVICE) :: work_d
-#endif
+     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
@@ -856,9 +902,13 @@ CONTAINS
                  !
                  !  this proc sends his block
                  !
-                 CALL mp_bcast( vl_d(:,1:nc), root, ortho_parent_comm )
+!$acc host_data use_device(vl) 
+                 CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
+!$acc end host_data
                  !
-                 work_d(:,1:nc) = vl_d(:,1:nc)
+!$acc kernels present(vl, work_d) 
+                 work_d(:,1:nc) = vl(:,1:nc)
+!$acc end kernels
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           spsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
@@ -897,18 +947,14 @@ CONTAINS
   !
   SUBROUTINE refresh_hpsi_gpu( )
      !
-#if defined(__CUDA)
      use cublas
-#endif
      !
+     IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
      COMPLEX(DP) :: beta
      !
-     COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
-#if defined(__CUDA)
-     attributes(DEVICE) :: work_d
-#endif
+     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
 !
 INTEGER :: i, j
      !
@@ -937,9 +983,13 @@ INTEGER :: i, j
                  !
                  !  this proc sends his block
                  !
-                 CALL mp_bcast( vl_d(:,1:nc), root, ortho_parent_comm )
+!$acc host_data use_device(vl) 
+                 CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
+!$acc end host_data
                  !
-                 work_d(:,1:nc) = vl_d(:,1:nc)
+!$acc kernels present(work_d, vl) 
+                 work_d(:,1:nc) = vl(:,1:nc)
+!$acc end kernels 
                  !
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
                           hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
@@ -981,18 +1031,14 @@ INTEGER :: i, j
      !  This subroutine compute <vi|wj> and store the
      !  result in distributed matrix dm
      !
-#if defined(__CUDA)
      use cublas
-#endif
      !
+     IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
-     COMPLEX(DP), INTENT(OUT) :: dm( :, : )
-     COMPLEX(DP), INTENT(IN) :: v(:,:), w(:,:)
-     COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
-#if defined(__CUDA)
-     attributes(DEVICE) :: v, w, work_d, dm
-#endif
+     COMPLEX(DP), DEVICE, INTENT(OUT) :: dm( :, : )
+     COMPLEX(DP), DEVICE, INTENT(IN) :: v(:,:), w(:,:)
+     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
@@ -1047,19 +1093,15 @@ INTEGER :: i, j
   !
   SUBROUTINE update_distmat_gpu( dm, v, w )
      !
-#if defined(__CUDA)
      use cublas
-#endif
      !
+     IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root, icc, ii
-     COMPLEX(DP) :: dm( :, : )
-     COMPLEX(DP), INTENT(IN) :: v(:,:), w(:,:)
+     COMPLEX(DP), DEVICE :: dm( :, : )
+     COMPLEX(DP), DEVICE, INTENT(IN) :: v(:,:), w(:,:)
      !
-     COMPLEX(DP), ALLOCATABLE :: work_d(:,:)
-#if defined(__CUDA)
-     attributes(DEVICE) :: v, w, work_d, dm
-#endif
+     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
      !
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
@@ -1123,10 +1165,11 @@ INTEGER :: i, j
      IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) .AND. la_proc ) THEN
         nc = idesc(LAX_DESC_NC)
         ic = idesc(LAX_DESC_IC)
-        !$cuf kernel do
+        !$acc kernels loop present(e_d, hl) 
         DO i = 1, nc
-           e_d( i + ic - 1 ) = REAL( hl_d( i, i ) )
+           e_d( i + ic - 1 ) = REAL( hl( i, i ) )
         END DO
+        !$acc end kernels loop 
      END IF
      CALL mp_sum( e_d(1:nbase), ortho_parent_comm )
      RETURN
@@ -1135,15 +1178,17 @@ INTEGER :: i, j
   SUBROUTINE set_h_from_e_gpu()
      INTEGER :: nc, ic, i
      IF( la_proc ) THEN
-        hl_d = ZERO
+!$acc kernels present(hl, e_d) 
+        hl  = ZERO
         IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) ) THEN
            nc = idesc(LAX_DESC_NC)
            ic = idesc(LAX_DESC_IC)
-           !$cuf kernel do
+           !$acc loop 
            DO i = 1, nc
-              hl_d(i,i) = CMPLX( e_d( i + ic - 1 ), 0_DP ,kind=DP)
+              hl(i,i) = CMPLX( e_d( i + ic - 1 ), 0_DP ,kind=DP)
            END DO
         END IF
+!$acc end kernels
      END IF
      RETURN
   END SUBROUTINE set_h_from_e_gpu
