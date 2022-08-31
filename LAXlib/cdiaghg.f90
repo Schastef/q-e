@@ -304,7 +304,7 @@ SUBROUTINE laxlib_cdiaghg_gpu( n, m, h_d, s_d, ldh, e_d, v_d, me_bgrp, root_bgrp
   !
   !
   !
-  CALL start_clock_gpu( 'cdiaghg' )
+  CALL start_clock_gpu( 'cdiaghg_gpu' )
   !
   ! ... only the first processor diagonalizes the matrix
   !
@@ -420,7 +420,7 @@ SUBROUTINE laxlib_cdiaghg_gpu( n, m, h_d, s_d, ldh, e_d, v_d, me_bgrp, root_bgrp
 #endif
 #endif
   !
-  CALL stop_clock_gpu( 'cdiaghg' )
+  CALL stop_clock_gpu( 'cdiaghg_gpu' )
   !
   RETURN
   !
@@ -483,7 +483,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
   !
   ! ... input s and h are copied so that they are not destroyed
   !
-  CALL start_clock( 'cdiaghg' )
+  CALL start_clock( 'pcdiaghg' )
   !
   CALL laxlib_intarray_to_desc(desc,idesc)
   !
@@ -502,7 +502,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
 
-  CALL start_clock( 'cdiaghg:choldc' )
+  CALL start_clock( 'pcdiaghg:choldc' )
   !
   ! ... Cholesky decomposition of sl ( L is stored in sl )
   !
@@ -525,11 +525,11 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
   !
-  CALL stop_clock( 'cdiaghg:choldc' )
+  CALL stop_clock( 'pcdiaghg:choldc' )
   !
   ! ... L is inverted ( sl = L^-1 )
   !
-  CALL start_clock( 'cdiaghg:inversion' )
+  CALL start_clock( 'pcdiaghg:inversion' )
   !
   IF( desc%active_node > 0 ) THEN
      !
@@ -548,11 +548,11 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
   !
-  CALL stop_clock( 'cdiaghg:inversion' )
+  CALL stop_clock( 'pcdiaghg:inversion' )
   !
   ! ... vl = L^-1*H
   !
-  CALL start_clock( 'cdiaghg:paragemm' )
+  CALL start_clock( 'pcdiaghg:paragemm' )
   !
   IF( desc%active_node > 0 ) THEN
      !
@@ -573,7 +573,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
   !
-  CALL stop_clock( 'cdiaghg:paragemm' )
+  CALL stop_clock( 'pcdiaghg:paragemm' )
   !
   !
   IF ( desc%active_node > 0 ) THEN
@@ -600,7 +600,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
   !
   ! ... v = (L^T)^-1 v
   !
-  CALL start_clock( 'cdiaghg:paragemm' )
+  CALL start_clock( 'pcdiaghg:paragemm' )
   !
   IF ( desc%active_node > 0 ) THEN
      !
@@ -614,13 +614,13 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
         CALL lax_error__( 'pcdiaghg', 'error broadcasting array e', ABS( info ) )
 #endif
   !
-  CALL stop_clock( 'cdiaghg:paragemm' )
+  CALL stop_clock( 'pcdiaghg:paragemm' )
   !
   IF ( desc%active_node > 0 ) THEN
      DEALLOCATE( ss, hh )
   END IF
   !
-  CALL stop_clock( 'cdiaghg' )
+  CALL stop_clock( 'pcdiaghg' )
   !
   RETURN
   !
@@ -690,6 +690,7 @@ SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
   USE laxlib_descriptor,      ONLY : la_descriptor, laxlib_intarray_to_desc
   USE laxlib_processors_grid, ONLY : ortho_parent_comm
   USE laxlib_processors_grid, ONLY : ortho_cntx, np_ortho, me_ortho, ortho_comm
+  use, intrinsic   :: iso_c_binding 
 #if defined __ELPAGPU
   USE zhpev_module,           ONLY : pzheevd_drv
   use elpa
@@ -735,10 +736,18 @@ SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
 #if defined(__CUDA)
   attributes(device) :: h, s, v, ss, hh, tt
 #endif
-
+interface 
+  subroutine signal(c,s) bind(C, name="kill") 
+     integer :: c,s  
+  end subroutine  signal
+  ! 
+  subroutine abort () bind (C, name="abort") 
+  end subroutine abort
+end interface 
+  
 #if defined(__ELPAGPU)
   !
-  CALL start_clock_gpu( 'cdiaghg' )
+  CALL start_clock_gpu( 'pcdiaghg_gpu' )
   !
   CALL laxlib_intarray_to_desc(desc,idesc)
   !
@@ -855,15 +864,18 @@ SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
      DEALLOCATE( ss, hh )
   END IF
   !
-  CALL stop_clock_gpu( 'cdiaghg' )
+  CALL stop_clock_gpu( 'pcdiaghg_gpu' )
   !
   RETURN
 
 #else !__ELPAGPU
   !
+  call start_clock('pcdiaghg_gpu') 
+  call abort() 
   CALL errore('lax gpu', 'not implemented',1)
   !CALL laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc)
   !
+  call stop_clock('pcdiaghg_gpu') 
   RETURN
 #endif !__ELPAGPU
   !

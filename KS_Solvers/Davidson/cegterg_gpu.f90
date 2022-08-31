@@ -292,7 +292,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      CALL start_clock( 'cegterg_gpu:diag' )
      IF ( do_distr_diag_inside_bgrp ) THEN ! NB on output of pdiaghg ew and vl are the same across ortho_parent_comm
         ! only the first bgrp performs the diagonalization
-#if defined (__SCALALAPACK) 
+#if defined (__SCALAPACK) 
 !$acc update host(hl,sl,vl) 
         IF ( my_bgrp_id == root_bgrp_id ) CALL laxlib_pcdiaghg( nbase, hl, sl, nx, ew, vl, idesc) 
 !$acc update device(vl) 
