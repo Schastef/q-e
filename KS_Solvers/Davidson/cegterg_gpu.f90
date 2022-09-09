@@ -90,14 +90,13 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
     ! do-loop counters
   INTEGER :: i, j, k, ierr
   REAL(DP), ALLOCATABLE :: ew(:)
-  REAL(DP), DEVICE, POINTER :: ew_d(:)
-  COMPLEX(DP), ALLOCATABLE :: hl(:,:), sl(:,:), vl(:,:)
+  COMPLEX(DP), ALLOCATABLE :: hl(:,:), sl(:,:), vl(:,:), psi_w(:,:) 
     ! Hamiltonian on the reduced basis
     ! S matrix on the reduced basis
     ! eigenvectors of the Hamiltonian
     ! eigenvalues of the reduced hamiltonian
-  COMPLEX(DP), DEVICE, POINTER :: psi_d(:,:), hpsi_d(:,:), spsi_d(:,:)
     ! work space, contains psi
+  COMPLEX(DP), DEVICE, POINTER :: hpsi_d(:,:), spsi_d(:,:)
     ! the product of H and psi
     ! the product of S and psi
   LOGICAL, ALLOCATABLE :: conv(:)
@@ -228,6 +227,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   ALLOCATE( ew( nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( ' pcegterg ',' cannot allocate ew ', ABS(ierr) )
+!$acc enter data create(ew) 
   !
   ALLOCATE( conv( nvec ), STAT=ierr )
   IF( ierr /= 0 ) &
@@ -237,18 +237,22 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   nbase  = nvec
   conv   = .FALSE.
   !
-  CALL buffer%lock_buffer(psi_d, (/npwx*npol, nvecx/), ierr)
+  !CALL buffer%lock_buffer(psi_d, (/npwx*npol, nvecx/), ierr)
+  ALLOCATE (psi_w(npwx*npol, nvecx)) 
+!$acc enter data create(psi_w) 
+  !
   CALL buffer%lock_buffer(hpsi_d, (/npwx*npol, nvecx/), ierr)
   CALL buffer%lock_buffer(spsi_d, (/npwx*npol, nvecx/), ierr)
-  CALL buffer%lock_buffer(ew_d, nvecx, ierr)
-
-  CALL dev_memcpy(psi_d, evc_d, (/1, npwx*npol /), 1 , (/ 1, nvec /) )
+!$acc host_data use_device(psi_w) 
+  CALL dev_memcpy(psi_w, evc_d, (/1, npwx*npol /), 1 , (/ 1, nvec /) )
   !
   ! ... hpsi contains h times the basis vectors
   !
-  CALL h_psi_gpu( npwx, npw, nvec, psi_d, hpsi_d ) ; nhpsi = nhpsi + nvec
+
+  CALL h_psi_gpu( npwx, npw, nvec, psi_w, hpsi_d ) ; nhpsi = nhpsi + nvec
   !
-  IF ( uspp ) CALL s_psi_gpu( npwx, npw, nvec, psi_d, spsi_d )
+  IF ( uspp ) CALL s_psi_gpu( npwx, npw, nvec, psi_w, spsi_d )
+!$acc end host_data 
   !
   ! ... hl contains the projection of the hamiltonian onto the reduced
   ! ... space, vl contains the eigenvectors of hl. Remember hl, vl and sl
@@ -256,23 +260,19 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   ! ... here are never allocated
   !
   CALL start_clock( 'cegterg_gpu:init' )
-!$acc host_data use_device(hl)  
-  CALL compute_distmat_gpu( hl, psi_d, hpsi_d )
-!$acc end host_data
+!$acc host_data use_device(hl,sl, psi_w)  
+  CALL compute_distmat_gpu( hl, psi_w, hpsi_d )
   !
   IF ( uspp ) THEN
      !
-!$acc host_data use_device(sl) 
-     CALL compute_distmat_gpu( sl, psi_d, spsi_d )
-!$acc end host_data
+     CALL compute_distmat_gpu( sl, psi_w, spsi_d )
      !
   ELSE
      !
-!$acc host_data use_device(sl) 
-     CALL compute_distmat_gpu( sl, psi_d, psi_d )
-!$acc end host_data
+     CALL compute_distmat_gpu( sl, psi_w, psi_w )
      !
   END IF
+!$acc end host_data
   CALL stop_clock( 'cegterg_gpu:init' )
   !
   IF ( lrot ) THEN
@@ -339,14 +339,17 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      ! ... expand the basis set with new basis vectors ( H - e*S )|psi> ...
      !
-     ew_d = ew ! NB: ew_d is needed by hpsi_dot_v_gpu
+     !ew_d = ew ! NB: ew_d is needed by hpsi_dot_v_gpu
+     !$acc update device(ew) 
      CALL hpsi_dot_v_gpu()
      !
      CALL stop_clock( 'cegterg_gpu:update' )
      !
      ! ... approximate inverse iteration
      !
-     CALL g_psi_gpu( npwx, npw, notcnv, npol, psi_d(1,nb1), ew_d(nb1) )
+!$acc host_data use_device(ew, psi_w) 
+     CALL g_psi_gpu( npwx, npw, notcnv, npol, psi_w(1,nb1), ew(nb1) )
+!$acc end host_data
      !
      ! ... "normalize" correction vectors psi(:,nb1:nbase+notcnv) in 
      ! ... order to improve numerical stability of subspace diagonalization 
@@ -354,43 +357,50 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      ! ...         ew = <psi_i|psi_i>,  i = nbase + 1, nbase + notcnv
      !
+!$acc host_data use_device(psi_w) 
      DO n = 1, notcnv
         !
         nbn = nbase + n
         !
         IF ( npol == 1 ) THEN
            !
-           ew(n) = myddot( 2*npw, psi_d(1,nbn), 1, psi_d(1,nbn), 1 )
+           ew(n) = myddot( 2*npw, psi_w(1,nbn), 1, psi_w(1,nbn), 1 )
            !
         ELSE
            !
-           ew(n) = myddot( 2*npw, psi_d(1,nbn), 1, psi_d(1,nbn), 1 ) + &
-                   myddot( 2*npw, psi_d(npwx+1,nbn), 1, psi_d(npwx+1,nbn), 1 )
+           ew(n) = myddot( 2*npw, psi_w(1,nbn), 1, psi_w(1,nbn), 1 ) + &
+                   myddot( 2*npw, psi_w(npwx+1,nbn), 1, psi_w(npwx+1,nbn), 1 )
            !
         END IF
         !
      END DO
+!$acc end host_data 
      !
      CALL mp_sum( ew( 1:notcnv ), intra_bgrp_comm )
      !
-     ew_d(1:notcnv) = ew(1:notcnv)
+     !ew_d(1:notcnv) = ew(1:notcnv)
+     !$acc update device(ew(1:notcnv)) 
 
-!$cuf kernel do(3)  <<<*,*>>>
+!!$cuf kernel do(3)  <<<*,*>>>
+!$acc kernels present(ew,psi_w) 
      DO i = 1, notcnv
         DO ipol = 0, npol -1 
           DO k = 1, npw
             idx1 = k + npwx* ipol 
             idx2 = nbase+i
-            psi_d(idx1, idx2) = psi_d(idx1,idx2)/SQRT( ew_d(i) )
+            psi_w(idx1, idx2) = psi_w(idx1,idx2)/SQRT( ew(i) )
           END DO
         END DO
      END DO
+!$acc end kernels
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     CALL h_psi_gpu( npwx, npw, notcnv, psi_d(1,nb1), hpsi_d(1,nb1) ) ; nhpsi = nhpsi + notcnv
+!$acc host_data use_device(psi_w) 
+     CALL h_psi_gpu( npwx, npw, notcnv, psi_w(1,nb1), hpsi_d(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !
-     IF ( uspp ) CALL s_psi_gpu( npwx, npw, notcnv, psi_d(1,nb1), spsi_d(1,nb1) )
+     IF ( uspp ) CALL s_psi_gpu( npwx, npw, notcnv, psi_w(1,nb1), spsi_d(1,nb1) )
+!$acc end host_data
      !
      ! ... update the reduced hamiltonian
      !
@@ -449,16 +459,16 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      END IF
      !
      !
-!$acc host_data use_device(hl, sl) 
-     CALL update_distmat_gpu( hl, psi_d, hpsi_d )
+!$acc host_data use_device(hl, sl,psi_w) 
+     CALL update_distmat_gpu( hl, psi_w, hpsi_d )
      !
      IF ( uspp ) THEN
         !
-        CALL update_distmat_gpu( sl, psi_d, spsi_d )
+        CALL update_distmat_gpu( sl, psi_w, spsi_d )
         !
      ELSE
         !
-        CALL update_distmat_gpu( sl, psi_d, psi_d )
+        CALL update_distmat_gpu( sl, psi_w, psi_w )
         !
      END IF
 !$acc end host_data
@@ -518,8 +528,11 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      notcnv = COUNT( .NOT. conv(:) )
      !
      e(1:nvec) = ew(1:nvec)
-     e_d(1:nvec) = e(1:nvec)
-     ew_d = ew
+!$acc update device(ew) 
+!$acc kernels present(ew) 
+     e_d(1:nvec) = ew(1:nvec)
+!$acc end kernels
+     !ew_d = ew
      !
      ! ... if overall convergence has been achieved, or the dimension of
      ! ... the reduced basis set is becoming too large, or in any case if
@@ -553,7 +566,9 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
         !
         ! ... refresh psi, H*psi and S*psi
         !
-        CALL dev_memcpy(psi_d, evc_d, (/1, npwx*npol /), 1 , (/ 1, nvec /), 1) ! need if refresh_evc_gpu
+!$acc host_data use_device(psi_w) 
+        CALL dev_memcpy(psi_w, evc_d, (/1, npwx*npol /), 1 , (/ 1, nvec /), 1) ! need if refresh_evc_gpu
+!$acc end host_data
         !
         IF ( uspp ) THEN
            !
@@ -604,7 +619,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
   END DO iterate
   !
-!$acc exit data finalize delete(vl,hl, sl) 
+!$acc exit data finalize delete(vl,hl, sl,ew, psi_w) 
   DEALLOCATE( vl, hl, sl )
   !
   DEALLOCATE( rank_ip )
@@ -615,11 +630,10 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   DEALLOCATE( conv )
   DEALLOCATE( ew )
   DEALLOCATE( e )
-  
-  CALL buffer%release_buffer(psi_d, ierr)
+  DEALLOCATE(psi_w) 
+ 
   CALL buffer%release_buffer(hpsi_d, ierr)
   CALL buffer%release_buffer(spsi_d, ierr)
-  CALL buffer%release_buffer(ew_d, ierr)
   !
   CALL stop_clock( 'cegterg_gpu' )
   !
@@ -629,6 +643,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
 CONTAINS
   !
   SUBROUTINE set_to_identity_gpu( distmat, idesc )
+     IMPLICIT NONE
      INTEGER, INTENT(IN)  :: idesc(LAX_DESC_SIZE)
      COMPLEX(DP), DEVICE, INTENT(OUT) :: distmat(:,:)
      ! 
@@ -718,12 +733,12 @@ CONTAINS
      !
      COMPLEX(DP),         ALLOCATABLE :: vtmp(:,:), ptmp(:,:) 
      COMPLEX(DP)                      :: ps1, ps2
-     INTEGER                          :: idx1, idx2, offsvec
+     INTEGER                          :: idx1, idx2, offsvec, npol_mio, npwx_mio 
      !
      ALLOCATE( vtmp( nx, nx ) )
      ALLOCATE( ptmp( npwx*npol, nx ) )
 !$acc enter data create(vtmp, ptmp) 
-!$acc kernels 
+!$acc kernels present(vtmp, ptmp)  
      vtmp = ZERO 
      ptmp = ZERO
 !$acc end kernels
@@ -750,19 +765,19 @@ CONTAINS
                  vtmp(:,1:notcl) = vl(:,1:notcl)
 !$acc end kernels
               END IF
-!$acc host_data use_device(vtmp, ptmp) 
+!$acc host_data use_device(vtmp, ptmp,psi_w) 
               CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
               !
               !
               IF ( uspp ) THEN
                  !
                  CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
-                    spsi_d(1, ir), kdmx, vtmp, nx, beta, psi_d(1,nb1+ic-1), kdmx )
+                    spsi_d(1, ir), kdmx, vtmp, nx, beta, psi_w(1,nb1+ic-1), kdmx )
                  !
               ELSE
                  !
                  CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
-                    psi_d(1, ir), kdmx, vtmp, nx, beta, psi_d(1,nb1+ic-1), kdmx )
+                    psi_w(1, ir), kdmx, vtmp, nx, beta, psi_w(1,nb1+ic-1), kdmx )
                  !
               END IF
               !
@@ -774,24 +789,29 @@ CONTAINS
 !$acc end host_data 
            END DO
            !
-           offsvec = nbase + ic -1 
+           offsvec = nbase + ic -1  
+           npwx_mio = npwx*npol 
            !!$cuf kernel do(3) <<<*,*>>>
-           !$acc kernels present(ptmp) 
-           !!$acc loop gang private(ps, idx2)  
+           !$acc kernels present(ptmp,ew, psi_w) 
+           !!$acc parallel present(ptmp, ew,psi_w) 
+           !!$acc loop gang private(ps1, idx2)  
            DO np = offsvec+1, offsvec + notcl
               idx2 = np - offsvec 
-              ps1 = ew_d(np) 
-              !!$acc loop private(idx1) vector 
-              DO k = 1, npol*npwx
-                   ps2 = ps1 * psi_d(k,np) 
-                   psi_d(k, np) = ptmp(k, idx2) - ps2
+              ps1 = ew(np) 
+              !$acc loop private(idx1,ps2) vector 
+              DO k = 1, npwx_mio
+                   ps2 = ps1 * psi_w(k,np) 
+                   psi_w(k, np) = ptmp(k, idx2) - ps2
               END DO
            END DO
            !$acc end kernels
+           !!$acc end parallel 
            !
            ! clean up garbage if there is any
-           IF (npw < npwx) psi_d(npw+1:npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
-           IF (npol == 2)  psi_d(npwx+npw+1:2*npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
+!$acc kernels present(psi_w) 
+           IF (npw < npwx) psi_w(npw+1:npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
+           IF (npol == 2)  psi_w(npwx+npw+1:2*npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
+!$acc end kernels 
            !
         END IF
         !
@@ -850,8 +870,10 @@ CONTAINS
                  work_d(:,1:nc) = vl(:,1:nc) ! FIXME!
 !$acc end kernels 
                  !
+!$acc host_data use_device(psi_w)              
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi_d(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
+                          psi_w(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
+!$acc end host_data 
                  !
               ELSE
                  !
@@ -859,8 +881,10 @@ CONTAINS
                  !
                  CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
                  !
+!$acc host_data use_device(psi_w) 
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi_d(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
+                          psi_w(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
+!$acc end host_data 
                  !
               END IF
               !
@@ -892,6 +916,7 @@ CONTAINS
      ALLOCATE( work_d( nx, nx ) )
      work_d = ZERO
      !
+     call start_clock("do_loop") 
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -922,8 +947,10 @@ CONTAINS
                  work_d(:,1:nc) = vl(:,1:nc)
 !$acc end kernels
                  !
+!$acc host_data use_device(psi_w) 
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          spsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
+                          spsi_d(1,ir), kdmx, work_d, nx, beta, psi_w(1,nvec+ic), kdmx )
+!$acc end host_data 
                  !
               ELSE
                  !
@@ -931,8 +958,10 @@ CONTAINS
                  !
                  CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
                  !
+!$acc host_data use_device(psi_w) 
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          spsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
+                          spsi_d(1,ir), kdmx, work_d, nx, beta, psi_w(1,nvec+ic), kdmx )
+!$acc end host_data 
                  !
               END IF
               !
@@ -943,13 +972,23 @@ CONTAINS
         END IF
         !
      END DO
+     call stop_clock("do_loop") 
      !
-     !$cuf kernel do(2) <<<*,*>>>
-     DO j = 1, nvec
-        DO i = 1, npwx*npol
-           spsi_d(i,j) = psi_d(i,nvec+j)
-        END DO
-     END DO
+     !!$cuf kernel do(2) <<<*,*>>>
+     !!$acc kernels present(psi_w(1:npwx*npol,nvecx))  
+     !call start_clock("final_copy") 
+     !DO j = 1, nvec
+     !   DO i = 1, npwx*npol
+     !      print *, "CIAO ", i, j
+     !      spsi_d(i,j) = psi_w(i,nvec+j)
+     !   END DO
+     !END DO
+     !!$acc end kernels 
+     !$acc update host(psi_w) 
+     DO j =1, nvec 
+        spsi_d(1:npwx*npol,j) = psi_w(1:npwx*npol,nvec+j)  
+     END DO 
+     !call stop_clock("final_copy") 
      !
      DEALLOCATE( work_d )
 
@@ -1003,8 +1042,10 @@ INTEGER :: i, j
                  work_d(:,1:nc) = vl(:,1:nc)
 !$acc end kernels 
                  !
+!$acc host_data use_device(psi_w) 
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
+                          hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_w(1,nvec+ic), kdmx )
+!$acc end host_data
                  !
               ELSE
                  !
@@ -1012,8 +1053,10 @@ INTEGER :: i, j
                  !
                  CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
                  !
+!$acc host_data use_device(psi_w) 
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_d(1,nvec+ic), kdmx )
+                          hpsi_d(1,ir), kdmx, work_d, nx, beta, psi_w(1,nvec+ic), kdmx )
+!$acc end host_data
                  !
               END IF
               !
@@ -1025,12 +1068,14 @@ INTEGER :: i, j
         !
      END DO
      !
-     !$cuf kernel do(2) <<<*,*>>>
+     !!$cuf kernel do(2) <<<*,*>>>
+     !$acc kernels present(psi_w) 
      DO j = 1, nvec
         DO i = 1, npwx*npol
-           hpsi_d(i,j) = psi_d(i,nvec+j)
+           hpsi_d(i,j) = psi_w(i,nvec+j)
         END DO
      END DO
+     !$acc end kernels 
      !
      DEALLOCATE( work_d )
      !
@@ -1172,6 +1217,7 @@ INTEGER :: i, j
   !
   !
   SUBROUTINE set_e_from_h_gpu()
+     IMPLICIT NONE
      INTEGER :: nc, ic, i
      e_d(1:nbase) = 0_DP
      IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) .AND. la_proc ) THEN
@@ -1188,6 +1234,7 @@ INTEGER :: i, j
   END SUBROUTINE set_e_from_h_gpu
   !
   SUBROUTINE set_h_from_e_gpu()
+     IMPLICIT NONE
      INTEGER :: nc, ic, i
      IF( la_proc ) THEN
 !$acc kernels present(hl, e_d) 
@@ -1205,5 +1252,5 @@ INTEGER :: i, j
      RETURN
   END SUBROUTINE set_h_from_e_gpu
   !
-END SUBROUTINE pcegterg_gpu
+	END SUBROUTINE pcegterg_gpu
 #endif
