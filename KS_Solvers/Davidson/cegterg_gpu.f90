@@ -716,12 +716,17 @@ CONTAINS
      INTEGER :: nr, ir, ic, notcl, root, np, ipol, ib
      COMPLEX(DP) :: beta
      !
-     COMPLEX(DP), DEVICE, ALLOCATABLE :: vtmp_d(:,:), ptmp_d(:,:)
+     COMPLEX(DP),         ALLOCATABLE :: vtmp(:,:), ptmp(:,:) 
+     COMPLEX(DP)                      :: ps1, ps2
+     INTEGER                          :: idx1, idx2, offsvec
      !
-     ALLOCATE( vtmp_d( nx, nx ) )
-     ALLOCATE( ptmp_d( npwx*npol, nx ) )
-     vtmp_d = ZERO
-     ptmp_d = ZERO
+     ALLOCATE( vtmp( nx, nx ) )
+     ALLOCATE( ptmp( npwx*npol, nx ) )
+!$acc enter data create(vtmp, ptmp) 
+!$acc kernels 
+     vtmp = ZERO 
+     ptmp = ZERO
+!$acc end kernels
 
 
      DO ipc = 1, idesc(LAX_DESC_NPC)
@@ -741,42 +746,48 @@ CONTAINS
               root = rank_ip( ipr, ipc )
 ! FIXME
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
-!$acc kernels present(vtmp_d, vl)  
-                 vtmp_d(:,1:notcl) = vl(:,1:notcl)
+!$acc kernels present(vtmp, vl)  
+                 vtmp(:,1:notcl) = vl(:,1:notcl)
 !$acc end kernels
               END IF
-
-              CALL mp_bcast( vtmp_d(:,1:notcl), root, ortho_parent_comm )
+!$acc host_data use_device(vtmp, ptmp) 
+              CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
               !
               !
               IF ( uspp ) THEN
                  !
                  CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
-                    spsi_d(1, ir), kdmx, vtmp_d, nx, beta, psi_d(1,nb1+ic-1), kdmx )
+                    spsi_d(1, ir), kdmx, vtmp, nx, beta, psi_d(1,nb1+ic-1), kdmx )
                  !
               ELSE
                  !
                  CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
-                    psi_d(1, ir), kdmx, vtmp_d, nx, beta, psi_d(1,nb1+ic-1), kdmx )
+                    psi_d(1, ir), kdmx, vtmp, nx, beta, psi_d(1,nb1+ic-1), kdmx )
                  !
               END IF
               !
               CALL ZGEMM( 'N', 'N', kdim, notcl, nr, ONE, &
-                      hpsi_d(1, ir), kdmx, vtmp_d, nx, beta, ptmp_d, kdmx )
+                      hpsi_d(1, ir), kdmx, vtmp, nx, beta, ptmp, kdmx )
               !
               beta = ONE
               !
+!$acc end host_data 
            END DO
            !
-           !$cuf kernel do(3) <<<*,*>>>
-           DO np = 1, notcl
-              DO ipol = 1, npol
-                 DO k = 1, npw
-                   psi_d(k + (ipol-1)*npwx, nbase+np+ic-1) = &
-                   ptmp_d(k + (ipol-1)*npwx, np) - ew_d(nbase+np+ic-1) * psi_d(k + (ipol-1)*npwx, nbase+np+ic-1)
-                 END DO
+           offsvec = nbase + ic -1 
+           !!$cuf kernel do(3) <<<*,*>>>
+           !$acc kernels present(ptmp) 
+           !!$acc loop gang private(ps, idx2)  
+           DO np = offsvec+1, offsvec + notcl
+              idx2 = np - offsvec 
+              ps1 = ew_d(np) 
+              !!$acc loop private(idx1) vector 
+              DO k = 1, npol*npwx
+                   ps2 = ps1 * psi_d(k,np) 
+                   psi_d(k, np) = ptmp(k, idx2) - ps2
               END DO
            END DO
+           !$acc end kernels
            !
            ! clean up garbage if there is any
            IF (npw < npwx) psi_d(npw+1:npwx,nbase+ic:nbase+notcl+ic-1) = ZERO
@@ -787,8 +798,9 @@ CONTAINS
      END DO
 
 
-     DEALLOCATE( vtmp_d )
-     DEALLOCATE( ptmp_d )
+!$acc exit data delete(vtmp, ptmp) 
+     DEALLOCATE( vtmp)
+     DEALLOCATE( ptmp)
 
      RETURN
   END SUBROUTINE hpsi_dot_v_gpu
