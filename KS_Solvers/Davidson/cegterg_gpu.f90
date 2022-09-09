@@ -361,31 +361,30 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      !
      ! ...         ew = <psi_i|psi_i>,  i = nbase + 1, nbase + notcnv
      !
-!$acc host_data use_device(psi_w) 
+!$acc kernels  
      DO n = 1, notcnv
         !
         nbn = nbase + n
         !
         IF ( npol == 1 ) THEN
            !
-           ew(n) = myddot( 2*npw, psi_w(1,nbn), 1, psi_w(1,nbn), 1 )
+           ew(n) = dot_product( psi_w(1:npw,nbn), psi_w(1:npw,nbn))
            !
         ELSE
            !
-           ew(n) = myddot( 2*npw, psi_w(1,nbn), 1, psi_w(1,nbn), 1 ) + &
-                   myddot( 2*npw, psi_w(npwx+1,nbn), 1, psi_w(npwx+1,nbn), 1 )
+           ew(n) = dot_product( psi_w(1:npw,nbn), psi_w(1:npw,nbn)) + &
+                   dot_product( psi_w(npwx+1:npwx+npw,nbn), psi_w(npwx+1:npwx:npwx+npw,nbn))
            !
         END IF
         !
      END DO
-!$acc end host_data 
+!$acc end kernels 
      !
+!$acc host_data use_device(ew) 
      CALL mp_sum( ew( 1:notcnv ), intra_bgrp_comm )
+!$acc end host_data
      !
-     !ew_d(1:notcnv) = ew(1:notcnv)
-     !$acc update device(ew(1:notcnv)) 
 
-!!$cuf kernel do(3)  <<<*,*>>>
 !$acc kernels present(ew,psi_w) 
      DO i = 1, notcnv
         idx2 = nbase+i
