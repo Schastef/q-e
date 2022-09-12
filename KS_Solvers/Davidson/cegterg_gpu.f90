@@ -264,7 +264,6 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
   ! ... here are never allocated
   !
   CALL start_clock( 'cegterg_gpu:init' )
-!$acc host_data use_device(hl,sl, psi_w, spsi_w, hpsi_w)  
   CALL compute_distmat_gpu( hl, psi_w, hpsi_w )
   !
   IF ( uspp ) THEN
@@ -276,7 +275,6 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      CALL compute_distmat_gpu( sl, psi_w, psi_w )
      !
   END IF
-!$acc end host_data
   CALL stop_clock( 'cegterg_gpu:init' )
   !
   IF ( lrot ) THEN
@@ -284,9 +282,7 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      CALL set_e_from_h_gpu()
      e = e_d
      !
-!$acc host_data use_device(vl) 
      CALL set_to_identity_gpu( vl, idesc )
-!$acc end host_data
      !
   ELSE
      !
@@ -457,7 +453,6 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
      END IF
      !
      !
-!$acc host_data use_device(hl, sl,psi_w, spsi_w, hpsi_w) 
      CALL update_distmat_gpu( hl, psi_w, hpsi_w )
      !
      IF ( uspp ) THEN
@@ -469,7 +464,6 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
         CALL update_distmat_gpu( sl, psi_w, psi_w )
         !
      END IF
-!$acc end host_data
      !
      CALL stop_clock( 'cegterg_gpu:overlap' )
      !
@@ -606,10 +600,8 @@ SUBROUTINE pcegterg_gpu(h_psi_gpu, s_psi_gpu, uspp, g_psi_gpu, &
         !
         CALL set_h_from_e_gpu( )
         !
-!$acc host_data use_device(vl,sl) 
         CALL set_to_identity_gpu( vl, idesc )
         CALL set_to_identity_gpu( sl, idesc )
-!$acc end host_data
         !
         CALL stop_clock( 'cegterg_gpu:last' )
         !
@@ -643,17 +635,21 @@ CONTAINS
   SUBROUTINE set_to_identity_gpu( distmat, idesc )
      IMPLICIT NONE
      INTEGER, INTENT(IN)  :: idesc(LAX_DESC_SIZE)
-     COMPLEX(DP), DEVICE, INTENT(OUT) :: distmat(:,:)
+     COMPLEX(DP), INTENT(OUT) :: distmat(:,:)
      ! 
      INTEGER :: i,nd
+!$acc data present(distmat) 
+!$acc kernels
      distmat = ( 0_DP , 0_DP )
+!$acc end kernels
      IF( idesc(LAX_DESC_MYC) == idesc(LAX_DESC_MYR) .AND. idesc(LAX_DESC_ACTIVE_NODE) > 0 ) THEN
         nd =  idesc(LAX_DESC_NC)
-        !$cuf kernel do
+        !$acc parallel loop 
         DO i = 1, nd
            distmat( i, i ) = ( 1_DP , 0_DP )
         END DO
      END IF 
+!$acc end data
      RETURN
   END SUBROUTINE set_to_identity_gpu
    !
@@ -758,12 +754,11 @@ CONTAINS
               !
               root = rank_ip( ipr, ipc )
 ! FIXME
-              IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
-!$acc kernels present(vtmp, vl)  
-                 vtmp(:,1:notcl) = vl(:,1:notcl)
-!$acc end kernels
-              END IF
-!$acc host_data use_device(vtmp, ptmp,psi_w, spsi_w, hpsi_w) 
+
+!$acc host_data use_device(vtmp, ptmp,psi_w, spsi_w, hpsi_w, vl) 
+              IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) & 
+                 CALL dev_memcpy(vtmp(1:,1:notcl),vl(1:,1:notcl),[1,nx],1,[1,notcl]) 
+              !
               CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
               !
               !
@@ -784,19 +779,18 @@ CONTAINS
               !
               beta = ONE
               !
-!$acc end host_data 
+!$acc end host_data
            END DO
            !
            offsvec = nbase + ic -1  
            npwx_mio = npwx*npol 
-           !!$cuf kernel do(3) <<<*,*>>>
            !$acc kernels present(ptmp,ew, psi_w) 
            !!$acc parallel present(ptmp, ew,psi_w) 
            !!$acc loop gang private(ps1, idx2)  
            DO np = offsvec+1, offsvec + notcl
               idx2 = np - offsvec 
               ps1 = ew(np) 
-              !$acc loop private(idx1,ps2) vector 
+              !!$acc loop private(ps2) vector 
               DO k = 1, npwx_mio
                    ps2 = ps1 * psi_w(k,np) 
                    psi_w(k, np) = ptmp(k, idx2) - ps2
@@ -833,10 +827,14 @@ CONTAINS
      INTEGER :: nr, nc, ir, ic, root
      COMPLEX(DP) :: beta
      !
-     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
+     COMPLEX(DP), ALLOCATABLE :: work(:,:)
      !
-     ALLOCATE( work_d( nx, nx ) )
-     work_d = ZERO
+     ALLOCATE( work( nx, nx ) )
+!$acc data present (vl, psi_w) create(work) 
+!$acc host_data use_device(vl, psi_w, work) 
+!$acc kernels 
+     work = ZERO
+!$acc end kernels
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -860,29 +858,24 @@ CONTAINS
                  !
                  !  this proc sends his block
                  !
-!$acc host_data use_device(vl) 
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-!$acc end host_data 
                  !
-!$acc kernels present(work_d, vl) 
-                 work_d(:,1:nc) = vl(:,1:nc) ! FIXME!
-!$acc end kernels 
+!!$acc kernels present(work , vl) 
+!                 work (1:nx,1:nc) = vl(1:nx,1:nc) ! FIXME!
+!!$acc end kernels 
+                 CALL dev_memcpy(work(1:,1:), vl(1:,1:),[1,nx],1,[1,nc])  
                  !
-!$acc host_data use_device(psi_w)              
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi_w(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
-!$acc end host_data 
+                          psi_w(1,ir), kdmx, work, nx, beta, evc_d(1,ic), kdmx )
                  !
               ELSE
                  !
                  !  all other procs receive
                  !
-                 CALL mp_bcast( work_d(:,1:nc), root, ortho_parent_comm )
+                 CALL mp_bcast( work(:,1:nc), root, ortho_parent_comm )
                  !
-!$acc host_data use_device(psi_w) 
                  CALL ZGEMM( 'N', 'N', kdim, nc, nr, ONE, &
-                          psi_w(1,ir), kdmx, work_d, nx, beta, evc_d(1,ic), kdmx )
-!$acc end host_data 
+                          psi_w(1,ir), kdmx, work, nx, beta, evc_d(1,ic), kdmx )
                  !
               END IF
               !
@@ -894,7 +887,9 @@ CONTAINS
         !
      END DO
      !
-     DEALLOCATE( work_d )
+!$acc end host_data
+!$acc end data 
+     DEALLOCATE( work)
      !
      RETURN
   END SUBROUTINE refresh_evc_gpu
@@ -986,12 +981,15 @@ CONTAINS
      !   END DO
      !END DO
      ! 
-!$acc kernels present(spsi_out(1:kdmx_, 1:nvecx_), psi_in(1:kdmx_,1:nvecx_))  
-     DO j =1, nvec_ 
-        idx1 = nvec_ + j 
-        spsi_out(1:kdmx_,j) = psi_in(1:kdmx_, idx1)  
-     END DO 
-!$acc end kernels 
+!!$acc kernels present(spsi_out(1:kdmx_, 1:nvecx_), psi_in(1:kdmx_,1:nvecx_))  
+!     DO j =nvec_ + 1, 2 * nvec_ 
+!        idx1 = j - nvec_ 
+!        spsi_out(1:kdmx_,idx1) = psi_in(1:kdmx_, j)  
+!     END DO 
+!!$acc end kernels 
+!$acc host_data use_device(spsi_out, psi_in) 
+     call dev_memcpy(spsi_out(1:,1:), psi_in(1:,nvec_ + 1:),[1,kdmx_],1,[1,nvec_],1)
+!$acc end host_data 
 !$acc end data 
      DEALLOCATE( work)
      RETURN
@@ -1097,12 +1095,16 @@ INTEGER :: i, j
      IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root
-     COMPLEX(DP), DEVICE, INTENT(OUT) :: dm( :, : )
-     COMPLEX(DP), DEVICE, INTENT(IN) :: v(:,:), w(:,:)
-     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
+     COMPLEX(DP), INTENT(OUT) :: dm( :, : )
+     COMPLEX(DP), INTENT(IN) :: v(:,:), w(:,:)
+     COMPLEX(DP), ALLOCATABLE :: work(:,:)
      !
-     ALLOCATE( work_d( nx, nx ) )
-     work_d = ZERO
+     ALLOCATE( work( nx, nx ) )
+!$acc data present(dm, v, w) create(work) 
+!$acc host_data use_device(dm, v, w, work) 
+!$acc kernels 
+     work = ZERO
+!$acc end kernels 
      !
      !
      !  Only upper triangle is computed, then the matrix is hermitianized
@@ -1122,31 +1124,32 @@ INTEGER :: i, j
            root = rank_ip( ipr, ipc )
 
            ! use blas subs. on the matrix block
-
            CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE , &
-                       v(1,ir), kdmx, w(1,ic), kdmx, ZERO, work_d, nx )
+                       v(1,ir), kdmx, w(1,ic), kdmx, ZERO, work, nx )
            !
            ! accumulate result on dm of root proc.
            !
-           CALL mp_root_sum( work_d, dm, root, ortho_parent_comm )
-
+           CALL mp_root_sum( work, dm, root, ortho_parent_comm )
         END DO
         !
      END DO
      if (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) then
-             !$cuf kernel do(2)
+             !$acc  kernels 
              do ir = 1, nx
              do ic = 1, nx
              dm(ir,ic) = dm(ir,ic)/nbgrp
              enddo
              enddo
+             !$acc end kernels 
      endif
      !
      !  The matrix is hermitianized using upper triangle
      !
      CALL laxlib_zsqmher( nbase, dm, nx, idesc )
+!$acc end host_data
+!$acc end data 
      !
-     DEALLOCATE( work_d )
+     DEALLOCATE( work )
      !
      RETURN
   END SUBROUTINE compute_distmat_gpu
@@ -1159,13 +1162,17 @@ INTEGER :: i, j
      IMPLICIT NONE
      INTEGER :: ipc, ipr
      INTEGER :: nr, nc, ir, ic, root, icc, ii
-     COMPLEX(DP), DEVICE :: dm( :, : )
-     COMPLEX(DP), DEVICE, INTENT(IN) :: v(:,:), w(:,:)
+     COMPLEX(DP), INTENT(INOUT) :: dm( :, : )
+     COMPLEX(DP), INTENT(IN) :: v(:,:), w(:,:)
      !
-     COMPLEX(DP), DEVICE, ALLOCATABLE :: work_d(:,:)
+     COMPLEX(DP), ALLOCATABLE :: work(:,:)
      !
-     ALLOCATE( work_d( nx, nx ) )
-     work_d = ZERO
+     ALLOCATE( work( nx, nx ) )
+!$acc data present(dm, v, w) create(work) 
+!$acc host_data use_device(dm,v,w,work) 
+!$acc kernels 
+     work = ZERO
+!$acc end kernels 
      !
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
@@ -1195,16 +1202,18 @@ INTEGER :: i, j
               root = rank_ip( ipr, ipc )
               !
               CALL ZGEMM( 'C', 'N', nr, nc, kdim, ONE, v(1, ir), &
-                          kdmx, w(1,ii), kdmx, ZERO, work_d, nx )
+                          kdmx, w(1,ii), kdmx, ZERO, work, nx )
               !
               !
-              IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) work_d = work_d/nbgrp
+!$acc kernels 
+              IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) work  = work / nbgrp
+!$acc end kernels 
               !
               IF(  (idesc(LAX_DESC_ACTIVE_NODE) > 0) .AND. &
                    (ipr-1 == idesc(LAX_DESC_MYR)) .AND. (ipc-1 == idesc(LAX_DESC_MYC)) ) THEN
-                 CALL mp_root_sum( work_d(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
+                 CALL mp_root_sum( work(:,1:nc), dm(:,icc:icc+nc-1), root, ortho_parent_comm )
               ELSE
-                 CALL mp_root_sum( work_d(:,1:nc), dm, root, ortho_parent_comm )
+                 CALL mp_root_sum( work(:,1:nc), dm, root, ortho_parent_comm )
               END IF
 
            END DO
@@ -1215,7 +1224,9 @@ INTEGER :: i, j
      !
      CALL laxlib_zsqmher( nbase+notcnv, dm, nx, idesc )
      !
-     DEALLOCATE( work_d )
+!$acc end host_data 
+!$acc end data
+     DEALLOCATE( work)
      RETURN
   END SUBROUTINE update_distmat_gpu
   !
