@@ -115,26 +115,32 @@ set(QE_FFTW_VENDOR "AUTO" CACHE
     STRING "select a specific FFTW library [Intel_DFTI, Intel_FFTW3, ArmPL, IBMESSL, FFTW3, Internal]")
 set(QE_ENABLE_SANITIZER "none" CACHE STRING "none,asan,ubsan,tsan,msan")
 set(QE_ENABLE_PLUGINS "" CACHE STRING "Semicolon-separated list of plugins")
-if(FOX_ROOT)
-    set(QE_FOX_INTERNAL OFF)
+set (QE_EXTRA_DEFINITIONS "" CACHE STRING "Semicolon-separated list of extra global definitions")
+option(QE_ENABLE_FOX
+    "enable XML I/O via Fox library" OFF)
+if(QE_ENABLE_FOX)
+    if(FOX_ROOT)
+        set(QE_FOX_INTERNAL OFF)
+    endif()
+    option(QE_FOX_INTERNAL
+        "enable FoX internal library" ON)
 endif()
-option(QE_FOX_INTERNAL
-    "enable FoX intenal library" ON)
+
 if(WANNIER90_ROOT)
     set(QE_WANNIER90_INTERNAL OFF)
 endif()
 option(QE_WANNIER90_INTERNAL
-    "enable Wannier90 intenal library" ON)
+    "enable Wannier90 internal library" ON)
 if(MBD_ROOT)
     set(QE_MBD_INTERNAL OFF)
 endif()
 option(QE_MBD_INTERNAL
-    "enable LibMBD intenal library" ON)
+    "enable LibMBD internal library" ON)
 if(DEVICEXLIB_ROOT)
     set(QE_DEVICEXLIB_INTERNAL OFF)
 endif()
 option(QE_DEVICEXLIB_INTERNAL
-    "enable DeviceXlib intenal library" ON)
+    "enable DeviceXlib internal library" ON)
 if(ENVIRON_ROOT)
     set(ENVIRON_DEFAULT "EXTERNAL")
 else()
@@ -172,6 +178,9 @@ endif()
 if(QE_ENABLE_BARRIER)
     qe_add_global_compile_definitions(__USE_BARRIER)
 endif()
+foreach(DEF IN LISTS QE_EXTRA_DEFINITIONS)
+    qe_add_global_compile_definitions(${DEF})
+endforeach()
 if(QE_ENABLE_MPI)
     # OMPI_SKIP_MPICXX: skip CXX APIs on openmpi, cause trouble to C APIs
     qe_add_global_compile_definitions(__MPI OMPI_SKIP_MPICXX)
@@ -187,6 +196,10 @@ if(QE_ENABLE_HDF5)
 endif()
 if(QE_ENABLE_ENVIRON)
     qe_add_global_compile_definitions(__ENVIRON)
+endif()
+
+if(QE_CLOCK_SECONDS)
+   qe_add_global_compile_definitions(__CLOCK_SECONDS)
 endif()
 
 # Feature checks
@@ -232,7 +245,7 @@ if(NOT QE_ENABLE_SANITIZER STREQUAL "none" AND NOT CMAKE_Fortran_COMPILER_ID MAT
 endif()
 
 # valid plugins checks
-set(VALID_QE_PLUGINS "d3q" "pw2qmcpack")
+set(VALID_QE_PLUGINS "d3q" "pw2qmcpack" "gipaw")
 # Perform sanitizer option check, only works in debug mode
 foreach(PLUGIN IN LISTS QE_ENABLE_PLUGINS)
   if(NOT PLUGIN IN_LIST VALID_QE_PLUGINS)

@@ -230,10 +230,10 @@ SUBROUTINE post_xml_init (  )
   g_d    = g
   gg_d   = gg
 #endif
-  !$acc update device(mill, g)
+  !$acc update device(mill, g, gg)
   !
   CALL ggens( dffts, gamma_only, at, g, gg, mill, gcutms, ngms ) 
-  CALL gshells ( lmovecell ) 
+  CALL gshells ( lmovecell )
   !
   IF (do_comp_esm) CALL esm_init()
   IF (do_cutoff_2D) CALL cutoff_fact()
@@ -268,6 +268,7 @@ SUBROUTINE post_xml_init (  )
   !
   CALL struc_fact( nat, tau, nsp, ityp, ngm, g, bg, dfftp%nr1, dfftp%nr2,&
                    dfftp%nr3, strf, eigts1, eigts2, eigts3 )
+  !$acc update device(eigts1(:,:), eigts2(:,:), eigts3(:,:))
   CALL setlocal()
   CALL set_rhoc()
   !

@@ -16,16 +16,20 @@
 #endif
 !
 !-------------------------------------------------------------------------
-      SUBROUTINE dforce_x ( i, bec, vkb, c, df, da, v, ldv, ispin, f, n, nspin, v1 )
-!-----------------------------------------------------------------------
-!computes: the generalized force df=cmplx(dfr,dfi,kind=DP) acting on the i-th
-!          electron state at the gamma point of the brillouin zone
-!          represented by the vector c=cmplx(cr,ci,kind=DP)
-!
-!     d_n(g) = f_n { 0.5 g^2 c_n(g) + [vc_n](g) +
-!              sum_i,ij d^q_i,ij (-i)**l beta_i,i(g) 
-!                                 e^-ig.r_i < beta_i,j | c_n >}
-!
+      SUBROUTINE dforce_x( i, bec, vkb, c, df, da, v, ldv, ispin, f, n, nspin, v1 )
+      !-----------------------------------------------------------------------
+      !! Computes: the generalized force df=cmplx(dfr,dfi,kind=DP) acting on the i-th
+      !!           electron state at the gamma point of the Brillouin zone
+      !!           represented by the vector c=cmplx(cr,ci,kind=DP).
+      !
+      !! \[ d_n(g) = f_n { 0.5 g^2 c_n(g) + [\text{vc}_n](g) +
+      !!             \sum_{i,ij} d^q_{i,ij} (-i)^l \beta_{i,'i}(g) 
+      !!                          e^{-ig} r_i \langle \beta_{i,j} | c_n \rangle}  \]
+      !
+      ! d_n(g) = f_n { 0.5 g^2 c_n(g) + [vc_n](g) +
+      !          sum_i,ij d^q_i,ij (-i)**l beta_i,`i(g) 
+      !                         e^-ig.r_i < beta_i,j | c_n >}
+      !
       USE parallel_include
       USE kinds,                  ONLY: dp
       USE control_flags,          ONLY: iprint
@@ -342,15 +346,9 @@
 #if defined (__CUDA)
 !-------------------------------------------------------------------------
       SUBROUTINE dforce_gpu_x ( i, bec, vkb, c, df, da, v, ldv, ispin, f, n, nspin )
-!-----------------------------------------------------------------------
-!computes: the generalized force df=cmplx(dfr,dfi,kind=DP) acting on the i-th
-!          electron state at the gamma point of the brillouin zone
-!          represented by the vector c=cmplx(cr,ci,kind=DP)
-!
-!     d_n(g) = f_n { 0.5 g^2 c_n(g) + [vc_n](g) +
-!              sum_i,ij d^q_i,ij (-i)**l beta_i,i(g) 
-!                                 e^-ig.r_i < beta_i,j | c_n >}
-!
+      !-----------------------------------------------------------------------
+      !! GPU double of \(\texttt{dforce_x}\).
+      !
       USE parallel_include
       USE kinds,                  ONLY: dp
       USE control_flags,          ONLY: iprint
@@ -358,7 +356,7 @@
       USE uspp_param,             ONLY: nhm, nh
       USE constants,              ONLY: pi, fpi
       USE ions_base,              ONLY: nsp, na, nat, ityp
-      USE gvecw,                  ONLY: ngw, g2kin_d
+      USE gvecw,                  ONLY: ngw, g2kin
       USE cell_base,              ONLY: tpiba2
       USE ensemble_dft,           ONLY: tens
       USE xc_lib,                 ONLY: xclib_dft_is, exx_is_active
@@ -492,10 +490,10 @@
                fip = -0.5d0*f(i+idx)
             endif
             CALL fftx_psi2c_gamma_gpu( dffts, psi( 1+ioff : ioff+dffts%nnr ), df_d(1+igno:igno+ngw), da_d(1+igno:igno+ngw))
-!$cuf kernel do(1)
+!$acc parallel loop present(g2kin, da_d, df_d, c)
             DO ig=1,ngw
-               df_d(ig+igno)= fi*(tpiba2*g2kin_d(ig)* c(ig,idx+i-1)+df_d(ig+igno))
-               da_d(ig+igno)=fip*(tpiba2*g2kin_d(ig)* c(ig,idx+i  )+da_d(ig+igno))
+               df_d(ig+igno)= fi*(tpiba2*g2kin(ig)* c(ig,idx+i-1)+df_d(ig+igno))
+               da_d(ig+igno)=fip*(tpiba2*g2kin(ig)* c(ig,idx+i  )+da_d(ig+igno))
             END DO
          END IF
 

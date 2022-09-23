@@ -9,9 +9,8 @@
 !----------------------------------------------------------------------------
 SUBROUTINE init_run()
   !----------------------------------------------------------------------------
-  !
-  ! ... this routine initialise the cp code and allocates (calling the
-  ! ... appropriate routines) the memory
+  !! This routine initialise the CP code and allocates (calling the
+  !! appropriate routines) the memory.
   !
   USE kinds,                    ONLY : DP
   USE control_flags,            ONLY : nbeg, nomore, lwf, iverbosity, iprint, &
@@ -26,7 +25,6 @@ SUBROUTINE init_run()
   USE gvect,                    ONLY : gstart, gg, gcutm
   USE fft_base,                 ONLY : dfftp, dffts
   USE electrons_base,           ONLY : nspin, nbsp, nbspx, nupdwn, f
-  USE pseudo_base,              ONLY : vkb_d
   USE uspp,                     ONLY : nkb, vkb, deeq, becsum,nkbus
   USE core,                     ONLY : rhoc
   USE wavefunctions,            ONLY : c0_bgrp, cm_bgrp, allocate_cp_wavefunctions
@@ -230,9 +228,7 @@ SUBROUTINE init_run()
   ALLOCATE( deeq( nhm, nhm, nat, nspin ) )
   !
   ALLOCATE( vkb( ngw, nkb ) )
-#if defined(_CUDA)
-  ALLOCATE( vkb_d( ngw, nkb ) )
-#endif
+  !$acc enter data create(vkb(1:ngw,1:nkb))
   !
   IF ( xclib_dft_is('meta') .AND. tens ) &
      CALL errore( ' init_run ', 'ensemble_dft not implemented for metaGGA', 1 )
