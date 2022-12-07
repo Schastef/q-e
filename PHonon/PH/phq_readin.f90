@@ -10,7 +10,7 @@
 SUBROUTINE phq_readin()
   !----------------------------------------------------------------------------
   !! This routine reads the control variables for the program \(\texttt{phononq}\).
-  !! A second routine, \(\texttt{read_file}\), reads the variables saved to file
+  !! A second routine, \(\texttt{read_file_ph}\), reads the variables saved to file
   !! by the self-consistent program.
   !
   !
@@ -28,7 +28,6 @@ SUBROUTINE phq_readin()
   USE uspp,          ONLY : okvan
   USE fixed_occ,     ONLY : tfixed_occ
   USE lsda_mod,      ONLY : lsda, nspin
-  USE fft_base,      ONLY : dffts
   USE cellmd,        ONLY : lmovecell
   USE run_info,      ONLY : title
   USE control_ph,    ONLY : maxter, alpha_mix, lgamma_gamma, epsil, &
@@ -108,6 +107,7 @@ SUBROUTINE phq_readin()
   INTEGER, ALLOCATABLE :: wqaux(:)
   INTEGER :: nqaux, iq
   CHARACTER(len=80) :: diagonalization='david'
+  LOGICAL :: needwf_ph=.TRUE.
   !
   NAMELIST / INPUTPH / tr2_ph, amass, alpha_mix, niter_ph, nmix_ph,  &
                        nat_todo, verbosity, iverbosity, outdir, epsil,  &
@@ -714,9 +714,12 @@ SUBROUTINE phq_readin()
   !
   IF (reduce_io) io_level=0
   !
-  ! DFPT+U: the occupation matrix ns is read via read_file
+  ! Here all needed data from the scf calculation are read
   !
-  CALL read_file ( )
+  ! IO of wfcs in collected format is not needed for recover run
+  needwf_ph = .NOT. recover
+  !
+  CALL read_file_ph ( needwf_ph )
   !
   magnetic_sym=noncolin .AND. domag
   !
