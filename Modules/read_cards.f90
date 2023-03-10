@@ -1534,6 +1534,31 @@ CONTAINS
                !
             ENDIF
             !
+         CASE( 'potential_wall' )
+            !
+            IF ( nfield == 4 ) THEN
+               !
+               READ( input_line, * ) constr_type_inp(i), &
+                                    constr_inp(1,i), &
+                                    constr_inp(2,i), &
+                                    constr_inp(3,i)
+               !
+               WRITE(stdout, '(7x,i3,a)') &
+                  i,') potential wall at origin normal to z-axis is requested'
+               WRITE(stdout, '(9x,a)') 'External force is proportional to:'
+               WRITE(stdout, '(11x,f12.6,a,f12.6,a,f12.6,a)') constr_inp(1,i), &
+                  ' (a.u.) * ', constr_inp(2,i), ' (a.u.) * exp(', &
+                  (-1._dp) * constr_inp(2,i), ').'
+               WRITE(stdout, '(9x,a,f12.6,a)') 'Force is applied when atom is within ',&
+                  constr_inp(3,i), ' (a.u.) from the wall.'
+            !
+            ELSE
+               !
+               CALL errore( 'card_constraints', &
+                           & 'potential_wall: wrong number of fields', nfield )
+               !
+            ENDIF
+            !
          CASE DEFAULT
             !
             CALL errore( 'card_constraints', 'unknown constraint ' // &
@@ -2519,6 +2544,8 @@ CONTAINS
             ! PW/src/intersite_V.f90
             ! sp_pos(na) is the atomic type of the atom na
             IF (.NOT.ALLOCATED(ityp)) THEN
+               IF (.NOT.ALLOCATED(sp_pos)) CALL errore ('card_hubbard', &
+                       'card HUBBARD must follow card ATOMIC_SPECIES',1)
                ALLOCATE(ityp(natx*(2*sc_size+1)**3))
                ityp(1:nat) = sp_pos(1:nat)
                i = nat
@@ -2999,24 +3026,26 @@ CONTAINS
          lda_plus_u = .TRUE.
          !
          ! We need to determine automatically which case we are dealing with,
-         ! based on what Hubbard parameters we found in the HUBBARD card
+         ! based on what Hubbard parameters we found in the HUBBARD card.
+         ! Allow positive and negative values of Hubbard parameters
+         ! (just in case if users want to experiment with negative values)
          !
-         IF (ANY(Hubbard_J(:,:)>eps16)) THEN
+         IF (ANY(ABS(Hubbard_J(:,:))>eps16)) THEN
             ! DFT+U+J
             lda_plus_u_kind = 1
-            IF (ANY(Hubbard_J0(:)>eps16)) CALL errore('card_hubbard', &
-                    'Hund J is not compatible with Hund J0', i)
-            IF (ANY(Hubbard_V(:,:,:)>eps16)) CALL errore('card_hubbard', &
-                    'Currently Hund J is not compatible with Hubbard V', i)
-         ELSEIF (ANY(Hubbard_V(:,:,:)>eps16)) THEN
+            IF (ANY(ABS(Hubbard_J0(:))>eps16)) CALL errore('card_hubbard', &
+                    & 'Hund J is not compatible with Hund J0', i)
+            IF (ANY(ABS(Hubbard_V(:,:,:))>eps16)) CALL errore('card_hubbard', &
+                    & 'Currently Hund J is not compatible with Hubbard V', i)
+         ELSEIF (ANY(ABS(Hubbard_V(:,:,:))>eps16)) THEN
             ! DFT+U+V(+J0)
             lda_plus_u_kind = 2
             IF (noncolin) CALL errore('card_hubbard', &
                     'Hubbard V is not supported with noncolin=.true.', i)
-         ELSEIF (ANY(Hubbard_U(:)>eps16) .AND. noncolin) THEN
+         ELSEIF (ANY(ABS(Hubbard_U(:))>eps16) .AND. noncolin) THEN
             ! DFT+U
             lda_plus_u_kind = 1
-         ELSEIF (ANY(Hubbard_U(:)>eps16) .OR. ANY(Hubbard_J0(:)>eps16)) THEN
+         ELSEIF (ANY(ABS(Hubbard_U(:))>eps16) .OR. ANY(ABS(Hubbard_J0(:))>eps16)) THEN
             ! DFT+U(+J0)
             lda_plus_u_kind = 0
          ELSE
