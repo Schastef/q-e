@@ -21,6 +21,7 @@ set(src_upflib
     read_fhi.f90
     read_ncpp.f90
     read_ps.f90
+    read_psml.f90
     read_upf_new.f90
     read_upf_v1.f90
     read_uspp.f90
@@ -51,10 +52,8 @@ set(src_upflib
     init_us_2_base_gpu.f90
     interp_atwfc_gpu.f90
     qvan2_gpu.f90
-    sph_bes_gpu.f90
     ylmr2_gpu.f90
     dylmr2_gpu.f90
-    simpsn_gpu.f90
     upf_acc_interfaces.f90)
 qe_enable_cuda_fortran("${src_upflib}")
 
