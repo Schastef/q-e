@@ -11,7 +11,8 @@ MODULE start_k
   !! Basic variables for k-point generations, as read from input.
   !
   USE kinds,      ONLY : DP
-  USE cell_base,  ONLY : bg
+  USE cell_base,  ONLY : bg, tpiba
+  USE io_global,  ONLY : stdout
   !
   SAVE
   !
@@ -41,6 +42,18 @@ MODULE start_k
   !
   CONTAINS
   !
+  SUBROUTINE compute_dens_k(nk1_, nk2_, nk3_, dens)
+       IMPLICIT NONE
+       INTEGER, INTENT(INOUT) :: nk1_, nk2_, nk3_
+       REAL(DP),INTENT(IN) :: dens ! linear densiity of kpoints in units of 1/bohr
+       ! Note: reciprocal lattiec bg bust already be defined!
+       IF(SUM(ABS(bg))<1.d-6) CALL errore('cmp k-points','bg not initilaized', 1)
+       IF(nk1_==0) nk1_ = CEILING(tpiba*DSQRT(NORM2(bg(:,1)))/dens)
+       IF(nk2_==0) nk2_ = CEILING(tpiba*DSQRT(NORM2(bg(:,2)))/dens)
+       IF(nk3_==0) nk3_ = CEILING(tpiba*DSQRT(NORM2(bg(:,3)))/dens)
+       WRITE(stdout, "(5x,'Generated grid of k points',i6,'x',i6,'x',i6)") nk1_, nk2_, nk3_
+  END SUBROUTINE
+          
   !---------------------------------------------------------------------  
     SUBROUTINE init_start_k( nk1_, nk2_, nk3_, k1_, k2_, k3_, k_points, &
                              nk_, xk_, wk_ ) 

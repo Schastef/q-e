@@ -183,6 +183,7 @@ MODULE read_namelists_module
        degauss = 0.0_DP
        nelec_cond=0.0_DP
        degauss_cond =0.0_DP
+       k_density = 0.25_dp
        nspin = 1
        nosym = .FALSE.
        nosym_evc = .FALSE.
@@ -955,6 +956,7 @@ MODULE read_namelists_module
        CALL mp_bcast( smearing,          ionode_id, intra_image_comm )
        CALL mp_bcast( degauss,           ionode_id, intra_image_comm )
        CALL mp_bcast( degauss_cond,      ionode_id, intra_image_comm )
+       CALL mp_bcast( k_density,         ionode_id, intra_image_comm )
        CALL mp_bcast( nelec_cond,        ionode_id, intra_image_comm )
        CALL mp_bcast( nbnd_cond,         ionode_id, intra_image_comm )
        CALL mp_bcast( nspin,             ionode_id, intra_image_comm )
