@@ -44,6 +44,9 @@ SUBROUTINE h_psi_meta( ldap, np, mp, psip, hpsi )
   REAL(DP) :: kplusgi, fac
   COMPLEX(DP), PARAMETER :: ci=(0.d0,1.d0)
   !
+  ! TODO, REPLACE THIS WITH SOMETHING LIKE xclib_dft_is('tau') in hpsi.f90
+  IF (MAXVAL(ABS(kedtau)) < 1.d-7) RETURN
+  !
   CALL start_clock( 'h_psi_meta' )
   !
   nrxxs = dffts%nnr
