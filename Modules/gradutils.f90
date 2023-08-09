@@ -685,7 +685,7 @@ SUBROUTINE fft_laplacian_g2r( dfft, a, gg, lapla )
   !
   DO ig = 1, dfft%ngm
      !
-     laux(dfft%nl(ig)) = -gg(ig)*a(dfft%nl(ig))
+     laux(dfft%nl(ig)) = -gg(ig)*a(ig)
      !
   END DO
   !
