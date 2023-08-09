@@ -981,7 +981,7 @@ CONTAINS
      !---------------------------------------------------------------------
      !! Find if DFT has gradient correction, meta or hybrid.
      !
-     USE dft_setting_params,  ONLY: isgradient, ismeta, ishybrid
+     USE dft_setting_params,  ONLY: isgradient, ismeta, ishybrid, islaplacian
      !
      IMPLICIT NONE
      !
@@ -1003,6 +1003,8 @@ CONTAINS
        xclib_dft_is = isgradient
      CASE( 'META' )
        xclib_dft_is = ismeta
+     CASE( 'METAL' )
+       xclib_dft_is = islaplacian
      CASE( 'HYBRID' )
        xclib_dft_is = ishybrid
      CASE DEFAULT
@@ -1075,7 +1077,8 @@ CONTAINS
     USE xclib_utils_and_para,ONLY: nowarning
     USE dft_setting_params,  ONLY: n_ext_params, xc_func, xc_info, par_list, &
                                    libxc_flags, n_ext_params, exx_term, &
-                                   lxc_exx_desc, lxc_scr_desc
+                                   lxc_exx_desc, lxc_scr_desc, &
+                                   islaplacian
     USE xc_f03_lib_m
 #endif
     IMPLICIT NONE
@@ -1146,6 +1149,8 @@ CONTAINS
         !
         libxc_initialized(iid) = .TRUE.
         !
+        islaplacian = (libxc_flags(iid,15) == 1)
+        !
         IF ( .NOT. nowarning ) THEN
           IF ( n_ext_params(iid) /= 0 ) &
             WRITE(stdout,'(/5X,"WARNING: libxc functional with ID ",I4," depends",&
@@ -1168,10 +1173,6 @@ CONTAINS
           IF ( libxc_flags(iid,14) == 1 ) &
             WRITE(stdout,'(4X,"[w02] libxc functional with ID ",I4," is still ", &
                       &/4X,"in development.")' ) id_vec(iid)
-          IF ( libxc_flags(iid,15) == 1 ) &
-            WRITE(stdout,'(/5X,"WARNING: libxc functional with ID ",I4," depends on",  &
-                          &/5X," the laplacian of the density, which is currently set",&
-                          &/5X," to zero.")' ) id_vec(iid)
         ENDIF
       ENDIF  
     ENDDO

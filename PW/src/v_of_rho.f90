@@ -162,7 +162,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   USE cell_base,        ONLY : omega
   USE funct,            ONLY : dft_is_nonlocc, nlc
   USE scf,              ONLY : scf_type
-  USE xc_lib,           ONLY : xc_metagcx, xclib_get_ID
+  USE xc_lib,           ONLY : xc_metagcx, xclib_get_ID, xclib_dft_is
   USE mp,               ONLY : mp_sum
   USE mp_bands,         ONLY : intra_bgrp_comm
   !
@@ -202,8 +202,11 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   REAL(DP), ALLOCATABLE :: rho_updw(:,:), grho(:,:,:), tau(:,:), lrho(:,:)
   COMPLEX(DP), ALLOCATABLE :: rhogsum(:)
   REAL(DP), PARAMETER :: eps12 = 1.0d-12, zero=0._dp
+  LOGICAL :: need_lapl
   !
   CALL start_clock( 'v_xc_meta' )
+  !
+  need_lapl = xclib_dft_is('metal')
   !
   etxc = zero
   vtxc = zero
@@ -216,15 +219,18 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !$acc data copyin( rho ) copyout( kedtaur, v )
   !
   ALLOCATE( grho(3,dfftp%nnr,nspin) )
-  ALLOCATE( lrho(dfftp%nnr,nspin) )
   ALLOCATE( h(3,dfftp%nnr,nspin) )
-  ALLOCATE( h2(dfftp%nnr,nspin) )
   ALLOCATE( rhogsum(ngm), tau(dfftp%nnr,nspin) )
-  !$acc data create( tau, grho, h )
+  !
+  IF ( need_lapl ) ALLOCATE( h2(dfftp%nnr,nspin), lrho(dfftp%nnr,nspin) )
+  !
+  !$acc data create( tau, grho, h, h2 )
   !
   ALLOCATE( ex(dfftp%nnr), ec(dfftp%nnr) )
-  ALLOCATE( v1x(dfftp%nnr,nspin), v2x(dfftp%nnr,nspin)   , v3x(dfftp%nnr,nspin), v4x(dfftp%nnr,nspin) )
-  ALLOCATE( v1c(dfftp%nnr,nspin), v2c(np,dfftp%nnr,nspin), v3c(dfftp%nnr,nspin), v4c(dfftp%nnr,nspin) )
+  ALLOCATE( v1x(dfftp%nnr,nspin), v2x(dfftp%nnr,nspin)   , v3x(dfftp%nnr,nspin) )
+  ALLOCATE( v1c(dfftp%nnr,nspin), v2c(np,dfftp%nnr,nspin), v3c(dfftp%nnr,nspin) )
+  !
+  IF ( need_lapl ) ALLOCATE( v4x(dfftp%nnr,nspin), v4c(dfftp%nnr,nspin) )
   !
   ! ... calculate the gradient of rho + rho_core in real space
   ! ... in LSDA case rhogsum is in (up,down) format
@@ -240,7 +246,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
      ENDDO
      !
      CALL fft_gradient_g2r( dfftp, rhogsum, g, grho(:,:,is) )
-     CALL fft_laplacian_g2r( dfftp, rhogsum, gg, lrho(:,is) )
+     IF ( need_lapl ) CALL fft_laplacian_g2r( dfftp, rhogsum, gg, lrho(:,is) )
      !
   ENDDO
   !
@@ -255,11 +261,16 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   DEALLOCATE( rhogsum )
   !
   !$acc data copyin( rho%of_r )
-  !$acc data create( ex, ec, v1x, v2x, v3x, v1c, v2c, v3c )
+  !$acc data create( ex, ec, v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c )
   IF (nspin == 1) THEN
     !
-    CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, lrho, ex, ec, &
+    IF ( need_lapl ) THEN
+       CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, lrho, ex, ec, &
                      v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c, gpu_args_=.TRUE. )
+    ELSE
+       CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, ex, ec, &
+                     v1x, v2x, v3x, v1c, v2c, v3c, gpu_args_=.TRUE. )
+    ENDIF
     !
     !$acc parallel loop reduction(+:etxc,vtxc,rhoneg1,rhoneg2) present(rho)
     DO k = 1, dfftp_nnr
@@ -272,7 +283,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
        ENDDO
        !
        ! ... h2 contains D(rho*Exc)/D(nabla^2 rho)
-       h2(k, 1) = (v4x(k,1)+v4c(k,1)) * e2
+       IF ( need_lapl ) h2(k, 1) = (v4x(k,1)+v4c(k,1)) * e2
        !
        kedtaur(k,1) = (v3x(k,1)+v3c(k,1)) * 0.5d0 * e2
        !
@@ -294,8 +305,13 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
         rho_updw(k,2) = ( rho%of_r(k,1) - rho%of_r(k,2) ) * 0.5d0
     ENDDO
     !
-    CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, lrho, ex, ec, &
-                     v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c, gpu_args_=.TRUE. )
+    IF ( need_lapl ) THEN
+       CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, lrho, ex, ec, &
+                        v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c, gpu_args_=.TRUE. )
+    ELSE
+       CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, ex, ec, &
+                        v1x, v2x, v3x, v1c, v2c, v3c, gpu_args_=.TRUE. )
+    ENDIF
     !
     ! ... first term of the gradient correction : D(rho*Exc)/D(rho)
     !
@@ -313,8 +329,8 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
        ENDDO
        !
        ! ... h2 contains D(rho*Exc)/D(nabla^2 rho)
-       h2(k, 1) = (v4x(k,1)+v4c(k,1)) * e2
-       h2(k, 2) = (v4x(k,2)+v4c(k,2)) * e2
+       IF ( need_lapl ) h2(k, 1) = (v4x(k,1)+v4c(k,1)) * e2
+       IF ( need_lapl ) h2(k, 2) = (v4x(k,2)+v4c(k,2)) * e2
        !
        kedtaur(k,1) = (v3x(k,1) + v3c(k,1)) * 0.5d0 * e2
        kedtaur(k,2) = (v3x(k,2) + v3c(k,2)) * 0.5d0 * e2
@@ -335,11 +351,13 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !
   !$acc end data
   DEALLOCATE( ex, ec )
-  DEALLOCATE( v1x, v2x, v3x, v4x )
-  DEALLOCATE( v1c, v2c, v3c, v4c )
+  DEALLOCATE( v1x, v2x, v3x )
+  DEALLOCATE( v1c, v2c, v3c )
+  IF ( need_lapl ) DEALLOCATE ( v4x, v4c )
   !
   ALLOCATE( dh( dfftp%nnr ) , dh2( dfftp%nnr ) )
-  !$acc data create( dh )
+  !$acc data create( dh, dh2 )
+  IF ( .not. need_lapl ) dh2 = 0.d0
   !
   ! ... second term of the gradient correction :
   ! ... \sum_alpha (D / D r_alpha) ( D(rho*Exc)/D(grad_alpha rho) )
@@ -349,7 +367,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !
   DO is = 1, nspin
      CALL fft_graddot( dfftp, h(1,1,is), g, dh )
-     CALL fft_laplacian( dfftp, h2(1,is), gg, dh2 )
+     IF ( need_lapl ) CALL fft_laplacian( dfftp, h2(1,is), gg, dh2 )
      !
      sgn_is = (-1.d0)**(is+1)
      !
@@ -403,8 +421,9 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
     DEALLOCATE(v0)
   ENDIF
   !
-  DEALLOCATE( tau, grho, lrho )
-  DEALLOCATE( h, h2 )
+  DEALLOCATE( tau, grho )
+  DEALLOCATE( h )
+  IF ( need_lapl ) DEALLOCATE ( lrho, h2 )
   !
   CALL stop_clock( 'v_xc_meta' )
   !
