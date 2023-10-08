@@ -304,7 +304,7 @@ SUBROUTINE laxlib_cdiaghg_gpu( n, m, h_d, s_d, ldh, e_d, v_d, me_bgrp, root_bgrp
   !
   !
   !
-  CALL start_clock_gpu( 'cdiaghg' )
+  CALL start_clock_gpu( 'cdiaghg_gpu' )
   !
   ! ... only the first processor diagonalizes the matrix
   !
@@ -420,7 +420,7 @@ SUBROUTINE laxlib_cdiaghg_gpu( n, m, h_d, s_d, ldh, e_d, v_d, me_bgrp, root_bgrp
 #endif
 #endif
   !
-  CALL stop_clock_gpu( 'cdiaghg' )
+  CALL stop_clock_gpu( 'cdiaghg_gpu' )
   !
   RETURN
   !
@@ -483,7 +483,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
   !
   ! ... input s and h are copied so that they are not destroyed
   !
-  CALL start_clock( 'cdiaghg' )
+  CALL start_clock( 'pcdiaghg' )
   !
   CALL laxlib_intarray_to_desc(desc,idesc)
   !
@@ -502,7 +502,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
 
-  CALL start_clock( 'cdiaghg:choldc' )
+  CALL start_clock( 'pcdiaghg:choldc' )
   !
   ! ... Cholesky decomposition of sl ( L is stored in sl )
   !
@@ -525,11 +525,11 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
   !
-  CALL stop_clock( 'cdiaghg:choldc' )
+  CALL stop_clock( 'pcdiaghg:choldc' )
   !
   ! ... L is inverted ( sl = L^-1 )
   !
-  CALL start_clock( 'cdiaghg:inversion' )
+  CALL start_clock( 'pcdiaghg:inversion' )
   !
   IF( desc%active_node > 0 ) THEN
      !
@@ -548,11 +548,11 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
   !
-  CALL stop_clock( 'cdiaghg:inversion' )
+  CALL stop_clock( 'pcdiaghg:inversion' )
   !
   ! ... vl = L^-1*H
   !
-  CALL start_clock( 'cdiaghg:paragemm' )
+  CALL start_clock( 'pcdiaghg:paragemm' )
   !
   IF( desc%active_node > 0 ) THEN
      !
@@ -573,7 +573,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
   END IF
   !
-  CALL stop_clock( 'cdiaghg:paragemm' )
+  CALL stop_clock( 'pcdiaghg:paragemm' )
   !
   !
   IF ( desc%active_node > 0 ) THEN
@@ -600,7 +600,7 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
   !
   ! ... v = (L^T)^-1 v
   !
-  CALL start_clock( 'cdiaghg:paragemm' )
+  CALL start_clock( 'pcdiaghg:paragemm' )
   !
   IF ( desc%active_node > 0 ) THEN
      !
@@ -614,13 +614,13 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
         CALL lax_error__( 'pcdiaghg', 'error broadcasting array e', ABS( info ) )
 #endif
   !
-  CALL stop_clock( 'cdiaghg:paragemm' )
+  CALL stop_clock( 'pcdiaghg:paragemm' )
   !
   IF ( desc%active_node > 0 ) THEN
      DEALLOCATE( ss, hh )
   END IF
   !
-  CALL stop_clock( 'cdiaghg' )
+  CALL stop_clock( 'pcdiaghg' )
   !
   RETURN
   !
@@ -675,3 +675,210 @@ CONTAINS
   !
 END SUBROUTINE laxlib_pcdiaghg
 !
+!#define __ELPAGPU !TOREMOVE!TOFIX
+!----------------------------------------------------------------------------
+SUBROUTINE laxlib_pcdiaghg_gpu( n, h, s, ldh, e, v, idesc, dummy )
+  !----------------------------------------------------------------------------
+  !
+  ! ... calculates eigenvalues and eigenvectors of the generalized problem
+  ! ... Hv=eSv, with H hermitean matrix, S overlap matrix.
+  ! ... On output both matrix are unchanged
+  !
+  ! ... Parallel version, with full data distribution
+  !
+  USE laxlib_parallel_include
+  USE laxlib_descriptor,      ONLY : la_descriptor, laxlib_intarray_to_desc
+  USE laxlib_processors_grid, ONLY : ortho_parent_comm
+  USE laxlib_processors_grid, ONLY : ortho_cntx, np_ortho, me_ortho, ortho_comm
+  use, intrinsic   :: iso_c_binding 
+#if defined __ELPAGPU
+  USE zhpev_module,           ONLY : pzheevd_drv
+  use elpa
+#endif
+  !
+  IMPLICIT NONE
+  !
+  INCLUDE 'laxlib_kinds.fh'
+  include 'laxlib_param.fh'
+  include 'laxlib_mid.fh'
+  include 'laxlib_low.fh'
+  !
+  INTEGER, INTENT(IN) :: n, ldh
+    ! dimension of the matrix to be diagonalized
+    ! leading dimension of h, as declared in the calling pgm unit
+  COMPLEX(DP), INTENT(INOUT) :: h(ldh,ldh), s(ldh,ldh)
+    ! actually intent(in) but compilers don't know and complain
+    ! matrix to be diagonalized
+    ! overlap matrix
+  REAL(DP), INTENT(OUT) :: e(n)
+    ! eigenvalues
+  COMPLEX(DP), INTENT(OUT) :: v(ldh,ldh)
+    ! eigenvectors (column-wise)
+  INTEGER, INTENT(IN) :: idesc(LAX_DESC_SIZE)
+  !
+  LOGICAL, INTENT(IN) :: dummy !USELESS
+  INTEGER :: nlrow, nlcol
+  !
+  TYPE(la_descriptor) :: desc
+  !
+  INTEGER, PARAMETER  :: root = 0
+  INTEGER             :: nx, info
+
+  integer :: i, j
+  !
+#if defined(__ELPAGPU)
+  class(elpa_t), pointer :: eh
+  INTEGER             :: descsca( 16 )
+#endif
+  ! local block size
+  COMPLEX(DP), ALLOCATABLE :: ss(:,:), hh(:,:), tt(:,:)
+  COMPLEX(DP), ALLOCATABLE :: ss_h(:,:), hh_h(:,:), tt_h(:,:), v_h(:,:)
+#if defined(__CUDA)
+  attributes(device) :: h, s, v, ss, hh, tt
+#endif
+interface 
+  subroutine signal(c,s) bind(C, name="kill") 
+     integer :: c,s  
+  end subroutine  signal
+  ! 
+  subroutine abort () bind (C, name="abort") 
+  end subroutine abort
+end interface 
+  
+#if defined(__ELPAGPU)
+  !
+  CALL start_clock_gpu( 'pcdiaghg_gpu' )
+  !
+  CALL laxlib_intarray_to_desc(desc,idesc)
+  !
+  ! ... input s and h are copied so that they are not destroyed
+  !
+  IF( desc%active_node > 0 ) THEN
+     !
+     nx   = desc%nrcx
+     !
+     IF( nx /= ldh ) &
+        CALL lax_error__(" pcdiaghg_gpu ", " inconsistent leading dimension ", ldh )
+     !
+     ALLOCATE( hh( nx, nx ) )
+     ALLOCATE( ss( nx, nx ) )
+     !
+     hh(1:nx,1:nx) = h(1:nx,1:nx)
+     ss(1:nx,1:nx) = s(1:nx,1:nx)
+     !
+  END IF
+
+  IF( desc%active_node > 0 ) THEN
+     !
+     CALL descinit( descsca, n, n, desc%nrcx, desc%nrcx, 0, 0, ortho_cntx, SIZE( ss, 1 ) , info )
+     !
+     IF( info /= 0 ) CALL lax_error__( ' cdiaghg ', ' desccinit ', ABS( info ) )
+     !
+     if (elpa_init(20200417) /= ELPA_OK) CALL lax_error__( ' cdiaghg ', ' ELPA API version not supported ', ABS( info ) )
+
+     eh => elpa_allocate(info)
+
+     nlrow = size(h,1)
+     nlcol = desc%nrcx
+
+     call eh%set("na", n, info)              ! size of the na x na matrix
+     call eh%set("nev", n, info)             ! number of eigenvectors that should be computed ( 1<= nev <= na)
+     call eh%set("nblk", SIZE(h, 2), info)   ! size of the BLACS block cyclic distribution
+     call eh%set("local_nrows", size(h,1), info)    ! number of local rows of the distributed matrix on this MPI task
+     call eh%set("local_ncols", desc%nrcx, info)    ! number of local columns of the distributed matrix on this MPI task
+     call eh%set("mpi_comm_parent", ortho_comm, info) ! the global MPI communicator
+     call eh%set("process_row", desc%myr, info)   ! row coordinate of MPI process
+     call eh%set("process_col", desc%myc, info)   ! column coordinate of MPI process
+    !call eh%set("timings", 1, ierr)
+    !call eh%set("debug", 1, ierr)
+
+     info = eh%setup()
+
+     if (info .ne. ELPA_OK) CALL lax_error__( ' cdiaghg ', ' problems setting up elpa ', ABS( info ) )
+
+     call eh%set("solver", ELPA_SOLVER_1STAGE, info)
+
+     ! CPU
+     !call eh%set("gpu", 0, info)
+     !call eh%set("complex_kernel", ELPA_2STAGE_COMPLEX_GENERIC, info)
+
+     !GPU (Still failing!)
+     ! call eh%set("gpu", 1, info) 
+     !call eh%set("complex_kernel", ELPA_2STAGE_COMPLEX_GPU, info)
+
+     !call eh%generalized_eigenvectors(hh, ss, e, v, .true., info)
+
+     ! compute the Cholesky factorization of B, on the CPU
+     allocate(ss_h, source=ss)
+     !
+     CALL pzpotrf( 'L', n, ss_h, 1, 1, descsca, info )
+
+     if(info /= 0) CALL lax_error__( ' cdiaghg ', ' problems computing cholesky ', info )
+
+     ! set to zero the upper triangle of ss
+     CALL sqr_setmat( 'U', n, ZERO, ss_h, size(ss_h,1), idesc )
+
+     ! invert triangular matrix
+     CALL pztrtri( 'L', 'N', n, ss_h, 1, 1, descsca, info )
+
+     if(info /= 0) CALL lax_error__( ' cdiaghg ', ' problems inverting triangular matrix ', ABS( info ) )
+     ! go back to GPU
+     ss = ss_h
+     !
+     CALL sqr_mm_cannon( 'N', 'N', n, ONE, ss, nx, hh, nx, ZERO, v, nx, idesc )
+     CALL sqr_mm_cannon( 'N', 'C', n, ONE, v, nx, ss, nx, ZERO, hh, nx, idesc )
+
+     CALL sqr_setmat( 'H', n, ZERO, hh, size(hh,1), idesc )
+     !
+     ! Go back to the CPU to comply with ELPA APIs
+     !
+     allocate(hh_h, source=hh)
+     allocate(v_h, source=v)
+     !
+     ! solve standard eigenproblem
+     call eh%eigenvectors(hh_h, e, v_h, info)
+
+     if(info /= 0) CALL lax_error__( ' cdiaghg ', ' problems solving standard eigenproblem ', ABS( info ) )
+     !
+     ! Back to GPU
+     v = v_h
+     !
+     CALL sqr_mm_cannon( 'C', 'N', n, ONE, ss, nx, v, nx, ZERO, v, nx, idesc )
+
+     call elpa_deallocate(eh)
+
+     call elpa_uninit()
+
+     DEALLOCATE(hh_h, ss_h, v_h)
+
+  ENDIF
+
+#if defined __MPI
+  CALL MPI_BCAST( e, SIZE(e), MPI_DOUBLE_PRECISION, root, ortho_parent_comm, info )
+  IF ( info /= 0 ) &
+        CALL lax_error__( 'pcdiaghg', 'error broadcasting array e', ABS( info ) )
+#endif
+
+  !
+  IF ( desc%active_node > 0 ) THEN
+     DEALLOCATE( ss, hh )
+  END IF
+  !
+  CALL stop_clock_gpu( 'pcdiaghg_gpu' )
+  !
+  RETURN
+
+#else !__ELPAGPU
+  !
+  call start_clock('pcdiaghg_gpu') 
+  call abort() 
+  CALL errore('lax gpu', 'not implemented',1)
+  !CALL laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc)
+  !
+  call stop_clock('pcdiaghg_gpu') 
+  RETURN
+#endif !__ELPAGPU
+  !
+END SUBROUTINE laxlib_pcdiaghg_gpu
+!
+!----------------------------------------------------------------------------
