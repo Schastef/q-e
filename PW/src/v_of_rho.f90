@@ -247,6 +247,35 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
      !
      CALL fft_gradient_g2r( dfftp, rhogsum, g, grho(:,:,is) )
      IF ( need_lapl ) CALL fft_laplacian_g2r( dfftp, rhogsum, gg, lrho(:,is) )
+
+     !IF ( need_lapl ) CALL fft_graddot( dfftp, grho(:,:,is), g, lrho(:,is) )
+
+     !allocate(rhotmp(dfftp%nnr,1))
+     ! DO ir = 1, dfftp_nnr
+     !   rhotmp(ir,1) = MAX(rho%of_r(ir,1) + rho_core(ir), 1d-10)
+     ! ENDDO
+     !CALL fft_laplacian( dfftp, rhotmp , gg, lrho(:,is) )
+     !
+     ! Options 2 - this is just a double check - should be removed
+     !!!IF ( need_lapl ) THEN
+     !!!
+     !!!  allocate(h3(3,3, dfftp%nnr))
+     !!!
+     !!!   DO ir = 1, dfftp_nnr
+     !!!     rho%of_r(ir,1) = rho%of_r(ir,1) + rho_core(ir)
+     !!!   ENDDO
+     !!!   !Option 2a
+     !!!       CALL fft_hessian ( dfftp, rho%of_r(:,1), g, grho(:,:,is), h3 )
+     !!!       DO k = 1, dfftp_nnr
+     !!!          lrho(k,is) =  (h3(1,1,k) + h3(2,2,k) + h3(3,3,k))
+     !!!       ENDDO
+     !!!   !Option 2b
+     !!!   !    CALL fft_laplacian( dfftp, rho%of_r(:,1) , gg, lrho(:,is) )
+     !!!   DO ir = 1, dfftp_nnr
+     !!!     rho%of_r(ir,1) = rho%of_r(ir,1) - rho_core(ir)
+     !!!   ENDDO
+     !!!   deallocate(h3)
+     !!!ENDIF
      !
   ENDDO
   !
@@ -256,6 +285,14 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
       tau(k,is) = rho%kin_r(k,is)/e2
     ENDDO
   ENDDO
+  !
+  ! Very crude smoothing of the laplacian?
+  !max_lapl = maxval(abs(lrho))
+  !DO is = 1, nspin
+  !  DO k = 1, dfftp_nnr
+  !    if (abs(lrho(k,is)) < 0.0001 * max_lapl) lrho(k,is) = 0.d0
+  !  ENDDO
+  !ENDDO
   !
   !$acc end data
   DEALLOCATE( rhogsum )
@@ -355,31 +392,46 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   DEALLOCATE( v1c, v2c, v3c )
   IF ( need_lapl ) DEALLOCATE ( v4x, v4c )
   !
-  ALLOCATE( dh( dfftp%nnr ) , dh2( dfftp%nnr ) )
-  !$acc data create( dh, dh2 )
-  IF ( .not. need_lapl ) dh2 = 0.d0
+  ALLOCATE( dh( dfftp%nnr ) )
+  !$acc data create( dh )
   !
   ! ... second term of the gradient correction :
   ! ... \sum_alpha (D / D r_alpha) ( D(rho*Exc)/D(grad_alpha rho) )
   !
-  ! ... third term of Laplacian metaGGA, the Laplacian :
-  ! ... nabla^2 ( D(rho*Exc)/D(nabla^2 rho) )
-  !
   DO is = 1, nspin
      CALL fft_graddot( dfftp, h(1,1,is), g, dh )
-     IF ( need_lapl ) CALL fft_laplacian( dfftp, h2(1,is), gg, dh2 )
      !
      sgn_is = (-1.d0)**(is+1)
      !
      !$acc parallel loop reduction(+:vtxc) present(rho)
      DO k = 1, dfftp_nnr
-       v(k,is) = v(k,is) - dh(k) + dh2(k)
-       vtxc = vtxc + ( dh2(k) - dh(k)) * ( rho%of_r(k,1) + sgn_is*rho%of_r(k,nspin) )*0.5D0
+       v(k,is) = v(k,is) - dh(k)
+       vtxc = vtxc - dh(k) * ABS( rho%of_r(k,1) + sgn_is*rho%of_r(k,nspin) )*0.5D0
      ENDDO
   ENDDO
-  !
   !$acc end data
-  DEALLOCATE( dh, dh2 )
+  DEALLOCATE( dh )
+  !
+  IF ( need_lapl ) THEN
+     ALLOCATE( dh2( dfftp%nnr ) )
+     !$acc data create( dh2 )
+     ! ... third term of Laplacian metaGGA, the Laplacian :
+     ! ... nabla^2 ( D(rho*Exc)/D(nabla^2 rho) )
+     !
+     DO is = 1, nspin
+        CALL fft_laplacian( dfftp, h2(1,is), gg, dh2 )
+        !
+        sgn_is = (-1.d0)**(is+1)
+        !
+        !$acc parallel loop reduction(+:vtxc) present(rho)
+        DO k = 1, dfftp_nnr
+          v(k,is) = v(k,is) + dh2(k)
+          vtxc = vtxc + dh2(k) * ABS( rho%of_r(k,1) + sgn_is*rho%of_r(k,nspin) )*0.5D0
+        ENDDO
+     ENDDO
+     !$acc end data
+     DEALLOCATE( dh2 )
+  ENDIF
   !
   !$acc end data
   !$acc end data
