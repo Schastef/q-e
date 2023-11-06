@@ -197,7 +197,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
   REAL(DP), INTENT(OUT) :: v3x(length,ns)
   !! v3x = D(E_x)/D(tau)
   REAL(DP), INTENT(OUT) :: v4x(length,ns)
-  !! v3x = D(E_x)/D(lapl)
+  !! v4x = D(E_x)/D(lapl)
   REAL(DP), INTENT(OUT) :: v1c(length,ns)
   !! v1c = D(E_c)/D(rho)
   REAL(DP), INTENT(OUT) :: v2c(np,length,ns)
@@ -214,11 +214,10 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
   REAL(DP), PARAMETER :: small = 1.E-10_DP
   !
 #if defined(__LIBXC)
-  REAL(DP), ALLOCATABLE :: rho_lxc(:), sigma(:), tau_lxc(:)
+  REAL(DP), ALLOCATABLE :: rho_lxc(:), sigma(:), tau_lxc(:), lapl_rho(:)
   REAL(DP), ALLOCATABLE :: ex_lxc(:), ec_lxc(:)
-  REAL(DP), ALLOCATABLE :: vx_rho(:), vx_sigma(:), vx_tau(:)
-  REAL(DP), ALLOCATABLE :: vc_rho(:), vc_sigma(:), vc_tau(:)
-  REAL(DP), ALLOCATABLE :: lapl_rho(:), vlapl_rho(:)
+  REAL(DP), ALLOCATABLE :: vx_rho(:), vx_sigma(:), vx_tau(:), vx_lapl(:)
+  REAL(DP), ALLOCATABLE :: vc_rho(:), vc_sigma(:), vc_tau(:), vc_lapl(:)
   !
   REAL(DP) :: rh, ggrho2, atau, xcoef
 #if (XC_MAJOR_VERSION > 4)
@@ -266,7 +265,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
       ENDDO
     ENDIF
   ENDIF
-  IF ( ANY(is_libxc(5:6)) ) ALLOCATE( vlapl_rho(length*ns) )
+  IF ( ANY(is_libxc(5:6)) ) ALLOCATE( vx_lapl(length*ns), vc_lapl(length*ns) )
   IF ( islaplacian ) THEN
      DO k = 1, length
        DO is = 1, ns
@@ -279,7 +278,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     !
     !$acc parallel loop
     DO k = 1, length
-      rho_lxc(k) = ABS( rho(k,1) )
+      rho_lxc(k) = MAX( rho(k,1), rho_threshold_mgga )
       sigma(k) = MAX( grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2, &
                       grho2_threshold_mgga )
       tau_lxc(k) = MAX( tau(k,1), tau_threshold_mgga )
@@ -294,8 +293,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     !
     !$acc parallel loop
     DO k = 1, length
-       rho_lxc(2*k-1) = ABS( rho(k,1) )
-       rho_lxc(2*k)   = ABS( rho(k,2) )
+       rho_lxc(2*k-1) = MAX( rho(k,1), rho_threshold_mgga )
+       rho_lxc(2*k)   = MAX( rho(k,2), rho_threshold_mgga )
        sigma(3*k-2) = MAX( grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2, &
                            grho2_threshold_mgga )
        sigma(3*k-1) = grho(1,k,1) * grho(1,k,2) + grho(2,k,1) * grho(2,k,2) +&
@@ -337,10 +336,11 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     CALL xc_f03_func_set_dens_threshold( xc_func(5), rho_threshold_mgga )
     IF (libxc_flags(5,0)==1) THEN
       CALL xc_f03_mgga_exc_vxc( xc_func(5), lengthxc, rho_lxc(1), sigma(1), lapl_rho(1), tau_lxc(1), &
-                                ex_lxc(1), vx_rho(1), vx_sigma(1), vlapl_rho(1), vx_tau(1) )
+                                ex_lxc(1), vx_rho(1), vx_sigma(1), vx_lapl(1), vx_tau(1) )
+
     ELSE
       CALL xc_f03_mgga_vxc( xc_func(5), lengthxc, rho_lxc(1), sigma(1), lapl_rho(1), tau_lxc(1), &
-                            vx_rho(1), vx_sigma(1), vlapl_rho(1), vx_tau(1) )
+                            vx_rho(1), vx_sigma(1), vx_lapl(1), vx_tau(1) )
       ex_lxc = 0.d0 
     ENDIF
     !
@@ -351,8 +351,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     IF ( ns==1 ) THEN
       !$acc parallel loop
       DO k = 1, length
-        IF ( ABS(rho_lxc(k))<=rho_threshold_mgga .OR. &
-             sigma(k)<=grho2_threshold_mgga      .OR. &
+        IF ( ABS(rho_lxc(k))<=rho_threshold_mgga .AND. &
+             sigma(k)<=grho2_threshold_mgga      .AND. &
              ABS(tau_lxc(k))<=tau_threshold_mgga ) THEN
           ex(k) = 0.d0    ; v1x(k,1) = 0.d0
           v2x(k,1) = 0.d0 ; v3x(k,1) = 0.d0
@@ -363,7 +363,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
         v1x(k,1) = xcoef * vx_rho(k)
         v2x(k,1) = xcoef * vx_sigma(k) * 2.0_DP
         v3x(k,1) = xcoef * vx_tau(k)
-        IF ( islaplacian ) v4x(k,1) = xcoef * vlapl_rho(k)
+        IF ( islaplacian ) v4x(k,1) = xcoef * vx_lapl(k)
       ENDDO
     ELSE
       !$acc parallel loop
@@ -383,7 +383,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           v1x(k,1) = xcoef * vx_rho(2*k-1)
           v2x(k,1) = xcoef * vx_sigma(3*k-2)*2.d0
           v3x(k,1) = xcoef * vx_tau(2*k-1)
-          IF ( islaplacian ) v4x(k,1) = xcoef * vlapl_rho(2*k-1)
+          IF ( islaplacian ) v4x(k,1) = xcoef * vx_lapl(2*k-1)
         ELSE
           v1x(k,1) = 0.d0 ; v2x(k,1) = 0.d0 ; v3x(k,1) = 0.d0
           IF ( islaplacian ) v4x(k,1) = 0.d0
@@ -394,7 +394,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           v1x(k,2) = xcoef * vx_rho(2*k)
           v2x(k,2) = xcoef * vx_sigma(3*k)*2.d0
           v3x(k,2) = xcoef * vx_tau(2*k)
-          IF ( islaplacian ) v4x(k,2) = xcoef * vlapl_rho(2*k)
+          IF ( islaplacian ) v4x(k,2) = xcoef * vx_lapl(2*k)
         ELSE
           v1x(k,2) = 0.d0 ; v2x(k,2) = 0.d0 ; v3x(k,2) = 0.d0
           IF ( islaplacian ) v4x(k,2) = 0.d0
@@ -414,10 +414,10 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     CALL xc_f03_func_set_dens_threshold( xc_func(6), rho_threshold_mgga )
     IF (libxc_flags(6,0)==1) THEN
       CALL xc_f03_mgga_exc_vxc( xc_func(6), lengthxc, rho_lxc(1), sigma(1), lapl_rho(1), tau_lxc(1), &
-                                ec_lxc(1), vc_rho(1), vc_sigma(1), vlapl_rho(1), vc_tau(1) )
+                                ec_lxc(1), vc_rho(1), vc_sigma(1), vc_lapl(1), vc_tau(1) )
     ELSE
       CALL xc_f03_mgga_vxc( xc_func(6), lengthxc, rho_lxc(1), sigma(1), lapl_rho(1), tau_lxc(1), &
-                            vc_rho(1), vc_sigma(1), vlapl_rho(1), vc_tau(1) )
+                            vc_rho(1), vc_sigma(1), vc_lapl(1), vc_tau(1) )
       ec_lxc = 0.d0
     ENDIF
     !
@@ -425,8 +425,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     IF ( ns==1 ) THEN
        !$acc parallel loop
        DO k = 1, length
-         IF ( ABS(rho_lxc(k))<=rho_threshold_mgga    .OR. &
-                     sigma(k)<=grho2_threshold_mgga  .OR. &
+         IF ( ABS(rho_lxc(k))<=rho_threshold_mgga    .AND. &
+                     sigma(k)<=grho2_threshold_mgga  .AND. &
               ABS(tau_lxc(k))<=rho_threshold_mgga  ) THEN
            ec(k) = 0.d0      ; v1c(k,1) = 0.d0
            v2c(1,k,1) = 0.d0 ; v3c(k,1) = 0.d0
@@ -437,7 +437,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
          v1c(k,1) = vc_rho(k)
          v2c(1,k,1) = vc_sigma(k) * 2.0_DP
          v3c(k,1) = vc_tau(k)
-         IF ( islaplacian ) v4c(k,1) = vlapl_rho(k)
+         IF ( islaplacian ) v4c(k,1) = vc_lapl(k)
        ENDDO
     ELSE
        !$acc parallel loop
@@ -445,8 +445,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           rh   = rho_lxc(2*k-1) + rho_lxc(2*k)
           atau = ABS(tau_lxc(2*k-1) + tau_lxc(2*k))
           ggrho2 = (sigma(3*k-2) + sigma(3*k))*4.0_DP
-          IF ( rh <= rho_threshold_mgga   .OR. &
-           ggrho2 <= grho2_threshold_mgga .OR. &
+          IF ( rh <= rho_threshold_mgga   .AND. &
+           ggrho2 <= grho2_threshold_mgga .AND. &
              atau <= tau_threshold_mgga  ) THEN
             ec(k) = 0.d0    
             v1c(k,1) = 0.d0 ; v3c(k,1) = 0.d0
@@ -467,8 +467,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           ENDDO
           v3c(k,1) = vc_tau(2*k-1)
           v3c(k,2) = vc_tau(2*k)
-          IF ( islaplacian ) v4c(k,1) = vlapl_rho(2*k-1)
-          IF ( islaplacian ) v4c(k,2) = vlapl_rho(2*k)
+          IF ( islaplacian ) v4c(k,1) = vc_lapl(2*k-1)
+          IF ( islaplacian ) v4c(k,2) = vc_lapl(2*k)
        ENDDO
     ENDIF
     !$acc end data
@@ -476,7 +476,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     DEALLOCATE( ec_lxc, vc_rho, vc_sigma, vc_tau )
   ENDIF
   !
-  IF ( ANY(is_libxc(5:6)) ) DEALLOCATE( vlapl_rho )
+  IF ( ANY(is_libxc(5:6)) ) DEALLOCATE( vx_lapl, vc_lapl )
   !
   !$acc end data
   DEALLOCATE( rho_lxc, sigma, tau_lxc, lapl_rho )
