@@ -173,7 +173,11 @@ SUBROUTINE read_upf_v1 ( file_pseudo, upf, ierr )
         call read_pseudo_ppinfo (iunps, upf, ierr)  
         if ( ierr > 0 ) go to 200
         call scan_end (iunps, "INFO",ierr)
-        if ( ierr > 0 ) go to 200
+        if ( ierr > 0 ) then
+           ! this case may signal a bogus error, don't stop
+           ierr = 0 
+           go to 200
+        end if
      ENDIF
   ENDIF
 
@@ -419,6 +423,7 @@ subroutine read_pseudo_nl (iunps, upf, ierr)
      ALLOCATE( upf%rcut( 1 ) )
      ALLOCATE( upf%rcutus( 1 ) )
      ALLOCATE( upf%els_beta( 1 ) )
+     ierr = 0
      return
   end if
   ALLOCATE( upf%kbeta( upf%nbeta ) )

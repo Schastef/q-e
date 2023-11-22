@@ -453,7 +453,7 @@ SUBROUTINE control_iosys()
   CASE( 'scf' )
      !
      lscf  = .true.
-     nstep = 1
+     nstep = min(1, nstep)
      !
   CASE( 'ensemble' )
      !
@@ -1065,9 +1065,13 @@ SUBROUTINE control_iosys()
      !
      io_level = -1
      !
-  CASE ( 'none' )
+  CASE ( 'minimal' )
      !
      io_level = -2
+     !
+  CASE ( 'none' )
+     !
+     io_level = -3
      !
   CASE DEFAULT
      !
@@ -2019,6 +2023,10 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
                               gau_parameter, localization_thr, scdm, ace,  &
                               scdmden, scdmgrd, nscdm, n_proj,             & 
                               exx_fraction, screening_parameter, ecutfock 
+  USE io_global,     ONLY : stdout
+  USE klist,         ONLY : tot_charge
+  USE ions_base,     ONLY : nat, ityp, zv
+  USE xc_lib,        ONLY:  xclib_dft_is
   USE xc_lib,        ONLY : xclib_set_exx_fraction, set_screening_parameter
   USE exx_base,      ONLY : x_gamma_extrapolation_ => x_gamma_extrapolation, &
                             nq1, nq2, nq3, &
@@ -2031,6 +2039,7 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   !
   IMPLICIT NONE
   REAL(dp), INTENT(IN):: ecutwfc, ecutrho
+  REAL(dp) :: nelec_
   !
   !
   x_gamma_extrapolation_ = x_gamma_extrapolation
@@ -2052,6 +2061,13 @@ SUBROUTINE exx_iosys ( ecutwfc, ecutrho )
   IF ( local_thr > 0.0_dp .AND. .NOT. use_ace ) &
      CALL errore('input','localization without ACE not implemented',1)
   IF ( use_scdm ) CALL errore('input','use_scdm not yet implemented',1)
+  !
+  nelec_ = SUM( zv(ityp(1:nat)) ) - tot_charge
+  IF (nelec_ <= 1) THEN
+    use_ace = .false.
+    IF (xclib_dft_is('hybrid')) WRITE(stdout, &
+    '(5x,"ACE is turned off because number of occupied orbitals <= 1",/)' )
+  END IF
   !
   IF(ecutfock <= 0.0_DP) THEN
      ! default case

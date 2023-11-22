@@ -9,7 +9,6 @@ set(src_upflib
     init_us_1.f90
     init_tab_atwfc.f90
     init_tab_beta.f90
-    init_tab_qrad.f90
     interp_atwfc.f90
     init_us_2_base.f90
     gth.f90
@@ -45,16 +44,17 @@ set(src_upflib
     uspp.f90
     uspp_data.f90
     uspp_param.f90
+    vloc_mod.f90
+    rhoc_mod.f90
+    rhoat_mod.f90
+    qrad_mod.f90
     write_upf_new.f90
     ylmr2.f90
     dylmr2.f90
     # GPU
     init_us_2_base_gpu.f90
-    interp_atwfc_gpu.f90
-    qvan2_gpu.f90
     ylmr2_gpu.f90
-    dylmr2_gpu.f90
-    upf_acc_interfaces.f90)
+    dylmr2_gpu.f90)
 qe_enable_cuda_fortran("${src_upflib}")
 
 qe_add_library(qe_xml xmltools.f90 dom.f90 wxml.f90)
