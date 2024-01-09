@@ -23,16 +23,16 @@ subroutine init_us_1( nat, ityp, omega, qmax, intra_bgrp_comm )
   !      spherical harmonics in the Q expansion
   !   f) It computes the interpolation table "qrad" for Q(G)
   !   g) It computes the qq terms which define the S matrix.
-  !   h) It fills the interpolation table "tab" for the beta functions
+  !   h) It fills the interpolation table "tab_beta" for the beta functions
   !
   USE upf_kinds,    ONLY : DP
   USE upf_const,    ONLY : fpi, sqrt2
   USE uspp,         ONLY : nhtol, nhtoj, nhtolm, ijtoh, dvan, qq_at, qq_nt, indv, &
                            ap, aainit, qq_so, dvan_so, okvan, ofsbeta, &
-                           nhtol_d, nhtoj_d, nhtolm_d, ijtoh_d, dvan_d, &
-                           qq_nt_d, indv_d, dvan_so_d, ofsbeta_d
+                           nhtol_d, nhtoj_d, ijtoh_d, dvan_d, &
+                           qq_nt_d, indv_d, dvan_so_d
   USE uspp_param,   ONLY : upf, lmaxq, nh, nhm, lmaxkb, nsp
-  USE upf_spinorb,  ONLY : is_spinorbit, rot_ylm, fcoef, fcoef_d, lmaxx, &
+  USE upf_spinorb,  ONLY : is_spinorbit, rot_ylm, fcoef, lmaxx, &
                            transform_qq_so
   USE qrad_mod,     ONLY : init_tab_qrad
   USE paw_variables,ONLY : okpaw
@@ -262,20 +262,18 @@ subroutine init_us_1( nat, ityp, omega, qmax, intra_bgrp_comm )
   if (nhm>0) then
      indv_d=indv
      nhtol_d=nhtol
-     nhtolm_d=nhtolm
      nhtoj_d=nhtoj
      ijtoh_d=ijtoh
      qq_nt_d=qq_nt
     !$acc update device(qq_at)
      if (is_spinorbit) then
         dvan_so_d=dvan_so
-        fcoef_d=fcoef
+      !$acc update device(fcoef)
       !$acc update device(qq_so)
      else
         dvan_d=dvan
      endif
   endif
-  ofsbeta_d=ofsbeta
   !
 #endif
   call stop_clock ('init_us_1')

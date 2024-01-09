@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2022 Quantum ESPRESSO group
+! Copyright (C) 2001-2023 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -166,7 +166,7 @@ SUBROUTINE orthoUwfc_k (ik, lflag)
   USE becmod,           ONLY : allocate_bec_type_acc, deallocate_bec_type_acc, &
                                bec_type, becp, calbec
   USE control_flags,    ONLY : gamma_only
-  USE noncollin_module, ONLY : noncolin 
+  USE noncollin_module, ONLY : noncolin, npol
   IMPLICIT NONE
   !
   INTEGER, INTENT(IN) :: ik ! the k point under consideration
@@ -204,7 +204,7 @@ SUBROUTINE orthoUwfc_k (ik, lflag)
   ENDIF
   !
   IF (Hubbard_projectors=="ortho-atomic") THEN
-     ALLOCATE(aux(npwx,natomwfc))
+     ALLOCATE(aux(npwx*npol,natomwfc))
      ! Copy atomic wfcs (phi)
      aux(:,:) = wfcatom(:,:)
   ENDIF
