@@ -51,7 +51,7 @@ SUBROUTINE xc_metagcx( length, ns, np, rho, grho, tau, ex, ec, v1x, v2x, v3x, v1
   !
   ! variables for laplacian not used, these may be too big for stack
   REAL(DP), ALLOCATABLE :: dummy(:,:)
-  ALLOCATE(dummy(length,ns))
+  ALLOCATE(dummy(1,1))
   !
   ! Maybe check that laplacian is not needed??
   !
@@ -60,16 +60,16 @@ SUBROUTINE xc_metagcx( length, ns, np, rho, grho, tau, ex, ec, v1x, v2x, v3x, v1
   !
   IF ( gpu_args ) THEN
     !
-    !$acc data present( rho, grho, tau, lrho, ex, ec, v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c )
+    !$acc data present( rho, grho, tau, ex, ec, v1x, v2x, v3x, v1c, v2c, v3c ), create(dummy)
     CALL xc_metagcx_( length, ns, np, rho, grho, tau, dummy, ex, ec, v1x, v2x, v3x, dummy, &
-                      v1c, v2c, v3c, dummy)
+                      v1c, v2c, v3c, dummy, .false.)
     !$acc end data
     !
   ELSE
     !
-    !$acc data copyin( rho, grho, tau, lrho ), copyout( ex, ec, v1x, v2x, v3x, v1c, v2c, v3c ), create(v4x, v4c)
+    !$acc data copyin( rho, grho, tau ), copyout( ex, ec, v1x, v2x, v3x, v1c, v2c, v3c ), create(dummy)
     CALL xc_metagcx_( length, ns, np, rho, grho, tau, dummy, ex, ec, v1x, v2x, v3x, dummy, &
-                      v1c, v2c, v3c, dummy )
+                      v1c, v2c, v3c, dummy, .false. )
     !$acc end data
     !
   ENDIF
@@ -134,14 +134,14 @@ SUBROUTINE xc_metagcxl( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     !
     !$acc data present( rho, grho, tau, lrho, ex, ec, v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c )
     CALL xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, v3x, v4x, &
-                      v1c, v2c, v3c, v4c)
+                      v1c, v2c, v3c, v4c, .true.)
     !$acc end data
     !
   ELSE
     !
     !$acc data copyin( rho, grho, tau, lrho ), copyout( ex, ec, v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c )
     CALL xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, v3x, v4x, &
-                      v1c, v2c, v3c, v4c )
+                      v1c, v2c, v3c, v4c, .true. )
     !$acc end data
     !
   ENDIF  
@@ -153,7 +153,7 @@ END SUBROUTINE
 !
 !----------------------------------------------------------------------------------------
 SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, v3x, v4x, &
-                        v1c, v2c, v3c, v4c )
+                        v1c, v2c, v3c, v4c, use_laplacian )
   !-------------------------------------------------------------------------------------
   !! Wrapper routine. Calls internal metaGGA drivers or the Libxc ones,
   !! depending on the input choice.
@@ -167,7 +167,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
   USE kind_l,               ONLY: DP
   USE dft_setting_params,   ONLY: imeta, imetac, is_libxc, rho_threshold_mgga,&
                                   grho2_threshold_mgga, tau_threshold_mgga,   &
-                                  ishybrid, exx_started, exx_fraction, islaplacian
+                                  ishybrid, exx_started, exx_fraction
   USE qe_drivers_mgga
   !
   IMPLICIT NONE
@@ -206,6 +206,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
   !! v3c = D(E_c)/D(tau)
   REAL(DP), INTENT(OUT) :: v4c(length,ns)
   !! v4c = D(E_c)/D(lapl)
+  LOGICAL use_laplacian
+  !! whether to add laplacian contribution
   !
   ! ... local variables
   !
@@ -234,7 +236,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
   !
   ALLOCATE( rho_lxc(length*ns), sigma(length*np) )
   ALLOCATE( tau_lxc(length*ns), lapl_rho(length*ns) )
-  !$acc data create( rho_lxc, sigma, tau_lxc, lapl_rho, islaplacian )
+  !$acc data create( rho_lxc, sigma, tau_lxc, lapl_rho, uselaplacian )
   !
   IF ( is_libxc(5) ) THEN
     ALLOCATE( ex_lxc(length) )
@@ -266,7 +268,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
     ENDIF
   ENDIF
   IF ( ANY(is_libxc(5:6)) ) ALLOCATE( vx_lapl(length*ns), vc_lapl(length*ns) )
-  IF ( islaplacian ) THEN
+  IF ( use_laplacian ) THEN
      DO k = 1, length
        DO is = 1, ns
          v4c(k,is) = 0.d0 ; v4x(k,is) = 0.d0
@@ -282,7 +284,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
       sigma(k) = MAX( grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2, &
                       grho2_threshold_mgga )
       tau_lxc(k) = MAX( tau(k,1), tau_threshold_mgga )
-      IF (islaplacian) THEN
+      IF (use_laplacian) THEN
           lapl_rho(k) = lrho(k,1)
       ELSE
           lapl_rho(k) = 0.d0
@@ -303,7 +305,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
                            grho2_threshold_mgga )
        tau_lxc(2*k-1) = MAX( tau(k,1), small )
        tau_lxc(2*k)   = MAX( tau(k,2), small )
-       IF ( islaplacian ) THEN
+       IF ( use_laplacian ) THEN
           lapl_rho(2*k-1) = lrho(k, 1)
           lapl_rho(2*k)   = lrho(k, 2)
        ELSE
@@ -356,14 +358,14 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
              ABS(tau_lxc(k))<=tau_threshold_mgga ) THEN
           ex(k) = 0.d0    ; v1x(k,1) = 0.d0
           v2x(k,1) = 0.d0 ; v3x(k,1) = 0.d0
-          IF ( islaplacian ) v4x(k,1) = 0.d0
+          IF ( use_laplacian ) v4x(k,1) = 0.d0
           CYCLE
         ENDIF  
         ex(k) = xcoef * ex_lxc(k) * rho_lxc(k)
         v1x(k,1) = xcoef * vx_rho(k)
         v2x(k,1) = xcoef * vx_sigma(k) * 2.0_DP
         v3x(k,1) = xcoef * vx_tau(k)
-        IF ( islaplacian ) v4x(k,1) = xcoef * vx_lapl(k)
+        IF ( use_laplacian ) v4x(k,1) = xcoef * vx_lapl(k)
       ENDDO
     ELSE
       !$acc parallel loop
@@ -372,8 +374,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           ex(k) = 0.d0    
           v1x(k,1) = 0.d0 ; v2x(k,1) = 0.d0 ; v3x(k,1) = 0.d0 ;
           v1x(k,2) = 0.d0 ; v2x(k,2) = 0.d0 ; v3x(k,2) = 0.d0 ;
-          IF ( islaplacian ) v4x(k,1) = 0.d0
-          IF ( islaplacian ) v4x(k,2) = 0.d0
+          IF ( use_laplacian ) v4x(k,1) = 0.d0
+          IF ( use_laplacian ) v4x(k,2) = 0.d0
           CYCLE
         ENDIF
         ex(k) = xcoef * ex_lxc(k) * (rho_lxc(2*k-1)+rho_lxc(2*k))
@@ -383,10 +385,10 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           v1x(k,1) = xcoef * vx_rho(2*k-1)
           v2x(k,1) = xcoef * vx_sigma(3*k-2)*2.d0
           v3x(k,1) = xcoef * vx_tau(2*k-1)
-          IF ( islaplacian ) v4x(k,1) = xcoef * vx_lapl(2*k-1)
+          IF ( use_laplacian ) v4x(k,1) = xcoef * vx_lapl(2*k-1)
         ELSE
           v1x(k,1) = 0.d0 ; v2x(k,1) = 0.d0 ; v3x(k,1) = 0.d0
-          IF ( islaplacian ) v4x(k,1) = 0.d0
+          IF ( use_laplacian ) v4x(k,1) = 0.d0
         ENDIF
         IF ( ABS(rho_lxc(2*k))>rho_threshold_mgga .AND. &
              sigma(3*k)>grho2_threshold_mgga      .AND. &
@@ -394,10 +396,10 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           v1x(k,2) = xcoef * vx_rho(2*k)
           v2x(k,2) = xcoef * vx_sigma(3*k)*2.d0
           v3x(k,2) = xcoef * vx_tau(2*k)
-          IF ( islaplacian ) v4x(k,2) = xcoef * vx_lapl(2*k)
+          IF ( use_laplacian ) v4x(k,2) = xcoef * vx_lapl(2*k)
         ELSE
           v1x(k,2) = 0.d0 ; v2x(k,2) = 0.d0 ; v3x(k,2) = 0.d0
-          IF ( islaplacian ) v4x(k,2) = 0.d0
+          IF ( use_laplacian ) v4x(k,2) = 0.d0
         ENDIF
       ENDDO
     ENDIF
@@ -430,14 +432,14 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
               ABS(tau_lxc(k))<=rho_threshold_mgga  ) THEN
            ec(k) = 0.d0      ; v1c(k,1) = 0.d0
            v2c(1,k,1) = 0.d0 ; v3c(k,1) = 0.d0
-           IF ( islaplacian ) v4c(k,1) = 0.d0
+           IF ( use_laplacian ) v4c(k,1) = 0.d0
            CYCLE
          ENDIF  
          ec(k) = ec_lxc(k) * rho_lxc(k) 
          v1c(k,1) = vc_rho(k)
          v2c(1,k,1) = vc_sigma(k) * 2.0_DP
          v3c(k,1) = vc_tau(k)
-         IF ( islaplacian ) v4c(k,1) = vc_lapl(k)
+         IF ( use_laplacian ) v4c(k,1) = vc_lapl(k)
        ENDDO
     ELSE
        !$acc parallel loop
@@ -455,7 +457,7 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
               v2c(ipol,k,1) = 0.d0
               v2c(ipol,k,2) = 0.d0
             ENDDO
-            IF ( islaplacian ) v4c(k,1) = 0.d0 ; v4c(k,2) = 0.d0
+            IF ( use_laplacian ) v4c(k,1) = 0.d0 ; v4c(k,2) = 0.d0
             CYCLE
           ENDIF   
           ec(k) = ec_lxc(k) * (rho_lxc(2*k-1)+rho_lxc(2*k))
@@ -467,8 +469,8 @@ SUBROUTINE xc_metagcx_( length, ns, np, rho, grho, tau, lrho, ex, ec, v1x, v2x, 
           ENDDO
           v3c(k,1) = vc_tau(2*k-1)
           v3c(k,2) = vc_tau(2*k)
-          IF ( islaplacian ) v4c(k,1) = vc_lapl(2*k-1)
-          IF ( islaplacian ) v4c(k,2) = vc_lapl(2*k)
+          IF ( use_laplacian ) v4c(k,1) = vc_lapl(2*k-1)
+          IF ( use_laplacian ) v4c(k,2) = vc_lapl(2*k)
        ENDDO
     ENDIF
     !$acc end data
