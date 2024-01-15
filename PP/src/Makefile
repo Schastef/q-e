@@ -61,7 +61,9 @@ idwmod.o \
 oscdft_pp_mod.o \
 oscdft_et_mod.o \
 xc_vdW_scale_mod.o \
-fft_interpolation_mod.o  
+fft_interpolation_mod.o \
+atomic_projectors.o \
+wannier.o
 
 PWOBJS = ../../PW/src/libpw.a ../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a 
 QEMODS = $(BASEMODS)
