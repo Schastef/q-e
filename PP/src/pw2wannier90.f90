@@ -5198,7 +5198,7 @@ SUBROUTINE compute_amn_with_atomproj
                           wf_times_overlap, wf_times_roverlap
    USE atomic_projectors, ONLY: atom_proj_dir, atom_proj_ext, atom_proj_ortho, &
                      atom_proj_sym, natproj, nexatproj, nexatproj_max, &
-                     atproj_excl, atproj_typs, atom_proj_exclude, &
+                     atproj_excl, atproj_types, atom_proj_exclude, &
                      allocate_atproj_type, init_atomproj, &
                      deallocate_atproj, atomic_wfc_ext
    USE wannier
@@ -5207,7 +5207,7 @@ SUBROUTINE compute_amn_with_atomproj
    !
    INCLUDE 'laxlib.fh'
    !
-   INTEGER :: npw, npw_, ik, ibnd
+   INTEGER :: npw, npw_, ik, ibnd, lmax_wfc
    INTEGER :: i, j, k, it, l, m, ib, ip, ik_g_w90, ibnd1
    REAL(DP), ALLOCATABLE :: e(:)
    COMPLEX(DP), ALLOCATABLE :: wfcatom(:, :), wfcatomall(:, :)
@@ -5257,7 +5257,7 @@ SUBROUTINE compute_amn_with_atomproj
    ALLOCATE(evc_k(npol*npwx, num_bands), stat=ierr)
    IF (ierr /= 0) CALL errore('pw2wannier90', 'Error allocating evc_k', 1)
    !
-   call init_atomproj(.true.)
+   call init_atomproj(lmax_wfc, .true.)
    !
    IF (ionode) THEN
       !

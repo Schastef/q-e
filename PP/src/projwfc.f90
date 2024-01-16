@@ -787,7 +787,7 @@ SUBROUTINE projwave(filproj, filowdin, lsym, diag_basis, lwrite_ovp)
    USE mp_pools, ONLY: me_pool, root_pool, intra_pool_comm
    USE uspp_init, ONLY: init_us_2
    USE buffers, ONLY: open_buffer, save_buffer, get_buffer, close_buffer
-   use atomic_projectors, ONLY: atom_proj_ext, atom_proj_dir, atproj_typs, &
+   use atomic_projectors, ONLY: atom_proj_ext, atom_proj_dir, atproj_types, &
                                 init_atomproj, atomic_wfc_ext, natproj
    !
    IMPLICIT NONE
@@ -831,15 +831,21 @@ SUBROUTINE projwave(filproj, filowdin, lsym, diag_basis, lwrite_ovp)
    INTEGER :: nproc_ortho
    ! distinguishes active procs in parallel linear algebra
    !
-   IF (natomwfc <= 0) CALL errore &
-      ('projwave', 'Cannot project on zero atomic wavefunctions!', 1)
    WRITE (stdout, '(/5x,"Calling projwave .... ")')
    IF (gamma_only) &
       WRITE (stdout, '(5x,"gamma-point specific algorithms are used")')
    !
-   ! fill structure nlmchi
+   if (atom_proj_ext) then
+      ! load atomic projectors from file and override natomwfc
+      call init_atomproj(lmax_wfc, .true.)
+      natomwfc = natproj
+   else
+      ! fill structure nlmchi
+      CALL fill_nlmchi(natomwfc, lmax_wfc)
+   end if
    !
-   CALL fill_nlmchi(natomwfc, lmax_wfc)
+   IF (natomwfc <= 0) CALL errore &
+      ('projwave', 'Cannot project on zero atomic wavefunctions!', 1)
    !
    ALLOCATE (proj(natomwfc, nbnd, nkstot))
    IF (diag_basis) THEN
@@ -885,9 +891,10 @@ SUBROUTINE projwave(filproj, filowdin, lsym, diag_basis, lwrite_ovp)
    IF (ionode) THEN
       WRITE (stdout, *)
       WRITE (stdout, *) ' Problem Sizes '
-      WRITE (stdout, *) ' natomwfc = ', natomwfc
       IF (atom_proj_ext) THEN
          WRITE (stdout, *) ' natproj  = ', natproj
+      ELSE
+         WRITE (stdout, *) ' natomwfc = ', natomwfc
       END IF
       IF (use_para_diag) WRITE (stdout, *) ' nx       = ', nx
       WRITE (stdout, *) ' nbnd     = ', nbnd
@@ -906,7 +913,6 @@ SUBROUTINE projwave(filproj, filowdin, lsym, diag_basis, lwrite_ovp)
       !
       wfcatom(:, :) = (0.0_dp, 0.0_dp)
       IF (atom_proj_ext) THEN
-         call init_atomproj(.false.)
          call atomic_wfc_ext(ik, wfcatom)
       ELSE IF (lforcet) THEN
          !    AlexS - To project on real harmonics, not on spinors.

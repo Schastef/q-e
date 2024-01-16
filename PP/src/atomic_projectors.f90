@@ -27,7 +27,7 @@ module atomic_projectors
    INTEGER :: natproj ! total number of projectors = n_proj + nexatproj
    LOGICAL, ALLOCATABLE :: atproj_excl(:) ! size = total num of projectors
    INTEGER :: iun_atproj
-   TYPE(atproj_type), ALLOCATABLE :: atproj_typs(:) ! all atom proj types
+   TYPE(atproj_type), ALLOCATABLE :: atproj_types(:) ! all atom proj types
 
    REAL(DP), ALLOCATABLE :: tab_at(:, :, :)
    !! interpolation table for atomic projectors
@@ -83,23 +83,25 @@ CONTAINS
       RETURN
    END SUBROUTINE allocate_atproj_type
 
-   SUBROUTINE read_atomproj(typs)
+   SUBROUTINE read_atomproj(types)
       !
       ! read data files for atom proj
       ! should be called only by one node
       !
       USE kinds, ONLY: dp
-      USE io_global, ONLY: stdout
+      USE io_global, ONLY: stdout, ionode
       USE ions_base, ONLY: nsp, atm
       !
       IMPLICIT NONE
       !
-      TYPE(atproj_type), INTENT(INOUT) :: typs(nsp)
+      TYPE(atproj_type), INTENT(INOUT) :: types(nsp)
       !
       INTEGER :: i, j, it
       LOGICAL :: file_exists
       CHARACTER(len=256) :: filename
       INTEGER :: ngrid, nproj
+
+      if (.not. ionode) return
 
       DO it = 1, nsp
          filename = TRIM(atom_proj_dir)//'/'//TRIM(atm(it))//".dat"
@@ -114,20 +116,20 @@ CONTAINS
          WRITE (stdout, '((A),(I4))') "   number of grid points   = ", ngrid
          WRITE (stdout, '((A),(I4))') "   number of projectors    = ", nproj
 
-         CALL allocate_atproj_type(typs(it), ngrid, nproj)
-         typs(it)%atsym = atm(it)
+         CALL allocate_atproj_type(types(it), ngrid, nproj)
+         types(it)%atsym = atm(it)
 
-         READ (iun_atproj, *) (typs(it)%l(i), i=1, nproj)
+         READ (iun_atproj, *) (types(it)%l(i), i=1, nproj)
          WRITE (stdout, '((A))', advance='no') "   ang. mom. of projectors = "
          DO i = 1, nproj
-            WRITE (stdout, '(I4)', advance='no') typs(it)%l(i)
+            WRITE (stdout, '(I4)', advance='no') types(it)%l(i)
          END DO
          WRITE (stdout, *)
          WRITE (stdout, *)
 
          DO i = 1, ngrid
-            READ (iun_atproj, *) typs(it)%xgrid(i), typs(it)%rgrid(i), &
-               (typs(it)%radial(i, j), j=1, nproj)
+            READ (iun_atproj, *) types(it)%xgrid(i), types(it)%rgrid(i), &
+               (types(it)%radial(i, j), j=1, nproj)
          END DO
 
          CLOSE (iun_atproj)
@@ -137,32 +139,60 @@ CONTAINS
    END SUBROUTINE read_atomproj
 
    SUBROUTINE broadcast_atomproj()
-      use ions_base, only: nsp
+      use ions_base, only: nsp, ityp, nat
       use io_global, only: ionode, ionode_id
       use mp_world, only: world_comm
       use mp, only: mp_bcast
       use basis, only: natomwfc
-      use projections, only: fill_nlmchi
+      use projections, only: fill_nlmchi, nlmchi
       use wannier, only: n_proj
 
       implicit none
 
-      integer :: it, i, j, ierr, lmax_wfc
+      integer :: it, i, j, ierr, lmax_wfc, iproj, nwfc, n, l, m, iwfc
 
       ! Broadcast the data
+      CALL mp_bcast(n_proj, ionode_id, world_comm)
+
       if (atom_proj_ext) then
          DO it = 1, nsp
-            i = atproj_typs(it)%ngrid
-            j = atproj_typs(it)%nproj
+            i = atproj_types(it)%ngrid
+            j = atproj_types(it)%nproj
             CALL mp_bcast(i, ionode_id, world_comm)
             CALL mp_bcast(j, ionode_id, world_comm)
-            IF (.NOT. ionode) CALL allocate_atproj_type(atproj_typs(it), i, j)
+            IF (.NOT. ionode) CALL allocate_atproj_type(atproj_types(it), i, j)
             !
-            CALL mp_bcast(atproj_typs(it)%atsym, ionode_id, world_comm)
-            CALL mp_bcast(atproj_typs(it)%xgrid, ionode_id, world_comm)
-            CALL mp_bcast(atproj_typs(it)%rgrid, ionode_id, world_comm)
-            CALL mp_bcast(atproj_typs(it)%l, ionode_id, world_comm)
-            CALL mp_bcast(atproj_typs(it)%radial, ionode_id, world_comm)
+            CALL mp_bcast(atproj_types(it)%atsym, ionode_id, world_comm)
+            CALL mp_bcast(atproj_types(it)%xgrid, ionode_id, world_comm)
+            CALL mp_bcast(atproj_types(it)%rgrid, ionode_id, world_comm)
+            CALL mp_bcast(atproj_types(it)%l, ionode_id, world_comm)
+            CALL mp_bcast(atproj_types(it)%radial, ionode_id, world_comm)
+         END DO
+
+         ! Update nlmchi
+         allocate(nlmchi(n_proj))
+         iproj = 0
+         DO i = 1, nat
+            it = ityp(i)
+            DO nwfc = 1, atproj_types(it)%nproj
+               l = atproj_types(it)%l(nwfc)
+               ! Work out n by looking through the previous projectors for this atom
+               n = l + 1
+               DO iwfc = 1, nwfc - 1
+                  if (atproj_types(it)%l(iwfc) == l) n = n + 1
+               END DO
+
+               DO m = 1, 2*l + 1
+                  iproj = iproj + 1
+                  nlmchi(iproj)%na = i
+                  nlmchi(iproj)%n = n
+                  nlmchi(iproj)%l = l
+                  nlmchi(iproj)%m = m
+                  nlmchi(iproj)%ind = m + 2*l + 1
+                  nlmchi(iproj)%jj = 0.0d0
+                  nlmchi(iproj)%els = ' '
+               END DO
+            END DO
          END DO
       ELSE
          ! need to access nlmchi, natomwfc, lmax_wfc on each core,
@@ -172,7 +202,6 @@ CONTAINS
 
       CALL mp_bcast(natproj, ionode_id, world_comm)
       CALL mp_bcast(nexatproj, ionode_id, world_comm)
-      CALL mp_bcast(n_proj, ionode_id, world_comm)
       IF (.NOT. ionode) THEN
          ALLOCATE (atproj_excl(n_proj + nexatproj), stat=ierr)
          IF (ierr /= 0) CALL errore('atomic_projectors', 'Error allocating atproj_excl', 1)
@@ -181,7 +210,7 @@ CONTAINS
 
    END SUBROUTINE
 
-   SUBROUTINE read_atomproj_wrapper(typs, print_info_arg)
+   SUBROUTINE read_atomproj_wrapper(types, print_info_arg)
 
       use io_global, only: stdout
       USE ions_base, ONLY: nsp, atm, nat, ityp
@@ -189,11 +218,11 @@ CONTAINS
 
       implicit none
 
-      TYPE(atproj_type), INTENT(INOUT) :: typs(nsp)
+      TYPE(atproj_type), INTENT(INOUT) :: types(nsp)
       logical, intent(in), optional :: print_info_arg
 
       logical :: print_info
-      integer :: i, it, l, m, nwfc
+      integer :: i, it, l, m, nwfc, iproj
 
       print_info = .false.
       if (present(print_info_arg)) print_info = print_info_arg
@@ -202,21 +231,22 @@ CONTAINS
          WRITE (stdout, '(a)') '  Using atomic projectors from dir '//TRIM(atom_proj_dir)
          WRITE (stdout, *) ''
       end if
-      call read_atomproj(typs)
+      call read_atomproj(types)
       n_proj = 0
       DO i = 1, nat
          it = ityp(i)
-         DO nwfc = 1, typs(it)%nproj
-            l = typs(it)%l(nwfc)
+         DO nwfc = 1, types(it)%nproj
+            l = types(it)%l(nwfc)
             DO m = 1, 2*l + 1
                n_proj = n_proj + 1
                if (print_info) then
-                  WRITE (stdout, 1000, ADVANCE="no") n_proj, i, typs(it)%atsym, nwfc, l
+                  WRITE (stdout, 1000, ADVANCE="no") n_proj, i, types(it)%atsym, nwfc, l
                   WRITE (stdout, '(" m=", i2, ")")') m
                end if
             END DO
          END DO
       END DO
+      WRITE (stdout, *) ''
 
 1000  FORMAT(5X, "state #", i4, ": atom ", i3, " (", a3, "), wfc ", i2, " (l=", i1)
 
@@ -263,6 +293,8 @@ CONTAINS
             END IF
          END DO
       end if
+      WRITE (stdout, *) ''
+
       n_proj = natomwfc
 
 1000  FORMAT(5X, "state #", i4, ": atom ", i3, " (", a3, "), wfc ", i2, " (l=", i1)
@@ -326,29 +358,33 @@ CONTAINS
 
    END SUBROUTINE
 
-   SUBROUTINE init_atomproj(print_info_arg)
+   SUBROUTINE init_atomproj(lmax_proj, print_info_arg)
       use io_global, only: ionode, stdout
       use mp_world, only: world_comm
       use wannier, only: n_proj
+      use ions_base, only: nsp
 
       implicit none
 
+      integer, intent(out) :: lmax_proj
       logical, intent(in), optional :: print_info_arg
 
       logical :: print_info
+      integer :: nt
 
       print_info = .false.
       if (present(print_info_arg)) print_info = print_info_arg
+      
+      if (atom_proj_ext) allocate(atproj_types(nsp))
 
       if (ionode) then
          if (atom_proj_ext) then
             ! Read the file
-            call read_atomproj_wrapper(atproj_typs, print_info)
+            call read_atomproj_wrapper(atproj_types, print_info)
          else
             ! Use atomic projectors from UPF
             call load_upfproj_wrapper(print_info)
          end if
-         WRITE (stdout, *) ''
 
          call count_number_of_excluded_projectors()
       end if
@@ -358,6 +394,12 @@ CONTAINS
 
       ! Populate the atomic projectors table
       CALL init_tab_atproj(world_comm)
+
+      ! Calculating lmax_proj
+      lmax_proj = 0
+      DO nt = 1, nsp
+         lmax_proj = MAX(lmax_proj, MAXVAL(atproj_types(nt)%l))
+      END DO
 
    END SUBROUTINE init_atomproj
 
@@ -406,8 +448,8 @@ CONTAINS
       lmax_wfc = 0
       nwfcm = 0
       DO nt = 1, ntyp
-         lmax_wfc = MAX(lmax_wfc, MAXVAL(atproj_typs(nt)%l))
-         nwfcm = MAX(nwfcm, atproj_typs(nt)%nproj)
+         lmax_wfc = MAX(lmax_wfc, MAXVAL(atproj_types(nt)%l))
+         nwfcm = MAX(nwfcm, atproj_types(nt)%nproj)
       END DO
       !
       npw = ngk(ik)
@@ -460,8 +502,8 @@ CONTAINS
          END DO
          !
          nt = ityp(na)
-         DO nb = 1, atproj_typs(nt)%nproj
-            l = atproj_typs(nt)%l(nb)
+         DO nb = 1, atproj_types(nt)%nproj
+            l = atproj_types(nt)%l(nb)
             lphase = (0.D0, 1.D0)**l
             !
             !  only support without spin-orbit coupling
@@ -491,7 +533,6 @@ CONTAINS
          DO m = 1, 2*l + 1
             lm = l**2 + m
             n_starting_wfc = n_starting_wfc + 1
-            write (*, *) n_starting_wfc, natproj
             IF (n_starting_wfc > natproj) CALL errore &
                ('atomic_wfc___', 'internal error: too many wfcs', 1)
             !
@@ -530,7 +571,7 @@ CONTAINS
       REAL(dp):: qgr, px, ux, vx, wx
       !
       DO nt = 1, nsp
-         DO nb = 1, atproj_typs(nt)%nproj
+         DO nb = 1, atproj_types(nt)%nproj
             DO ig = 1, npw
                qgr = qg(ig)
                px = qgr/dq - INT(qgr/dq)
@@ -579,8 +620,8 @@ CONTAINS
       ndm = 0
       nwfcm = 0
       DO nt = 1, nsp
-         ndm = MAX(ndm, atproj_typs(nt)%ngrid)
-         nwfcm = MAX(nwfcm, atproj_typs(nt)%nproj)
+         ndm = MAX(ndm, atproj_types(nt)%ngrid)
+         nwfcm = MAX(nwfcm, atproj_types(nt)%nproj)
       END DO
       ALLOCATE (aux(ndm), vchi(ndm), rab(ndm), stat=ierr)
       IF (ierr /= 0) CALL errore('atomic_projectors', 'Error allocating aux/vchi/rab', 1)
@@ -597,19 +638,19 @@ CONTAINS
       tab_at(:, :, :) = 0.0_DP
       !
       DO nt = 1, nsp
-         rab = (atproj_typs(nt)%xgrid(2) - atproj_typs(nt)%xgrid(1))* &
-               atproj_typs(nt)%rgrid
-         DO nb = 1, atproj_typs(nt)%nproj
+         rab = (atproj_types(nt)%xgrid(2) - atproj_types(nt)%xgrid(1))* &
+               atproj_types(nt)%rgrid
+         DO nb = 1, atproj_types(nt)%nproj
             !
-            l = atproj_typs(nt)%l(nb)
+            l = atproj_types(nt)%l(nb)
             !
             DO iq = startq, lastq
                q = dq*(iq - 1)
-               CALL sph_bes(atproj_typs(nt)%ngrid, atproj_typs(nt)%rgrid, q, l, aux)
-               DO ir = 1, atproj_typs(nt)%ngrid
-                  vchi(ir) = atproj_typs(nt)%radial(ir, nb)*aux(ir)*atproj_typs(nt)%rgrid(ir)
+               CALL sph_bes(atproj_types(nt)%ngrid, atproj_types(nt)%rgrid, q, l, aux)
+               DO ir = 1, atproj_types(nt)%ngrid
+                  vchi(ir) = atproj_types(nt)%radial(ir, nb)*aux(ir)*atproj_types(nt)%rgrid(ir)
                END DO
-               CALL simpson(atproj_typs(nt)%ngrid, vchi, rab, vqint)
+               CALL simpson(atproj_types(nt)%ngrid, vchi, rab, vqint)
                tab_at(iq, nb, nt) = vqint*pref
             END DO
             !
