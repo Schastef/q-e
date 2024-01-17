@@ -278,6 +278,13 @@ SUBROUTINE print_clock_pw()
       ELSEIF (lda_plus_u_kind.EQ.2) THEN
          CALL print_clock( 'new_nsg' )
          CALL print_clock( 'alloc_neigh' )
+      ELSEIF (lda_plus_u_kind.EQ.3) THEN
+         IF (noncolin) THEN
+            CALL errore('print_clock', &
+            & 'noncollinear orbital-resolved DFT+U is not implemented',1)  
+         ELSE
+            CALL print_clock( 'new_ns' )
+         ENDIF
       ENDIF
       CALL print_clock( 'vhpsi' )
       CALL print_clock( 'force_hub' )

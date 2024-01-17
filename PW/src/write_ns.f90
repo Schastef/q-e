@@ -164,10 +164,15 @@ SUBROUTINE write_ns
      !
   ENDDO ! na
   !
-  !
   IF (nspin==1) nsum = 2.d0 * nsum 
   !
-  WRITE( stdout, '(/5x,a,1x,f9.4)') 'Number of occupied Hubbard levels =', nsum
+  IF ( lda_plus_u_kind.NE.3 ) &
+      ! in orbital-resolved DFT+U, the Hubbard manifold can be
+      ! smaller than the entire shell. With an active Hubbard_alpha_m,
+      ! the routine alpha_m_trace prints the sum over the occupied Hubbard
+      ! states
+      !s
+      WRITE( stdout, '(/5x,a,1x,f9.4)') 'Number of occupied Hubbard levels =', nsum
   !
   IF (rsrv.GT.0.d0) &
      WRITE(stdout,'(5x,"Total occupation of reservoir states = ",x,f11.6)') rsrv
@@ -820,6 +825,13 @@ SUBROUTINE read_ns()
         ENDIF
      ELSEIF (lda_plus_u_kind.EQ.2) THEN
         READ( UNIT = iunocc, FMT = * , iostat = ierr) nsg
+     ELSEIF (lda_plus_u_kind.EQ.3) THEN
+        IF (noncolin) THEN
+           CALL errore('read_ns', &
+           & 'noncollinear orbital-resolved DFT+U is not implemented',1)
+        ELSE
+           READ( UNIT = iunocc, FMT = *, iostat = ierr ) rho%ns
+        ENDIF
      ENDIF
      CLOSE(UNIT=iunocc,STATUS='keep')
      !
@@ -840,6 +852,13 @@ SUBROUTINE read_ns()
         ENDIF
      ELSEIF (lda_plus_u_kind.EQ.2) THEN
         nsg(:,:,:,:,:) = (0.d0, 0.d0)
+     ELSEIF (lda_plus_u_kind.EQ.3) THEN
+        IF (noncolin) THEN
+           CALL errore('read_ns', &
+           & 'noncollinear orbital-resolved DFT+U is not implemented',1) 
+        ELSE
+           rho%ns(:,:,:,:) = 0.D0
+        ENDIF
      ENDIF
      !
   ENDIF
@@ -873,6 +892,14 @@ SUBROUTINE read_ns()
         CALL v_hubbard_extended_nc (nsg, v_nsg, eth)
      ELSE
         CALL v_hubbard_extended (nsg, v_nsg, eth)
+     ENDIF
+  ELSEIF (lda_plus_u_kind.EQ.3) THEN
+     IF (noncolin) THEN
+        CALL errore('read_ns', &
+          & 'noncollinear orbital-resolved DFT+U is not implemented',1) 
+     ELSE
+        CALL mp_bcast(rho%ns, ionode_id, intra_image_comm)
+        CALL v_hubbard_resolved (rho%ns, v%ns, eth)
      ENDIF
   ENDIF
   !

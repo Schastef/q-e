@@ -431,11 +431,13 @@ MODULE input_parameters
         INTEGER  :: Hubbard_n3(nsx) = -1
         REAL(DP) :: Hubbard_U(nsx)  = 0.0_DP
         REAL(DP) :: Hubbard_U2(nsx) = 0.0_DP
+        REAL(DP) :: Hubbard_Um(lqmax,nspinx,nsx) = 0.0_DP
         REAL(DP) :: Hubbard_V(natx,natx*(2*sc_size+1)**3,4) = 0.0_DP 
         REAL(DP) :: Hubbard_J0(nsx) = 0.0_DP
         REAL(DP) :: Hubbard_J(3,nsx) = 0.0_DP
         REAL(DP) :: Hubbard_alpha(nsx) = 0.0_DP
         REAL(DP) :: Hubbard_alpha_back(nsx) = 0.0_DP
+        REAL(DP) :: Hubbard_alpha_m(lqmax,nspinx,nsx) = 0.0_DP
         REAL(DP) :: Hubbard_beta(nsx) = 0.0_DP
         REAL(DP) :: Hubbard_occ(nsx,3) = -1.0_DP
         CHARACTER(len=80) :: Hubbard_projectors = ''
