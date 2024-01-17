@@ -828,7 +828,14 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   CALL mp_sum( rho_ddot, intra_bgrp_comm )
   !
   IF (xclib_dft_is('meta')) rho_ddot = rho_ddot + tauk_ddot( rho1, rho2, gf )
-  IF (lda_plus_u )   rho_ddot = rho_ddot + ns_ddot( rho1, rho2 )
+  !
+  IF (lda_plus_u ) THEN 
+      IF ( lda_plus_u_kind .EQ. 3) THEN
+         rho_ddot = rho_ddot + ns_ddot_um( rho1, rho2 )
+      ELSE
+         rho_ddot = rho_ddot + ns_ddot( rho1, rho2 )
+      ENDIF
+  ENDIF
   ! 
   ! Beware: paw_ddot has a hidden parallelization on all processors
   !         it must be called on all processors or else it will hang
@@ -1043,6 +1050,102 @@ FUNCTION nsg_ddot( nsg1, nsg2, nspin )
   RETURN
   !
 END FUNCTION nsg_ddot
+!
+!
+!----------------------------------------------------------------------------
+FUNCTION ns_ddot_um( rho1, rho2 )
+  !---------------------------------------------------------------------------
+  !! Calculates \(U/2 \sum_i \text{ns1}(i)\ \text{ns2}(i)\) used as an estimate
+  !! of the self-consistency error on the orbital-resolved DFT+U correction to the energy.
+  !
+  USE kinds,     ONLY : DP
+  USE ldaU,      ONLY : Hubbard_l, Hubbard_U, Hubbard_U2, ldim_back, &
+                        lda_plus_u_kind, is_hubbard, eigenvecs_ref, &
+                        Hubbard_lmax, Hubbard_Um, hub_um_on
+  USE ions_base, ONLY : nat, ityp
+  USE constants, ONLY : eps16, RYTOEV
+  USE io_global, ONLY : stdout
+  !
+  IMPLICIT NONE  
+  !
+  TYPE(mix_type), INTENT(IN) :: rho1
+  !! first Hubbard ns
+  TYPE(mix_type), INTENT(IN) :: rho2
+  !! second Hubbard ns
+  REAL(DP) :: ns_ddot_um
+  !! output: see function comments
+  !
+  ! ... local variables
+  !
+  COMPLEX(DP)  :: vet1(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin)
+  COMPLEX(DP)  :: vet2(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin)
+  INTEGER      :: order1(2*Hubbard_lmax+1), order2(2*Hubbard_lmax+1)
+  INTEGER      :: na, ldim, is, m, index1, index2
+  REAL(DP)     :: lambda1(2*Hubbard_lmax+1,nspin), lambda2(2*Hubbard_lmax+1,nspin)
+  !
+  ns_ddot_um = 0.D0
+  !
+  IF (.NOT. hub_um_on) RETURN
+  ! if hub_um_on is still .FALSE.
+  ! do not (yet) apply Hubbard U corrections.
+  !
+  DO na = 1, nat
+    nt = ityp(na)
+    IF ( is_hubbard(nt) ) THEN
+      !
+      ldim = 2 * Hubbard_l(nt) + 1
+      !
+      vet1(:,:,:) = CMPLX(0.D0,0.D0, kind=dp)
+      vet2(:,:,:) = CMPLX(0.D0,0.D0, kind=dp)
+      lambda1(:,:) = 0.D0
+      lambda2(:,:) = 0.D0
+      !
+      CALL diag_ns( ldim, rho1%ns(1:ldim,1:ldim,:,na), lambda1(1:ldim,:), vet1(1:ldim,1:ldim,:) )
+      CALL diag_ns( ldim, rho2%ns(1:ldim,1:ldim,:,na), lambda2(1:ldim,:), vet2(1:ldim,1:ldim,:) )
+      ! diagonalize old- and new occupation matrix
+      ! 
+      DO is = 1, nspin
+         ! order eigenvectors
+         order1(:) = 0
+         order2(:) = 0
+         CALL order_eigenvecs( order1(1:ldim), vet1(1:ldim,1:ldim,is), &
+                                 eigenvecs_ref(1:ldim,1:ldim,is,na), ldim )
+         CALL order_eigenvecs( order2(1:ldim), vet2(1:ldim,1:ldim,is), &
+                                 eigenvecs_ref(1:ldim,1:ldim,is,na), ldim )
+         !
+         IF ( ANY(ABS(Hubbard_Um(:,is,nt)) .GT. eps16) ) THEN
+            ! compute U(m)/2*SUM(ns1*ns2)
+            DO m = 1, ldim
+               !
+               index1 = FINDLOC(order1,m,dim=1)
+               index2 = FINDLOC(order2,m,dim=1)
+               ! find the index where the order vector is
+               ! equal to m to apply the same Hubbard_Um
+               ! to the same eigenstates 
+               !
+               ns_ddot_um = ns_ddot_um + 0.5D0 * Hubbard_Um(m,is,nt) * &
+                      lambda1(index1,is) * lambda2(index2,is)
+               !
+#if defined(__DEBUG)
+               WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " , index2:", i1)') m, is,index1,index2
+               WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ", f7.4,", ns_ddot_um: ", f7.4)') &
+                               Hubbard_Um(m,is,nt)*RYTOEV,lambda1(index1,is),lambda2(index2,is),ns_ddot_um
+#endif
+            !
+            ENDDO
+         ENDIF
+         !
+      ENDDO
+      !
+     ENDIF
+     !
+  ENDDO
+  !
+  IF ( nspin == 1 ) ns_ddot_um = 2.D0*ns_ddot_um
+  !
+  RETURN
+  !
+END FUNCTION ns_ddot_um
 !
 !----------------------------------------------------------------------------
 FUNCTION local_tf_ddot( rho1, rho2, ngm0, g0 )

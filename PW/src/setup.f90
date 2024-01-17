@@ -384,7 +384,7 @@ SUBROUTINE setup()
            ! ... do not spoil it with a lousy first diagonalization :
            ! ... set a strict ethr in the input file (diago_thr_init)
            !
-           IF ( lgcscf ) THEN
+           IF ( lgcscf .OR. lda_plus_u ) THEN
               !
               ethr = 1.D-8
               !

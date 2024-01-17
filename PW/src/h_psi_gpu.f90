@@ -284,7 +284,8 @@ SUBROUTINE h_psi__gpu( lda, n, m, psi_d, hpsi_d )
         CALL vhpsi_nc( lda, n, m, psi_host, hpsi_host )
         CALL dev_memcpy(hpsi_d, hpsi_host)  ! hpsi_d = hpsi_host
      ELSE
-        IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 ) THEN
+        IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 &
+            .OR. lda_plus_u_kind.EQ.3 ) THEN
           CALL vhpsi_gpu( lda, n, m, psi_d, hpsi_d )  ! DFT+U
         ELSEIF ( lda_plus_u_kind.EQ.2 ) THEN          ! DFT+U+V
           CALL vhpsi( lda, n, m, psi_host, hpsi_host )

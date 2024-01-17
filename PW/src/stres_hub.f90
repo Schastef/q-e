@@ -110,7 +110,7 @@ SUBROUTINE stres_hub ( sigmah )
    !
    CALL block_distribute( nbnd, me_pool, nproc_pool, nb_s, nb_e, mykey )
    !
-   IF (lda_plus_u_kind.EQ.0) THEN
+   IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
       ldim = 2 * Hubbard_lmax + 1
       IF (noncolin) then
          ALLOCATE ( dns_nc(ldim, ldim, nspin, nat) )
@@ -132,7 +132,7 @@ SUBROUTINE stres_hub ( sigmah )
    ENDIF
    !
 #ifdef DEBUG
-   IF (lda_plus_u_kind.EQ.0) THEN
+   IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
       DO na = 1, nat
          DO is = 1, nspin
             nt = ityp(na)
@@ -231,7 +231,7 @@ SUBROUTINE stres_hub ( sigmah )
          !
          DO jpol = 1, 3
             !
-            IF (lda_plus_u_kind.EQ.0) THEN
+            IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
                !
                ! The DFT+U case
                !

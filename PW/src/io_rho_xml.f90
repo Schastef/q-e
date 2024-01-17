@@ -82,7 +82,7 @@ MODULE io_rho_xml
          IF ( ionode ) THEN
             OPEN ( NEWUNIT=iunocc, FILE = TRIM(dirname) // 'occup.txt', &
                  FORM='formatted', STATUS='unknown' )
-            IF (lda_plus_u_kind.EQ.0) THEN
+            IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
                IF (noncolin) THEN
                    WRITE( iunocc, * , iostat = ierr) rho%ns_nc
                ELSE   
@@ -185,7 +185,7 @@ MODULE io_rho_xml
          IF ( ionode ) THEN
             OPEN ( NEWUNIT=iunocc, FILE = TRIM(dirname) // 'occup.txt', &
                  FORM='formatted', STATUS='old', IOSTAT=ierr )
-            IF (lda_plus_u_kind.EQ.0) THEN
+            IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
                IF (noncolin) THEN
                   READ( UNIT = iunocc, FMT = *, iostat = ierr ) rho%ns_nc
                ELSE        
@@ -209,7 +209,7 @@ MODULE io_rho_xml
          IF ( ionode ) THEN
             CLOSE( UNIT = iunocc, STATUS = 'KEEP')
          ELSE
-            IF (lda_plus_u_kind.EQ.0) THEN
+            IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
                IF (noncolin) THEN
                   rho%ns_nc(:,:,:,:) = 0.D0      
                ELSE        
@@ -227,7 +227,7 @@ MODULE io_rho_xml
             ENDIF
          ENDIF
          !
-         IF (lda_plus_u_kind.EQ.0) THEN
+         IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
             IF (noncolin) THEN
                 CALL mp_sum(rho%ns_nc, intra_image_comm)
             ELSE    

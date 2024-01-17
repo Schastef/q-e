@@ -1951,18 +1951,20 @@ SUBROUTINE dftu_iosys ( ntyp, noncolin )
                                Hubbard_U, Hubbard_J, Hubbard_J0, Hubbard_V, Hubbard_U2, &
                                Hubbard_n, Hubbard_l, Hubbard_projectors, &
                                Hubbard_n2, Hubbard_l2, Hubbard_n3, Hubbard_l3, &
-                               lda_plus_u, lda_plus_u_kind
+                               lda_plus_u, lda_plus_u_kind, Hubbard_Um, Hubbard_alpha_m
   !
   USE constants,     ONLY : rytoev
   !
   ! Hubbard parameters: output
   !
   USE ldaU,          ONLY : Hubbard_U_  => hubbard_u, &
+                            Hubbard_Um_  => hubbard_um, &
                             Hubbard_J0_ => hubbard_j0, &
                             Hubbard_J_ => hubbard_j, &
                             Hubbard_n_ => hubbard_n, &
                             Hubbard_l_ => hubbard_l, &
                             Hubbard_alpha_ => hubbard_alpha, &
+                            Hubbard_alpha_m_ => hubbard_alpha_m, &
                             Hubbard_beta_ => hubbard_beta, &
                             lda_plus_u_    => lda_plus_u, &
                             lda_plus_u_kind_    => lda_plus_u_kind, &
@@ -1994,6 +1996,7 @@ SUBROUTINE dftu_iosys ( ntyp, noncolin )
   !
   !
   Hubbard_U_(1:ntyp)          = hubbard_u(1:ntyp) / rytoev
+  Hubbard_Um_(:,:,1:ntyp)     = hubbard_um(:,:,1:ntyp) / rytoev
   Hubbard_J_(1:3,1:ntyp)      = hubbard_j(1:3,1:ntyp) / rytoev
   Hubbard_J0_(1:ntyp)         = hubbard_j0(1:ntyp) / rytoev
   Hubbard_V_(:,:,:)           = hubbard_V(:,:,:) / rytoev
@@ -2006,6 +2009,7 @@ SUBROUTINE dftu_iosys ( ntyp, noncolin )
   Hubbard_l3_(1:ntyp)         = hubbard_l3(1:ntyp)
   Hubbard_projectors_         = hubbard_projectors
   Hubbard_alpha_(1:ntyp)      = hubbard_alpha(1:ntyp) / rytoev
+  Hubbard_alpha_m_(:,:,1:ntyp) = hubbard_alpha_m(:,:,1:ntyp) / rytoev
   Hubbard_beta_(1:ntyp)       = hubbard_beta(1:ntyp) / rytoev
   Hubbard_occ_(1:ntyp,1:3)    = hubbard_occ(1:ntyp,1:3)
   Hubbard_alpha_back_(1:ntyp) = hubbard_alpha_back(1:ntyp) / rytoev

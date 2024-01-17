@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2023 Quantum ESPRESSO group
+! Copyright (C) 2001-2024 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -17,6 +17,7 @@ MODULE ldaU
   USE basis,         ONLY : natomwfc
   USE ions_base,     ONLY : nat, ntyp => nsp, ityp
   USE control_flags, ONLY : dfpt_hub
+  USE io_global,     ONLY : stdout
   !
   SAVE
   !
@@ -34,6 +35,8 @@ MODULE ldaU
   !! the Hubbard U (main Hubbard channel)
   REAL(DP) :: Hubbard_U2(ntypx)
   !! the Hubbard U (second (and third) Hubbard channel)
+  REAL(DP) :: Hubbard_Um(lqmax,2,ntypx)
+  !! the (spin-)orbital-resolved Hubbard U
   REAL(DP) :: Hubbard_J0(ntypx)
   !! the Hubbard J, in simplified DFT+U
   REAL(DP) :: Hubbard_J(3,ntypx)
@@ -45,6 +48,8 @@ MODULE ldaU
   !! the Hubbard alpha (used to calculate U)
   REAL(DP) :: Hubbard_alpha_back(ntypx)
   !! the Hubbard alpha (used to calculate U on background states)
+  REAL(DP) :: Hubbard_alpha_m(lqmax,2,ntypx)
+  !! the Hubbard alpha used to calculate orbital-resolved U(m,s) parameters
   REAL(DP) :: Hubbard_beta(ntypx)
   !! the Hubbard beta (used to calculate J0)
   REAL(DP) :: Hubbard_occ(ntypx,3)
@@ -108,6 +113,11 @@ MODULE ldaU
   LOGICAL :: hub_pot_fix
   !! if .TRUE. do not include into account the change of the Hubbard potential
   !! during the SCF cycle (needed to compute U self-consistently with supercells)
+  LOGICAL :: hub_um_on
+  !! When set to .TRUE. and lda_plus_u_kind==3, the Hubbard potential and
+  !!  energy are calculated based on the diagonalized occupations. Before,
+  !!  Hubbard corrections are not applied in order to stabilize the eigenstates
+  !!  before storing reference eigenvectors.
   LOGICAL :: iso_sys
   !! .TRUE. if the system is isolated (the code diagonalizes
   !! and prints the full occupation matrix)
@@ -132,7 +142,13 @@ MODULE ldaU
   !! coefficients for projecting onto beta functions
   REAL(DP), ALLOCATABLE :: q_ps(:,:,:)
   !! (matrix elements on AE and PS atomic wfcs)
-  !!
+  REAL(DP), ALLOCATABLE :: lambda_ns(:,:,:)
+  !! Array to store the eigenvalues of the occupation matrix,
+  !! needed for orbital-resolved DFT+U
+  COMPLEX(DP), ALLOCATABLE :: eigenvecs_ref(:,:,:,:)
+  !! Eigenvectors used for tracking
+  !! orbitals in orbital-resolved DFT+U
+
   !****************************************************
   !                Hubbard V part                     !
   !****************************************************
@@ -214,6 +230,7 @@ CONTAINS
     lba = .FALSE.
     lb  = .FALSE.
     hub_back = .FALSE.
+    hub_um_on = .FALSE.
     !
     is_hubbard(:) = .FALSE.
     is_hubbard_back(:) = .FALSE.
@@ -285,6 +302,15 @@ CONTAINS
           ldmx_tot = MAX( ldmx_tot, ldim_u(nt) )
           !
        ENDDO !nt
+       !
+       IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) ) THEN
+          ! To apply LR-cDFT to calculate Hubbard parameters,
+          ! we fix the Hubbard potential
+          hub_pot_fix = .TRUE.
+          WRITE(stdout,'(/5x,"NONZERO HUBBARD_ALPHA DETECTED:")')
+          WRITE(stdout,'(/5x,"FIXING HUBBARD POTENTIAL TO THE &
+                              &GROUND STATE ONE (PRB 98, 085127)")')
+       ENDIF
        !
        IF (ALLOCATED(ll)) DEALLOCATE (ll) 
        ALLOCATE(ll(ldmx_tot,ntyp))
@@ -474,6 +500,47 @@ CONTAINS
           ! 
        ENDDO
        !
+    ELSEIF ( lda_plus_u_kind == 3 ) THEN
+       !
+       ! orbital-resolved DFT+U (arXiv:2312.13580)
+       !
+       DO nt = 1, ntyp
+          !
+          ! Hubbard parameters except U and alpha are currently 
+          ! not supported. This is checked in read_cards.f90.
+          !
+          is_hubbard(nt) = ANY(Hubbard_Um(:,:,nt) /= 0.0_DP) .OR. &
+                           ANY(Hubbard_alpha_m(:,:,nt) /= 0.0_DP)
+          !
+          IF ( is_hubbard(nt) ) THEN
+            !
+             Hubbard_lmax = MAX( Hubbard_lmax, Hubbard_l(nt) )
+             ldmx = MAX( ldmx, 2*Hubbard_l(nt)+1 )
+             ldim_u(nt) = 2*Hubbard_l(nt)+1
+             IF (hubbard_occ(nt,1) < 0.0d0) CALL determine_hubbard_occ(nt,1)
+             !
+          ENDIF
+          !
+          ldmx_tot = MAX( ldmx_tot, ldim_u(nt) )
+          !
+       ENDDO
+       !
+       ALLOCATE(lambda_ns(ldmx,nspin,nat))
+       ALLOCATE(eigenvecs_ref(ldmx,ldmx,nspin,nat))
+       lambda_ns(:,:,:) = 0.0_DP
+       eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)
+       !
+       IF ( ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP) ) THEN
+          ! to apply LR-cDFT to calculate Hubbard parameters,
+          ! fix the Hubbard potential and turn on orbital-resolved
+          ! corrections before the first iteration.
+          hub_um_on = .TRUE.
+          hub_pot_fix = .TRUE.
+          WRITE(stdout,'(/5x,"NONZERO HUBBARD_ALPHA DETECTED:")')
+          WRITE(stdout,'(/5x,"FIXING HUBBARD POTENTIAL TO THE &
+                              &GROUND STATE ONE (PRB 98, 085127)")')
+       ENDIF
+       !
     ELSE
        !
        CALL errore( 'init_hubbard', 'Not allowed value of lda_plus_u_kind', 1 )
@@ -548,6 +615,8 @@ CONTAINS
      IF ( ALLOCATED( atom_pos ) )      DEALLOCATE( atom_pos )
      IF ( ALLOCATED( at_sc ) )         DEALLOCATE( at_sc )
      IF ( ALLOCATED( sc_at ) )         DEALLOCATE( sc_at )
+     IF ( ALLOCATED( lambda_ns ) )     DEALLOCATE( lambda_ns )
+     IF ( ALLOCATED( eigenvecs_ref))   DEALLOCATE( eigenvecs_ref )
      IF ( ALLOCATED( neighood ) ) THEN
         DO na = 1, nat
            CALL deallocate_at_center_type ( neighood(na) )
