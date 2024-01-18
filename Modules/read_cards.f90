@@ -3162,7 +3162,7 @@ CONTAINS
                         & 'E3 for this atomic type was already set', i )
             ENDIF
          ELSEIF (is_v) THEN
-            IF (ABS(Hubbard_V(na,nb,nc)<eps16)) THEN
+            IF (ABS(Hubbard_V(na,nb,nc))<eps16) THEN
                 Hubbard_V(na,nb,nc) = hu_v
             ELSE
                 WRITE(stdout,'(/5x,"Problem in the HUBBARD card for V on line ",i5)') i
