@@ -1,9 +1,6 @@
  &control
     calculation='scf'
     restart_mode='from_scratch'
-    prefix='LiCoO2'
-    pseudo_dir = '/scratch/macke/um_paper/q-e/pseudo/'
-    outdir='/scratch/macke/um_paper/q-e/tempdir/'
     verbosity='high'
     tprnfor = .true.
     tstress = .true.
