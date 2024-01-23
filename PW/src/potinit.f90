@@ -347,8 +347,6 @@ SUBROUTINE potinit()
            & 'noncollinear orbital-resolved DFT+U is not implemented',1)  
         ELSE
            CALL write_ns()
-           IF ( ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP) ) &
-               CALL alpha_m_trace(rho%ns)
         ENDIF
      ENDIF
      !

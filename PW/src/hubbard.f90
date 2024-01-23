@@ -470,7 +470,7 @@ DO na = 1, nat
       IF (nspin ==1) tralpha = tralpha*2
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
-            & " | OCCUPATION: ", f7.5," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+            & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
       !
    ELSEIF ( ANY(Hubbard_Um(:,:,nt) .NE. 0.d0) .AND. ALL(Hubbard_alpha_m(:,:,nt) .EQ. 0.d0) ) THEN
       ! ...case b) the species is NOT directly affected by Hubbard_alpha_m
@@ -558,7 +558,7 @@ IF (has_second_manifold) THEN
       !
       IF (nspin ==1) tralpha = tralpha*2
       WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
-      & " | OCCUPATION: ", f7.5," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+      & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
       !
    DEALLOCATE( eigval_list )
    DEALLOCATE( eigenvecs_current)

@@ -777,7 +777,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
                      & 'noncollinear orbital-resolved DFT+U is not implemented',1) 
                  ELSE
                     CALL write_ns()
-                    IF ( hub_pot_fix ) CALL alpha_m_trace(rho%ns)
                  ENDIF
               ENDIF
            ENDIF
@@ -803,6 +802,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
              ELSEIF (lda_plus_u_kind.EQ.3) THEN
                 IF (noncolin) CALL errore('electrons_scf', &
                 & 'hub_pot_fix is not implemented for (lda_plus_u_kind=3 .AND. noncolin)',1)     
+                CALL alpha_m_trace(rho%ns)
                 rho%ns = rhoin%ns ! back to input values
              ENDIF
            ENDIF
