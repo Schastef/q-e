@@ -1783,7 +1783,7 @@ DO na = 1, nat
       effU = 0.0
       effalpha = 0.0
       !
-      CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(:,:,na), eigenvecs_current(1:ldim,1:ldim,:) )
+      CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(1:ldim,1:ldim,na), eigenvecs_current(1:ldim,1:ldim,:) )
       !
       DO is = 1, nspin
          !
