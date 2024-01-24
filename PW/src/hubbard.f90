@@ -454,14 +454,14 @@ DO na = 1, nat
             !
             IF (ABS(Hubbard_alpha_m(order(m1,is),is,nt)) .GE. eps16) THEN
                ! sum up the occupation of the perturbed states
-               tralpha = tralpha + lambda_ns(m1,is,na)
+               tralpha = tralpha + lambda_ns(order(m1,is),is,na)
                u = Hubbard_Um(order(m1,is),is,nt)*rytoev
                !
                ! Replicate the input sturcture of the HUBBARD card
                eigval_add = 0
                IF ( is .EQ.2 ) eigval_add = ldim
                !
-               eigval_list = [ eigval_list,m1+eigval_add ]
+               eigval_list = [ eigval_list,order(m1,is)+eigval_add ]
             ENDIF
             !
          ENDDO
@@ -544,13 +544,13 @@ IF (has_second_manifold) THEN
             ! and sum up over the occupations these states in na
             !
             IF ( Hubbard_alpha_m(order(m1,is),is,nt2) .NE. 0.d0 ) THEN
-               tralpha = tralpha + lambda_ns(m1,is,na)
+               tralpha = tralpha + lambda_ns(order(m1,is),is,na)
                u = Hubbard_Um(order(m1,is),is,nt)*rytoev
                !
                eigval_add = 0
                IF ( is .EQ.2 ) eigval_add = ldim
                !
-               eigval_list = [ eigval_list,m1+eigval_add ]
+               eigval_list = [ eigval_list,order(m1,is)+eigval_add ]
             ENDIF
             !
          ENDDO
