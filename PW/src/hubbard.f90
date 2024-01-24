@@ -433,7 +433,7 @@ DO na = 1, nat
       !             print the sum over the perturbed manifold's occupation eigenvalues
       !
       ! diagonalize the occupation matrix
-      CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(:,:,na), eigenvecs_current )
+      CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(1:ldim,1:ldim,na), eigenvecs_current )
       !
       DO is = 1, nspin
          !
@@ -526,7 +526,7 @@ IF (has_second_manifold) THEN
       ALLOCATE( eigenvecs_current(ldim,ldim,nspin))
       !
       ! diagonalize the occupation matrix
-      CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(:,:,na), eigenvecs_current )
+      CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(1:ldim,1:ldim,na), eigenvecs_current )
       !
       DO is = 1, nspin
          !
