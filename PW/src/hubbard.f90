@@ -421,7 +421,7 @@ lambda_ns(:,:,:) = 0.d0
 WRITE( stdout,'(/5x,"Occupations of perturbed manifolds (active HUBBARD ALPHA):")')
 DO na = 1, nat
    !
-   nt = ityp (na)ab
+   nt = ityp (na)
    !
    WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
    ldim = 2*Hubbard_l(nt)+1
