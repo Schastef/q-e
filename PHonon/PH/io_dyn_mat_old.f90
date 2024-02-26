@@ -91,11 +91,12 @@ SUBROUTINE read_dyn_from_file( nqs, xq, epsil, lrigid, &
   !----------------------------------------------------------------------------
   !! Read dynamical matrix from file.
   !
-  USE kinds, ONLY : DP
+  USE kinds,      ONLY : DP
   USE dynamicalq, ONLY: phiq, tau, ityp, zeu
-  USE io_global, ONLY : ionode, ionode_id, stdout
-  USE mp,        ONLY : mp_bcast
+  USE io_global,  ONLY : ionode, ionode_id, stdout
+  USE mp,         ONLY : mp_bcast
   USE mp_images,  ONLY : intra_image_comm
+  USE ions_base,  ONLY : ntypx
   !
   IMPLICIT NONE
   !
@@ -104,8 +105,8 @@ SUBROUTINE read_dyn_from_file( nqs, xq, epsil, lrigid, &
   LOGICAL :: lrigid
   INTEGER :: nqs, ntyp, nat, ibrav
   REAL(DP) :: epsil(3,3)
-  REAL(DP) :: xq(3,48), celldm(6), at(3,3), amass(ntyp)
-  CHARACTER(LEN=3) atm(ntyp)
+  REAL(DP) :: xq(3,48), celldm(6), at(3,3), amass(ntypx)
+  CHARACTER(LEN=6) atm(ntypx)
   ! local variables
   INTEGER :: ntyp1,nat1,ibrav1,ityp1
   INTEGER :: i, j, na, nb, nt, ios
