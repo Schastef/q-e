@@ -113,7 +113,7 @@ SUBROUTINE read_dyn_from_file( nqs, xq, epsil, lrigid, &
   REAL(DP) :: tau1(3), amass1, at1(3,3), celldm1(6), q2
   REAL(DP) :: phir(3),phii(3)
   CHARACTER(LEN=75) :: line
-  CHARACTER(LEN=3)  :: atm1
+  CHARACTER(LEN=6)  :: atm1
   LOGICAL, SAVE :: first =.TRUE.
   !
   IF (ionode) THEN
