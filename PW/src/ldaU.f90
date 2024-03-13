@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2024 Quantum ESPRESSO group
+! Copyright (C) 2001-2023 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -8,8 +8,7 @@
 !--------------------------------------------------------------------------
 MODULE ldaU
   !--------------------------------------------------------------------------
-  !
-  ! The quantities needed in DFT+U and extended DFT+U calculations.
+  !! The quantities needed in DFT+U and extended DFT+U calculations.
   !
   USE kinds,         ONLY : DP
   USE upf_params,    ONLY : lqmax
@@ -23,11 +22,11 @@ MODULE ldaU
   SAVE
   !
   COMPLEX(DP), ALLOCATABLE :: wfcU(:,:)
+  !! atomic wfcs with U term
 #if defined(__CUDA)
   ! while waiting for a better implementation
   attributes(PINNED) :: wfcU
 #endif
-  !! atomic wfcs with U term
   COMPLEX(DP), ALLOCATABLE :: d_spin_ldau(:,:,:)
   !! the rotations in spin space for all symmetries
   REAL(DP) :: eth
@@ -149,10 +148,12 @@ MODULE ldaU
   COMPLEX(DP), ALLOCATABLE :: eigenvecs_ref(:,:,:,:)
   !! Eigenvectors used for tracking
   !! orbitals in orbital-resolved DFT+U
-
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  !!!!!!!!!!!!!!!!!!!!! Hubbard V part !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  !!
+  !****************************************************
+  !                Hubbard V part                     !
+  !****************************************************
+  !
+  ! Inter atomic interaction should be cut off at some distance 
   !
   ! Inter atomic interaction should be cut off at some distance 
   ! that is the reason of having so many unitcell information. 
