@@ -127,6 +127,9 @@ if(NOT ELPA_INCLUDE_DIRS)
         if(NOT PKG_ELPA_FOUND)
             pkg_search_module(PKG_ELPA elpa)
         endif()
+	if(NOT PKG_ELPA_FOUND AND OPENMP_FOUND)
+            pkg_search_module(PKG_ELPA elpa_openmp)
+        endif()
         if(NOT ELPA_FIND_QUIETLY)
             if(PKG_ELPA_FOUND)
                 message(STATUS "Looking for ELPA - info found by PkgConfig")
@@ -168,6 +171,14 @@ find_library(
     NAMES elpa
     HINTS ${PKG_ELPA_LIBRARY_DIRS}
     PATH_SUFFIXES "lib" "lib64")
+
+if(NOT ELPA_LIBRARIES AND OPENMP_FOUND)
+    find_library(
+        ELPA_LIBRARIES
+        NAMES elpa_openmp
+        HINTS ${PKG_ELPA_LIBRARY_DIRS}
+        PATH_SUFFIXES "lib" "lib64")
+endif()
 
 # extract version string from ELPA_INCLUDE_DIRS
 if(ELPA_INCLUDE_DIRS)
