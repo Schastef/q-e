@@ -26,12 +26,19 @@ SUBROUTINE dynmat_us()
   USE lsda_mod,             ONLY : lsda, current_spin, isk, nspin
   USE vlocal,               ONLY : vloc
   USE klist,                ONLY : xk, ngk, igk_k
-  USE wavefunctions, ONLY : evc
+  USE wavefunctions,        ONLY : evc
   USE cell_base,            ONLY : omega, tpiba2
   USE uspp_param,           ONLY : nh, nhm
   USE noncollin_module,     ONLY : noncolin, npol
+#if defined(__CUDA)
+  USE becmod,               ONLY : calbec, bec_type, allocate_bec_type, &
+                                   deallocate_bec_type, beccopy,        &
+                                   allocate_bec_type_acc, becupdate,    &
+                                   deallocate_bec_type_acc
+#else
   USE becmod,               ONLY : calbec, bec_type, allocate_bec_type, &
                                    deallocate_bec_type, beccopy
+#endif
   USE modes,                ONLY : u
   USE dynmat,               ONLY : dyn
   USE phus,                 ONLY : alphap
@@ -46,7 +53,8 @@ SUBROUTINE dynmat_us()
   USE lrus,                 ONLY : becp1
   USE qpoint,               ONLY : nksq, ikks
   USE control_lr,           ONLY : nbnd_occ, lgamma
-  USE uspp_init,        ONLY : init_us_2
+  USE uspp_init,            ONLY : init_us_2
+  USE control_flags,        ONLY : offload_type
 
   IMPLICIT NONE
   
@@ -61,7 +69,7 @@ SUBROUTINE dynmat_us()
   ! auxiliary variable
   ! the true weight of a K point
 
-  COMPLEX(DP) :: work, dynwrk (3 * nat, 3 * nat), fact
+  COMPLEX(DP) :: work, dynwrk (3 * nat, 3 * nat), fact, tmpdynwrk
   ! work space
   TYPE (bec_type) :: gammap(3,3)
   COMPLEX(DP), ALLOCATABLE :: rhog (:), aux1 (:,:), work1 (:), &
@@ -70,6 +78,9 @@ SUBROUTINE dynmat_us()
   ! fourier transform of rho
   ! the second derivative of the beta
   ! work space
+#if defined(__CUDA)
+  TYPE (bec_type) :: bectmp
+#endif
 
   CALL start_clock ('dynmat_us')
   ALLOCATE (rhog  ( dfftp%nnr))
@@ -81,6 +92,9 @@ SUBROUTINE dynmat_us()
   ELSE
      ALLOCATE (deff(nhm, nhm, nat ))
   END IF
+#if defined(__CUDA)
+  CALL allocate_bec_type_acc( nkb, nbnd, bectmp )
+#endif
   DO icart=1,3
      DO jcart=1,3
         CALL allocate_bec_type(nkb,nbnd, gammap(icart,jcart))
@@ -100,14 +114,20 @@ SUBROUTINE dynmat_us()
   rhog (:) = CMPLX(rho%of_r(:, 1), 0.d0,kind=DP)
 
   CALL fwfft ('Rho', rhog, dfftp)
+  CALL start_clock('dynus1')
   !
   ! there is a delta ss'
   !
+  !$acc data copyin(dfftp, igtongl, ityp, rhog, tau, vloc) copy(dynwrk) present(g)
+  !$acc data copyin(dfftp%nl) 
+  !$acc parallel loop collapse(3) reduction(+:tmpdynwrk)
   DO na = 1, nat
      DO icart = 1, 3
-        na_icart = 3 * (na - 1) + icart
         DO jcart = 1, 3
+           na_icart = 3 * (na - 1) + icart
            na_jcart = 3 * (na - 1) + jcart
+           tmpdynwrk = (0.0,0.0)
+           !$acc loop vector reduction(+:tmpdynwrk)
            DO ng = 1, ngm
               gtau = tpi * (g (1, ng) * tau (1, na) + &
                             g (2, ng) * tau (2, na) + &
@@ -115,15 +135,18 @@ SUBROUTINE dynmat_us()
               fac = omega * vloc (igtongl (ng), ityp (na) ) * tpiba2 * &
                    ( DBLE (rhog (dfftp%nl (ng) ) ) * COS (gtau) - &
                     AIMAG (rhog (dfftp%nl (ng) ) ) * SIN (gtau) )
-              dynwrk (na_icart, na_jcart) = dynwrk (na_icart, na_jcart) - &
-                   fac * g (icart, ng) * g (jcart, ng)
-           ENDDO
+              tmpdynwrk = tmpdynwrk - fac * g (icart, ng) * g (jcart, ng)
+           END DO
+           dynwrk (na_icart, na_jcart) = tmpdynwrk
         ENDDO
      ENDDO
   ENDDO
+  !$acc end data
+  !$acc end data
   IF (do_cutoff_2D) call cutoff_dynmat0(dynwrk, rhog)  
 
   CALL mp_sum (dynwrk, intra_bgrp_comm)
+  CALL stop_clock('dynus1')
   !
   ! each pool contributes to next term
   !
@@ -131,39 +154,62 @@ SUBROUTINE dynmat_us()
   !
   ! Here we compute  the nonlocal Ultra-soft contribution
   !
+  CALL start_clock('dynusl')
+  !$acc data present(g,igk_k) copyin(xk,evc) create(aux1)
   DO ik = 1, nksq
      ikk = ikks(ik)
      IF (lsda) current_spin = isk (ikk)
      npw = ngk(ikk)
-     IF (nksq > 1) CALL get_buffer (evc, lrwfc, iuwfc, ikk)
-     CALL init_us_2 (npw, igk_k(1,ikk), xk (1, ikk), vkb)
+     IF (nksq > 1) THEN
+             CALL get_buffer (evc, lrwfc, iuwfc, ikk)
+             !$acc update device(evc)
+     ENDIF
+     CALL start_clock('dynus2')
+     CALL init_us_2 (npw, igk_k(1,ikk), xk (1, ikk), vkb, .true.)
      !
      !    We first prepare the gamma terms, which are the second derivatives
      !    becp terms.
      !
      DO icart = 1, 3
         DO jcart = 1, icart
-           aux1=(0.d0,0.d0)
+           !$acc kernels
+           aux1(:,:)=(0.d0,0.d0)
+           !$acc end kernels
+           !$acc parallel 
+           !$acc loop collapse(2)
            DO ibnd = 1, nbnd
               DO ig = 1, npw
                  aux1 (ig, ibnd) = - evc (ig, ibnd) * tpiba2 * &
                       (xk (icart, ikk) + g (icart, igk_k(ig,ikk) ) ) * &
                       (xk (jcart, ikk) + g (jcart, igk_k(ig,ikk) ) )
               ENDDO
-              IF (noncolin) THEN
+           END DO
+           IF (noncolin) THEN
+              !$acc loop collapse(2)
+              DO ibnd = 1, nbnd
                  DO ig = 1, npw
                     aux1 (ig+npwx, ibnd) = - evc (ig+npwx, ibnd) * tpiba2 * &
                       (xk (icart, ikk) + g (icart, igk_k(ig,ikk) ) ) * &
                       (xk (jcart, ikk) + g (jcart, igk_k(ig,ikk) ) )
                  ENDDO
-              END IF
-           ENDDO
-
-           CALL calbec ( npw, vkb, aux1, gammap(icart,jcart) )
+              ENDDO
+           END IF
+           !$acc end parallel
+#if defined(__CUDA)
+           CALL calbec ( offload_type, npw, vkb, aux1, bectmp )
+           CALL becupdate( offload_type, gammap, icart, 3, jcart, 3, bectmp )
+#else
+           CALL calbec ( offload_type, npw, vkb, aux1, gammap(icart,jcart) )
+#endif
            IF (jcart < icart) &
-              CALL beccopy (gammap(icart,jcart),gammap(jcart,icart), nkb, nbnd)
+#if defined(__CUDA)
+             CALL becupdate( offload_type, gammap, jcart, 3, icart, 3, bectmp )
+#else
+             CALL beccopy (gammap(icart,jcart),gammap(jcart,icart), nkb, nbnd)
+#endif
         ENDDO
      ENDDO
+     CALL stop_clock('dynus2')
      !
      !   And then compute the contribution from the US pseudopotential
      !   which is  similar to the KB one
@@ -228,11 +274,13 @@ SUBROUTINE dynmat_us()
         ENDDO
      ENDDO
   ENDDO
+  !$acc end data
   !
   !   For true US pseudopotentials there is an additional term in the second
   !   derivative which is due to the change of the self consistent D part
   !   when the atom moves. We compute these terms in an additional routine
   !
+  CALL stop_clock('dynusl')
   CALL addusdynmat (dynwrk)
   !
   CALL mp_sum ( dynwrk, inter_pool_comm )
@@ -259,6 +307,9 @@ SUBROUTINE dynmat_us()
   ELSE
      DEALLOCATE (deff)
   END IF
+#if defined(__CUDA)
+  CALL deallocate_bec_type_acc(bectmp)
+#endif
   DO icart=1,3
      DO jcart=1,3
         CALL deallocate_bec_type(gammap(icart,jcart))
