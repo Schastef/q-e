@@ -85,7 +85,7 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
   real(DP), allocatable :: fac(:), facq(:)
   ! auxiliary variables
 
-  complex(DP) ::  dy1(3,3), dy2 (3,3), facg, fnat
+  complex(DP) ::  dy1(3,3), dy2 (3,3), facg, fnat, tmpdy1, tmpdy2
   complex(DP), allocatable :: dy3 (: , :)
   ! work spaces, factors
   real(DP), external :: qe_erfc
@@ -126,13 +126,26 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
   if (upperbound > 1.d-9) goto 11
 
   WRITE( stdout, '(/5x,"Alpha used in Ewald sum = ",f8.4)') alpha
+#if defined(_OPENACC)
+  !$acc enter data create(dy3)
+  !$acc kernels
+#endif
   dy3 (:,:) = (0.d0, 0.d0)
+#if defined(_OPENACC)
+  !$acc end kernels
+#endif
   !
   ! Prepare coefficients
   !
   allocate(facq(ngm))
   allocate(fac(ngm))
+#if defined(_OPENACC)
+  !$acc enter data create(facq,fac) 
+  !$acc data copyin(cutoff_2D_qg, cutoff_2D, ityp, tau, atomo_l, zv, q) present(g, gg)
+  !$acc parallel loop private(gtq2,gt2) if(ngm > 0)
+#else
 !$omp parallel do private(gtq2, gt2) shared(facq, fac) if(ngm > 0)
+#endif
   do ng = 1, ngm
      !
      !
@@ -153,14 +166,20 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
         fac(ng) = 0.d0
      endif
   end do
+#if !defined(_OPENACC)
 !$omp end parallel do
+#endif
   !
   ! G-space sums here
   !
+#if defined(_OPENACC)
+  !$acc parallel loop gang private(dy1,dy2,dtau)
+#else
 !$omp parallel do &
 !$omp private(na, na_l, na_i, nta, dy2, nb, nb_i, ntb, zvab, dtau, argq, dy1) &
 !$omp private(ng, arg, fnat, facg, icart, jcart) shared(dy3,atomo_l) &
 !$omp schedule(static) if(ngm > 0)
+#endif
   do na_l = 1, nat_l
      if (nat_l < nat) then 
        na = atomo_l(na_l) 
@@ -171,6 +190,7 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
      nta = ityp (na)
      !
      dy2 (:,:) = (0.d0, 0.d0)
+     !$acc loop seq
      do nb = 1, nat
         nb_i = 3 * (nb - 1)
         ntb = ityp (nb)
@@ -179,8 +199,31 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
 
         argq = tpi * dot_product( q , dtau )
 
+#if defined(_OPENACC)
+        !$acc loop seq collapse(2)
+        do icart = 1, 3
+           do jcart = 1, 3
+              tmpdy1 = (0.0,0.0)
+              tmpdy2 = (0.0,0.0)  
+              !$acc loop gang reduction(+:tmpdy1,tmpdy2) 
+              do ng = 1, ngm         
+                 !
+                 !if (fac(ng) == 0.d0  .and. facq(ng) == 0.d0) cycle
+                 !
+                 arg = tpi * dot_product( g (:, ng) , dtau )
+                 !
+                 fnat = fac(ng) * zvab * CMPLX(cos (arg), 0.d0, kind=DP)
+                 facg = facq(ng) * zvab * CMPLX(cos (arg + argq), sin (arg + argq), kind=DP)
+                 tmpdy1 = tmpdy1 + facg * (q (icart) + &
+                   g (icart, ng) ) * (q (jcart) + g (jcart, ng) )
+                 tmpdy2 = tmpdy2 + fnat * g(icart, ng) * g(jcart, ng)
+              enddo
+              dy1 (icart, jcart) = tmpdy1
+              dy2 (icart , jcart) = dy2(icart,jcart) + tmpdy2
+           enddo
+        enddo
+#else
         dy1 (:,:) = (0.d0, 0.d0)
-
         do ng = 1, ngm
            !
            !if (fac(ng) == 0.d0  .and. facq(ng) == 0.d0) cycle
@@ -197,11 +240,15 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
               enddo
            enddo
         enddo
+#endif
         dy3( na_i + 1: na_i+3,  nb_i + 1:nb_i+3) = dy3( na_i+1: na_i+3,  nb_i+1:nb_i+3) + dy1(1:3,1:3)
      enddo
      dy3( na_i + 1: na_i+3,  na_i + 1:na_i+3) = dy3( na_i+1: na_i+3,  na_i+1:na_i+3) - dy2(1:3,1:3)
   enddo
+#if !defined(_OPENACC)
 !$omp end parallel do
+#endif
+  !$acc exit data delete(facq, fac)
   deallocate(facq, fac)
   !
   CALL block_distribute(nat_l, me_bgrp, nproc_bgrp, na_s, na_e, mykey ) 
@@ -214,7 +261,7 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
   !
   ! with this choice terms up to ZiZj*erfc(5) are counted (erfc(5)=2x10^-1
   !
-  
+  !$acc update host(dy3)
   do na_l  = na_s, na_e 
      do nb = 1, nat
         if (nat_l < nat ) then 
@@ -262,8 +309,16 @@ subroutine d2ionq( nat, ntyp, ityp, zv, tau, alat, omega, q, at, &
         enddo 
      enddo
   enddo
+#if defined(_OPENACC)
+  !$acc update device(dy3)
+#endif
 100 continue
+#if defined(_OPENACC)
+  !$acc end data
+  !$acc exit data copyout(dy3) 
+#endif
   call mp_sum ( dy3, intra_bgrp_comm )
+
   !
   !   The dynamical matrix was computed in Cartesian axis and now we put
   !   it on the basis of the modes
