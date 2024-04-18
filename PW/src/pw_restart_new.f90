@@ -1017,7 +1017,7 @@ MODULE pw_restart_new
       ! ... This subroutine maps local G+k index to the global G vector index
       ! ... the mapping is used to collect wavefunctions subsets distributed
       ! ... across processors.
-      ! ... This map is used to obtained the G+k grids related to each kpt
+      ! ... This map is used to obtain the G+k grids related to each kpt
       !
       USE mp_bands,             ONLY : intra_bgrp_comm
       USE mp,                   ONLY : mp_sum
