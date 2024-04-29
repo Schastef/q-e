@@ -5,10 +5,6 @@
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
-!----------------------------------------------------------------------------
-! TB
-! included gate related energy
-!----------------------------------------------------------------------------
 !
 !----------------------------------------------------------------------------
 SUBROUTINE electrons()
@@ -51,7 +47,6 @@ SUBROUTINE electrons()
   USE loc_scdm,             ONLY : use_scdm, localize_orbitals
   USE loc_scdm_k,           ONLY : localize_orbitals_k
   !
-  USE wvfct_gpum,           ONLY : using_et
   USE scf_gpum,             ONLY : using_vrs
   !
   USE add_dmft_occ,         ONLY : dmft
@@ -123,6 +118,7 @@ SUBROUTINE electrons()
            ! FIXME: et and wg should be read from xml file
            READ (iunres, *) (wg(1:nbnd,ik),ik=1,nks)
            READ (iunres, *) (et(1:nbnd,ik),ik=1,nks)
+           !$acc update device(et)
            CLOSE ( unit=iunres, status='delete')
            ! ... if restarting here, exx was already active
            ! ... initialize stuff for exx
@@ -161,6 +157,7 @@ SUBROUTINE electrons()
   ENDIF
   !
   !  ... energy calculation of neutral case
+  !  ... FIXME: these lines should be called before electrons, not inside it
   !
   IF (sic .and. sic_energy) THEN
      WRITE(stdout,'(5x,"Energy calculation for the neutral polaron")')
@@ -194,7 +191,6 @@ SUBROUTINE electrons()
      IF ( stopped_by_user .OR. .NOT. conv_elec ) THEN
         conv_elec=.FALSE.
         IF ( .NOT. first) THEN
-           CALL using_et(0)
            WRITE(stdout,'(5x,"Calculation (EXX) stopped during iteration #", &
                         & i6)') iter
            CALL seqopn (iunres, 'restart_e', 'formatted', exst)
@@ -348,7 +344,6 @@ SUBROUTINE electrons()
      WRITE( stdout,'(/5x,"EXX: now go back to refine exchange calculation")')
      !
      IF ( check_stop_now() .or. (iter.ge.nexxiter) ) THEN
-        CALL using_et(0)
         WRITE(stdout,'(5x,"Calculation (EXX) stopped after iteration #", &
                         & i6)') iter
         conv_elec=.FALSE.
@@ -467,7 +462,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE libmbd_interface,     ONLY : EmbdvdW
   USE add_dmft_occ,         ONLY : dmft, dmft_update, v_dmft, dmft_updated
   !
-  USE wvfct_gpum,           ONLY : using_et
   USE scf_gpum,             ONLY : using_vrs
   USE device_fbuff_m,       ONLY : dev_buf, pin_buf
   USE pwcom,                ONLY : report_mag 
@@ -551,8 +545,10 @@ SUBROUTINE electrons_scf ( printout, exxen )
   !
   iter = 0
   dr2  = 0.0_dp
-  IF ( restart ) CALL restart_in_electrons( iter, dr2, ethr, et )
-  IF ( restart ) CALL using_et(2)
+  IF ( restart ) THEN
+     CALL restart_in_electrons( iter, dr2, ethr, et )
+     !$acc update device (et)
+  END IF
   !
   WRITE( stdout, 9000 ) get_clock( 'PWSCF' )
   !
@@ -615,7 +611,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
      !
      IF ( check_stop_now() ) THEN
         conv_elec=.FALSE.
-        CALL using_et(0)
         CALL save_in_electrons (iter, dr2, ethr, et )
         GO TO 10
      ENDIF
@@ -697,7 +692,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
         !
         IF ( stopped_by_user ) THEN
            conv_elec=.FALSE.
-           CALL using_et( 0 )
            CALL save_in_electrons( iter-1, dr2, ethr, et )
            GO TO 10
         ENDIF
@@ -710,7 +704,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
         ! ... explicitly collected to the first node
         ! ... this is done here for et, in sum_band for wg
         !
-        CALL using_et(1)
         CALL poolrecover( et, nbnd, nkstot, nks )
         !
         ! ... the new density is computed here. For PAW:
@@ -1911,7 +1904,6 @@ FUNCTION exxenergyace( )
   USE mp,                 ONLY : mp_sum
   USE control_flags,      ONLY : gamma_only, use_gpu
   USE wavefunctions,      ONLY : evc
-  USE wavefunctions_gpum, ONLY : evc_d, using_evc, using_evc_d
   !
   IMPLICIT NONE
   !
@@ -1926,9 +1918,6 @@ FUNCTION exxenergyace( )
   domat = .TRUE.
   exxenergyace=0.0_dp
   !
-  IF (.NOT. use_gpu) CALL using_evc(0)
-  IF (      use_gpu) CALL using_evc_d(0)
-  !
   DO ik = 1, nks
      npw = ngk (ik)
      !
@@ -1936,17 +1925,26 @@ FUNCTION exxenergyace( )
      IF ( lsda ) current_spin = isk(ik)
      !
      IF (nks > 1) THEN
-        CALL using_evc(2)
         CALL get_buffer( evc, nwordwfc, iunwfc, ik )
-        IF (use_gpu) CALL using_evc_d(0)
+        !$acc update device(evc)
      ENDIF
      !
      IF (gamma_only) THEN
-        IF (.NOT. use_gpu) CALL vexxace_gamma( npw, nbnd, evc, ex )
-        IF (      use_gpu) CALL vexxace_gamma_gpu( npw, nbnd, evc_d, ex )
+        IF (use_gpu) THEN
+          !$acc host_data use_device(evc)
+          CALL vexxace_gamma_gpu( npw, nbnd, evc, ex )
+          !$acc end host_data
+        ELSE
+          CALL vexxace_gamma( npw, nbnd, evc, ex )
+        END IF
      ELSE
-        IF (.NOT. use_gpu) CALL vexxace_k( npw, nbnd, evc, ex )
-        IF (      use_gpu) CALL vexxace_k_gpu( npw, nbnd, evc_d, ex )
+        IF (use_gpu) THEN
+          !$acc host_data use_device(evc)
+          CALL vexxace_k_gpu( npw, nbnd, evc, ex )
+          !$acc end host_data
+        ELSE
+          CALL vexxace_k( npw, nbnd, evc, ex )
+        ENDIF
      ENDIF
      exxenergyace = exxenergyace + ex
   ENDDO

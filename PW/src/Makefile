@@ -23,7 +23,6 @@ addusforce.o \
 addusstress.o \
 allocate_fft.o \
 allocate_locpot.o \
-allocate_nlpot.o \
 allocate_wfc.o \
 atomic_rho.o \
 atomic_wfc.o \
@@ -278,7 +277,6 @@ PWLIBS += \
   h_psi_gpu.o \
   vhpsi_gpu.o \
   vloc_psi_gpu.o \
-  pwcom_gpu.o \
   scf_mod_gpu.o \
   usnldiag_gpu.o \
   add_vuspsi_gpu.o \
