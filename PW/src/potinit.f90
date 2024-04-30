@@ -40,8 +40,8 @@ SUBROUTINE potinit()
   USE ener,                 ONLY : ehart, etxc, vtxc, epaw, esol, vsol
   USE ldaU,                 ONLY : lda_plus_u, Hubbard_lmax, eth, &
                                    niter_with_fixed_ns, lda_plus_u_kind, &
-                                   nsg, nsgnew, hub_um_on, Hubbard_alpha, &
-                                   Hubbard_alpha_m
+                                   nsg, nsgnew, apply_um, Hubbard_alpha, &
+                                   Hubbard_alpha_m, orbital_resolved
   USE noncollin_module,     ONLY : noncolin, domag, report, lforcet
   USE io_files,             ONLY : restart_dir, input_drho, check_file_exist
   USE mp,                   ONLY : mp_sum
@@ -92,7 +92,7 @@ SUBROUTINE potinit()
      ! ... if we restart from a preexisting charge density, the eigenstates
      ! ... are considered stable and we can apply orbital-resolved Hubbard 
      ! ... corrections starting from the first iteration
-     IF ( lda_plus_u_kind.EQ.3) hub_um_on = .TRUE.
+     IF ( orbital_resolved ) apply_um = .TRUE.
      !
      IF ( .NOT.lforcet ) THEN
         CALL read_scf ( rho, nspin, gamma_only )
@@ -160,9 +160,17 @@ SUBROUTINE potinit()
      IF (lda_plus_u) THEN
         !
         IF (lda_plus_u_kind == 0) THEN
-           IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) ) &
+           IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) .OR. ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP)) &
               WRITE( stdout, '(5X,"WARNING: applying Hubbard_alpha without &
                      &restarting from a converged potential")' )
+           IF ( orbital_resolved .AND. (.NOT. apply_um) ) THEN
+              WRITE( stdout, '(/,5X,47("="))')
+              WRITE( stdout, '(/,5X,"Not restarting from a converged ", &
+                                &    "potential:",/,5X,             &
+              & "Orbital-resolved Hubbard corrections not yet active")')
+              WRITE( stdout, '(/,5X,47("="))')
+              !
+           ENDIF
            IF (noncolin) THEN
               CALL init_ns_nc() 
            ELSE 
@@ -176,27 +184,6 @@ SUBROUTINE potinit()
            ENDIF
         ELSEIF (lda_plus_u_kind == 2) THEN
            CALL init_nsg()
-        ELSEIF (lda_plus_u_kind ==3) THEN
-           IF ( .NOT. hub_um_on ) THEN
-              WRITE( stdout, '(/,5X,47("="))')
-              WRITE( stdout, '(/,5X,"Not restarting from a converged ", &
-                               &    "potential:",/,5X,             &
-              & "Orbital-resolved Hubbard corrections not yet active")')
-              WRITE( stdout, '(/,5X,47("="))')
-              !
-           ENDIF
-           !
-           IF ( ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP) ) &
-              CALL errore( 'potinit', &
-                  'Must restart from a converged potential &
-                  &to use orbital-resolved Hubbard_alpha', 1 )
-           !
-           IF (noncolin) THEN
-              CALL errore('potinit', &
-              & 'noncollinear orbital-resolved DFT+U is not implemented',1)  
-           ELSE
-              CALL init_ns()
-           ENDIF
         ENDIF
         !
      ENDIF
@@ -340,13 +327,6 @@ SUBROUTINE potinit()
            CALL write_nsg_nc()
         ELSE
            CALL write_nsg()
-        ENDIF
-     ELSEIF (lda_plus_u_kind == 3) THEN
-        IF (noncolin) THEN
-           CALL errore('potinit', &
-           & 'noncollinear orbital-resolved DFT+U is not implemented',1)  
-        ELSE
-           CALL write_ns()
         ENDIF
      ENDIF
      !

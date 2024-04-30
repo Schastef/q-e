@@ -12,7 +12,7 @@ MODULE scf
   USE kinds,           ONLY : DP
   USE lsda_mod,        ONLY : nspin
   USE ldaU,            ONLY : lda_plus_u, Hubbard_lmax, lda_plus_u_kind, ldmx, &
-                              ldmx_b, is_hubbard_back
+                              ldmx_b, is_hubbard_back, orbital_resolved
   USE ions_base,       ONLY : nat
   USE buffers,         ONLY : open_buffer, close_buffer, get_buffer, save_buffer
   USE xc_lib,          ONLY : xclib_dft_is
@@ -830,7 +830,7 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   IF (xclib_dft_is('meta')) rho_ddot = rho_ddot + tauk_ddot( rho1, rho2, gf )
   !
   IF (lda_plus_u ) THEN 
-      IF ( lda_plus_u_kind .EQ. 3) THEN
+      IF ( orbital_resolved ) THEN
          rho_ddot = rho_ddot + ns_ddot_um( rho1, rho2 )
       ELSE
          rho_ddot = rho_ddot + ns_ddot( rho1, rho2 )
@@ -1061,7 +1061,7 @@ FUNCTION ns_ddot_um( rho1, rho2 )
   USE kinds,     ONLY : DP
   USE ldaU,      ONLY : Hubbard_l, Hubbard_U, Hubbard_U2, ldim_back, &
                         lda_plus_u_kind, is_hubbard, eigenvecs_ref, &
-                        Hubbard_lmax, Hubbard_Um, hub_um_on
+                        Hubbard_lmax, Hubbard_Um, apply_um
   USE ions_base, ONLY : nat, ityp
   USE constants, ONLY : eps16, RYTOEV
   USE io_global, ONLY : stdout
@@ -1085,8 +1085,8 @@ FUNCTION ns_ddot_um( rho1, rho2 )
   !
   ns_ddot_um = 0.D0
   !
-  IF (.NOT. hub_um_on) RETURN
-  ! if hub_um_on is still .FALSE.
+  IF (.NOT. apply_um) RETURN
+  ! if apply_um is still .FALSE.
   ! do not (yet) apply Hubbard U corrections.
   !
   DO na = 1, nat
@@ -1100,8 +1100,14 @@ FUNCTION ns_ddot_um( rho1, rho2 )
       lambda1(:,:) = 0.D0
       lambda2(:,:) = 0.D0
       !
-      CALL diag_ns( ldim, rho1%ns(1:ldim,1:ldim,:,na), lambda1(1:ldim,:), vet1(1:ldim,1:ldim,:) )
-      CALL diag_ns( ldim, rho2%ns(1:ldim,1:ldim,:,na), lambda2(1:ldim,:), vet2(1:ldim,1:ldim,:) )
+      IF (nspin == 4 ) THEN
+         !!! FIXME: FOR NC orbital-resolved U, we need a different definition of lambda and vet
+         !CALL diag_ns_nc( ldim, rho1%ns_nc(1:2*ldim,1:ldim,:,na), lambda1(1:2*ldim), vet1(1:2*ldim,1:2*ldim) )
+         !CALL diag_ns_nc( ldim, rho2%ns_nc(1:2*ldim,1:ldim,:,na), lambda2(1:2*ldim), vet2(1:2*ldim,1:2*ldim) )
+      ELSE
+         CALL diag_ns( ldim, rho1%ns(1:ldim,1:ldim,:,na), lambda1(1:ldim,:), vet1(1:ldim,1:ldim,:) )
+         CALL diag_ns( ldim, rho2%ns(1:ldim,1:ldim,:,na), lambda2(1:ldim,:), vet2(1:ldim,1:ldim,:) )
+      ENDIF
       ! diagonalize old- and new occupation matrix
       ! 
       DO is = 1, nspin
@@ -1117,15 +1123,17 @@ FUNCTION ns_ddot_um( rho1, rho2 )
             ! compute U(m)/2*SUM(ns1*ns2)
             DO m = 1, ldim
                !
-               index1 = FINDLOC(order1,m,dim=1)
-               index2 = FINDLOC(order2,m,dim=1)
                ! find the index where the order vector is
                ! equal to m to apply the same Hubbard_Um
                ! to the same eigenstates 
+               index1 = FINDLOC(order1,m,dim=1)
+               index2 = FINDLOC(order2,m,dim=1)
                !
+               ! **Check if the following also works for the NC case**
                ns_ddot_um = ns_ddot_um + 0.5D0 * Hubbard_Um(m,is,nt) * &
                       lambda1(index1,is) * lambda2(index2,is)
                !
+               ! This can be removed once the merge request is approved
 #if defined(__DEBUG)
                WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " , index2:", i1)') m, is,index1,index2
                WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ", f7.4,", ns_ddot_um: ", f7.4)') &

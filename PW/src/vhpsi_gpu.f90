@@ -75,7 +75,7 @@ SUBROUTINE vhpsi_gpu( ldap, np, mps, psip_d, hpsi_d )
   endif
 #endif
   !
-  IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 .OR. lda_plus_u_kind.EQ.3) THEN
+  IF ( lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.1 ) THEN
      CALL vhpsi_U_gpu()  ! DFT+U
   ELSEIF ( lda_plus_u_kind.EQ.2 ) THEN
      CALL errore('vhpsi', 'DFT+U+V case not implemented for GPU', 1 )

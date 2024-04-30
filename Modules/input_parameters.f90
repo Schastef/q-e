@@ -420,7 +420,7 @@ MODULE input_parameters
         !
         ! the following are the parameters for DFT+Hubbard
         LOGICAL :: lda_plus_u = .false.              
-        INTEGER :: lda_plus_u_kind = -1              
+        INTEGER :: lda_plus_u_kind = -1            
         INTEGER, PARAMETER :: nspinx=2 ! lqmax is taken from upf_params
         REAL(DP) :: starting_ns_eigenvalue(lqmax,nspinx,nsx) = -1.0_DP
         INTEGER  :: Hubbard_l(nsx)  = -1
@@ -444,6 +444,7 @@ MODULE input_parameters
         LOGICAL :: reserv(nsx) = .FALSE.
         LOGICAL :: reserv_back(nsx) = .FALSE.
         LOGICAL :: hub_pot_fix = .FALSE.
+        LOGICAL :: orbital_resolved = .FALSE.
         LOGICAL :: backall(nsx) = .FALSE.
 
           ! For linking to DMFT calculations
@@ -675,9 +676,9 @@ MODULE input_parameters
              lda_plus_u, lda_plus_u_kind, U_projection_type, Hubbard_parameters, & ! obsolete
              Hubbard_U, Hubbard_J0, Hubbard_J, Hubbard_V, Hubbard_U_back,     & ! moved to HUBBARD card 
              Hubbard_alpha, Hubbard_alpha_back, Hubbard_beta, Hubbard_occ,    &
-             hub_pot_fix, reserv, reserv_back, dmft, dmft_prefix,             &
-             edir, emaxpos, eopreg, eamp, smearing, starting_ns_eigenvalue,   &
-             input_dft, la2F, assume_isolated,                                &
+             hub_pot_fix, orbital_resolved, reserv, reserv_back, dmft,        &
+             dmft_prefix, edir, emaxpos, eopreg, eamp, smearing,              &
+             starting_ns_eigenvalue, input_dft, la2F, assume_isolated,        &
              nqx1, nqx2, nqx3, ecutfock, localization_thr, scdm, ace,         &
              scdmden, scdmgrd, nscdm, n_proj,                                 &
              exxdiv_treatment, x_gamma_extrapolation, yukawa, ecutvcut,       &

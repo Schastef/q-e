@@ -102,7 +102,7 @@ SUBROUTINE sum_band_gpu()
   ! ... Needed for DFT+Hubbard: compute occupations of Hubbard states
   !
   IF (lda_plus_u) THEN
-    IF (lda_plus_u_kind==0 .OR. lda_plus_u_kind==3) THEN
+    IF (lda_plus_u_kind==0) THEN
        !
        IF (noncolin) THEN
           CALL new_ns_nc(rho%ns_nc)

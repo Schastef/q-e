@@ -3206,7 +3206,9 @@ CONTAINS
             IF (ANY(ABS(Hubbard_alpha_m(:,:,:))>eps16)) CALL errore('card_hubbard', &
                     & 'Currently DFT+U+V does not support orbital-resolved Hubbard ALPHA parameters', i)
          ELSEIF (ANY(ABS(Hubbard_Um(:,:,:))>eps16) .OR. ANY(ABS(Hubbard_alpha_m(:,:,:))>eps16)) THEN
-            lda_plus_u_kind = 3
+            ! Orbital-resolved DFT+U
+            lda_plus_u_kind = 0
+            orbital_resolved = .true.
             !
             IF (noncolin) CALL errore('card_hubbard', &
                     & 'Currently, orbital-resolved DFT+U is not implemented with noncolin=.true.', i)

@@ -29,7 +29,7 @@ SUBROUTINE electrons()
                                    do_makov_payne, sic
   USE sic_mod,              ONLY : sic_energy, occ_f2fn, occ_fn2f, save_rhon, sic_first
   USE io_files,             ONLY : iunres, seqopn
-  USE ldaU,                 ONLY : eth, hub_um_on, lda_plus_u_kind, hub_pot_fix
+  USE ldaU,                 ONLY : eth
   USE extfield,             ONLY : tefield, etotefield
   USE wvfct,                ONLY : nbnd, wg, et
   USE klist,                ONLY : nks
@@ -429,7 +429,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
   USE ldaU,                 ONLY : eth, lda_plus_u, lda_plus_u_kind, &
                                    niter_with_fixed_ns, hub_pot_fix, &
                                    nsg, nsgnew, v_nsg, at_sc, neighood, &
-                                   ldim_u, is_hubbard_back, hub_um_on
+                                   ldim_u, is_hubbard_back, apply_um, orbital_resolved
   USE extfield,             ONLY : tefield, etotefield, gate, etotgatefield !TB
   USE noncollin_module,     ONLY : noncolin, magtot_nc, i_cons,  bfield, &
                                    lambda, report, domag, nspin_mag, npol
@@ -639,7 +639,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            !
         ENDIF
         !
-        IF ( lda_plus_u_kind.EQ.3 ) THEN
+        IF ( orbital_resolved ) THEN
            ethr = MIN( ethr, 0.05D0*dr2 / MAX( 1.D0, nelec ) )
            ! ... tighten diagonalization in orbital-resolved DFT+U
            ! ... for faster convergence
@@ -764,13 +764,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  ELSE 
                     CALL write_nsg()
                  ENDIF
-              ELSEIF (lda_plus_u_kind.EQ.3) THEN
-                 IF (noncolin) THEN
-                    CALL errore('electrons_scf', &
-                     & 'noncollinear orbital-resolved DFT+U is not implemented',1) 
-                 ELSE
-                    CALL write_ns()
-                 ENDIF
               ENDIF
            ENDIF
            !
@@ -782,7 +775,9 @@ SUBROUTINE electrons_scf ( printout, exxen )
            IF (hub_pot_fix) THEN
              IF (lda_plus_u_kind.EQ.0) THEN
                 IF (noncolin) CALL errore('electrons_scf', &
-                & 'hub_pot_fix is not implemented for (lda_plus_u_kind=0 .AND. noncolin)',1)     
+                & 'hub_pot_fix is not implemented for (lda_plus_u_kind=0 .AND. noncolin)',1)
+                !call occupation counting routine before resetting ns  
+                IF (orbital_resolved) CALL alpha_m_trace(rho%ns) 
                 rho%ns = rhoin%ns ! back to input values
                 IF (lhb) rho%nsb = rhoin%nsb
              ELSEIF (lda_plus_u_kind.EQ.1) THEN
@@ -792,11 +787,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
                 IF (noncolin) CALL errore('electrons_scf', &
                 & 'hub_pot_fix is not implemented for (lda_plus_u_kind=2 .AND. noncolin)',1)
                 nsgnew = nsg
-             ELSEIF (lda_plus_u_kind.EQ.3) THEN
-                IF (noncolin) CALL errore('electrons_scf', &
-                & 'hub_pot_fix is not implemented for (lda_plus_u_kind=3 .AND. noncolin)',1)     
-                CALL alpha_m_trace(rho%ns)
-                rho%ns = rhoin%ns ! back to input values
              ENDIF
            ENDIF
            !
@@ -817,15 +807,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                     rhoin%ns = rho%ns
                  ENDIF
               ELSEIF (lda_plus_u_kind.EQ.2) THEN
-                 CALL nsg_adj()
-              ELSEIF (lda_plus_u_kind.EQ.3 .AND. starting_pot == 'atomic' ) THEN
-                 CALL ns_adj()
-                 IF (noncolin) THEN
-                    CALL errore('electrons_scf', &
-                    & 'noncollinear orbital-resolved DFT+U is not implemented',1)                  
-                 ELSE
-                    rhoin%ns = rho%ns
-                 ENDIF   
+                 CALL nsg_adj()  
               ENDIF
            ENDIF
            IF ( iter <= niter_with_fixed_ns ) THEN
@@ -845,14 +827,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  ENDIF
               ELSEIF (lda_plus_u_kind.EQ.2) THEN
                  nsgnew = nsg
-              ELSEIF (lda_plus_u_kind.EQ.3) THEN
-                 CALL ns_adj()
-                 IF (noncolin) THEN
-                    CALL errore('electrons_scf', &
-                    & 'noncollinear orbital-resolved DFT+U is not implemented',1)                       
-                 ELSE
-                    rho%ns = rhoin%ns
-                 ENDIF
               ENDIF
            ENDIF
            !
@@ -934,7 +908,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
            ! ... no convergence yet: calculate new potential from mixed
            ! ... charge density (i.e. the new estimate)
            !
-           IF ( lda_plus_u_kind.EQ.3 .AND. .NOT.hub_um_on) THEN
+           IF ( orbital_resolved .AND. (.NOT. apply_um) ) THEN
               !
               IF ( ethr .LE. 1.D-4 .OR. iter .GT. 10 ) THEN
                  !
@@ -949,7 +923,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
                     WRITE( stdout, '(/,5X,"WARNING: check convergence of eigenstates")')
                  WRITE( stdout, '(/,5X,47("="))')
                  !
-                 hub_um_on = .TRUE.
+                 apply_um = .TRUE.
               ENDIF
            ENDIF
            !
@@ -1091,16 +1065,16 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  IF (lhb) CALL new_nsb(rho%nsb)
               ELSEIF (lda_plus_u_kind.EQ.2) THEN
                  CALL new_nsg()
-              ELSEIF (lda_plus_u_kind.EQ.3) THEN
-                  CALL new_ns(rho%ns)
               ENDIF
            ENDIF
            !
            ! Write the occupation matrices
            IF (lda_plus_u_kind == 0) THEN
+              IF ( orbital_resolved .AND. hub_pot_fix ) &
+                 CALL alpha_m_trace(rho%ns)
               IF (noncolin) THEN      
                  CALL write_ns_nc()
-              ELSE        
+              ELSE
                  CALL write_ns()
               ENDIF
            ELSEIF (lda_plus_u_kind == 1) THEN
@@ -1114,14 +1088,6 @@ SUBROUTINE electrons_scf ( printout, exxen )
                  CALL write_nsg_nc()
               ELSE
                  CALL write_nsg()
-              ENDIF
-           ELSEIF (lda_plus_u_kind == 3) THEN
-              IF (noncolin) THEN
-                 CALL errore('electrons_scf', &
-                  & 'noncollinear orbital-resolved DFT+U is not implemented',1)   
-              ELSE
-                 IF ( hub_pot_fix ) CALL alpha_m_trace(rho%ns)
-                 CALL write_ns()
               ENDIF
            ENDIF
            !
@@ -1411,7 +1377,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
        CALL mp_sum( delta_e, intra_bgrp_comm )
        !
        IF (lda_plus_u .AND. (.NOT.hub_pot_fix)) THEN
-         IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
+         IF (lda_plus_u_kind.EQ.0) THEN
             IF (noncolin) THEN
               delta_e_hub = - SUM( rho%ns_nc(:,:,:,:)*v%ns_nc(:,:,:,:) )
               delta_e = delta_e + delta_e_hub              
@@ -1527,7 +1493,7 @@ SUBROUTINE electrons_scf ( printout, exxen )
        CALL mp_sum( delta_escf, intra_bgrp_comm )
        !
        IF (lda_plus_u .AND. (.NOT.hub_pot_fix)) THEN
-          IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind.EQ.3) THEN
+          IF (lda_plus_u_kind.EQ.0) THEN
              IF (noncolin) THEN 
                 delta_escf_hub = -SUM((rhoin%ns_nc(:,:,:,:)-rho%ns_nc(:,:,:,:))*v%ns_nc(:,:,:,:))
                 delta_escf = delta_escf + delta_escf_hub

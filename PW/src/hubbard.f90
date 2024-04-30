@@ -15,7 +15,8 @@ SUBROUTINE hub_summary()
                                    Hubbard_U, Hubbard_J0, Hubbard_U2, Hubbard_alpha, &
                                    Hubbard_beta, Hubbard_alpha_back, is_hubbard_back,  &
                                    Hubbard_J, Hubbard_l, Hubbard_n, Hubbard_Um, &
-                                   lda_plus_u, Hubbard_alpha_m, hub_pot_fix, hub_um_on
+                                   lda_plus_u, Hubbard_alpha_m, hub_pot_fix, apply_um, &
+                                   orbital_resolved
     USE lsda_mod,           ONLY : nspin 
     USE noncollin_module,   ONLY : lspinorb
     USE ions_base,          ONLY : ntyp => nsp
@@ -29,6 +30,7 @@ SUBROUTINE hub_summary()
     !
     WRITE(stdout,'(5x,a)') 'Hubbard projectors: ' // TRIM(Hubbard_projectors)
     IF (lda_plus_u_kind == 0) THEN
+      IF (orbital_resolved) CONTINUE !For orbital-resolved DFT+U, printing see below!
        WRITE( stdout, '(5x,"Hubbard parameters of DFT+U (Dudarev formulation) in eV:")')
        DO nt = 1, ntyp
           IF (is_hubbard(nt)) THEN
@@ -81,45 +83,46 @@ SUBROUTINE hub_summary()
             CALL write_hub_param (nt, Hubbard_alpha_back(nt), 'alpha', 2)
         ENDIF
        ENDDO
-   !
-   ELSEIF (lda_plus_u_kind == 3) THEN
-   ! ... currently not using "write_hub_param" because the latter expects 
-   ! ... hub_parameter to be a scalar, but orbital-resolved Hubbard parameters
-   ! ... are arrays and should be printed as such
-   !
+    ENDIF
+    !
+    IF (orbital_resolved) THEN
+    ! ... currently not using "write_hub_param" because the latter expects 
+    ! ... hub_parameter to be a scalar, but orbital-resolved Hubbard parameters
+    ! ... are arrays and should be printed as such
+    !
       WRITE( stdout, '(5x,"Orbital-resolved Hubbard parameters in eV:")')
       DO nt = 1, ntyp
          IF (is_hubbard(nt)) THEN
-            IF (ANY(ABS(Hubbard_Um(:,:,nt)) .GT. eps16)) THEN
-               WRITE(stdout,'(5x,a,i1,a)')  &
-                  'U' // '(' // TRIM(atm(nt)) // '-', Hubbard_n(nt), &
-                  l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
+               IF (ANY(ABS(Hubbard_Um(:,:,nt)) .GT. eps16)) THEN
+                  WRITE(stdout,'(5x,a,i1,a)')  &
+                     'U' // '(' // TRIM(atm(nt)) // '-', Hubbard_n(nt), &
+                     l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
                   !
-               ldim = 2*Hubbard_l(nt)+1
-               DO is = 1, nspin
-                  WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
-                        is,(Hubbard_Um(m1,is,nt)*rytoev, m1=1, ldim)
-               ENDDO
-            ENDIF
-            !
-            IF (ANY(ABS(Hubbard_alpha_m(:,:,nt)) .GT. eps16)) THEN
-               WRITE(stdout,'(5x,a,i1,a)')  &
-                  'ALPHA' // '(' // TRIM(atm(nt)) // '-', Hubbard_n(nt), &
-                  l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
+                  ldim = 2*Hubbard_l(nt)+1
+                  DO is = 1, nspin
+                     WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
+                              is,(Hubbard_Um(m1,is,nt)*rytoev, m1=1, ldim)
+                  ENDDO
+               ENDIF
+               !
+               IF (ANY(ABS(Hubbard_alpha_m(:,:,nt)) .GT. eps16)) THEN
+                  WRITE(stdout,'(5x,a,i1,a)')  &
+                     'ALPHA' // '(' // TRIM(atm(nt)) // '-', Hubbard_n(nt), &
+                     l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
                   !
-               DO is = 1, nspin
-                  WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
-                        is,(Hubbard_alpha_m(m1,is,nt)*rytoev, m1=1, ldim)
-               ENDDO
-            ENDIF
+                  DO is = 1, nspin
+                     WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
+                              is,(Hubbard_alpha_m(m1,is,nt)*rytoev, m1=1, ldim)
+                  ENDDO
+               ENDIF
          ENDIF
       ENDDO
-   ENDIF
+    ENDIF
     !
     WRITE(stdout, '(/5x,"Internal variables: lda_plus_u =",l, ", lda_plus_u_kind = ",i1)') &
             lda_plus_u, lda_plus_u_kind
-    WRITE(stdout, '(/5x,"Internal variables: hub_pot_fix =",l, ", hub_um_on = ",l)') &
-            hub_pot_fix, hub_um_on
+    WRITE(stdout, '(/5x,"Internal variables: orbital_resolved =",l, ", hub_pot_fix =",l, ", apply_um = ",l)') &
+            orbital_resolved, hub_pot_fix, apply_um
     !
     RETURN
     !
@@ -376,6 +379,58 @@ RETURN
 END SUBROUTINE diag_ns
 !
 !----------------------------------------------------------------------------
+SUBROUTINE diag_ns_nc( ldim, ns_nc, lambda, eigenvecs_current )
+   !---------------------------------------------------------------------
+   !
+   !! Diagonalizes the ns matrix and returns the
+   !! resulting eigenvalues & eigenvectors.
+   !! Used by multiple subroutines 
+   !! (v_hub_selective, ns_ddot_um, alpha_m_trace)
+   !
+   USE kinds,                ONLY : DP
+   USE lsda_mod,             ONLY : nspin
+   USE io_global,            ONLY : stdout
+   USE noncollin_module,     ONLY : npol
+   IMPLICIT NONE
+   !
+   INTEGER, INTENT(IN)        :: ldim
+   !! Number of magnetic quantum orbitals (2l+1)
+   REAL(DP), INTENT(IN)       :: ns_nc(ldim,ldim,4)
+   !! Occupation matrix (undiagonalized)
+   REAL(DP), INTENT(OUT)      :: lambda(2*ldim)
+   !! Occupation eigenvalues
+   COMPLEX(DP), INTENT(OUT)   :: eigenvecs_current(2*ldim,2*ldim)
+   !! Eigenvectors of current iteration
+   !
+   !  ... local variables
+   !
+   COMPLEX(DP)                :: f(2*ldim,2*ldim)
+   INTEGER                    :: m1, m2
+   !
+   !
+   CALL errore( 'diag_ns_nc', 'Noncollinear orbital-resolved DFT+U is not yet implemented', 1 )
+   f(:,:) = CMPLX(0.d0,0.d0, kind=dp)
+   eigenvecs_current(:,:) = CMPLX(0.d0,0.d0, kind=dp)
+   lambda(:) = 0.d0
+   !
+   DO m1 = 1, ldim
+      DO m2 = 1, ldim
+         f(m1, m2)           = ns_nc(m1,m2,1)
+         f(m1, ldim+m2)      = ns_nc(m1,m2,2)
+         f(ldim+m1, m2)      = ns_nc(m1,m2,3)
+         f(ldim+m1, ldim+m2) = ns_nc(m1,m2,4)
+      ENDDO
+   ENDDO 
+   !
+   ! Diagonalize the occupation matrix and save the eigenvectors in an array
+   !
+   CALL cdiagh( 2*ldim, f, 2*ldim, lambda(:), eigenvecs_current(:,:) )
+   !
+   !
+RETURN
+END SUBROUTINE diag_ns_nc
+!
+!----------------------------------------------------------------------------
 SUBROUTINE alpha_m_trace( ns )
 !---------------------------------------------------------------------
 !
@@ -413,6 +468,8 @@ LOGICAL                  :: has_second_manifold
 !
 CHARACTER(len=6)         :: manifold
 !
+!
+IF (nspin == 4) CALL errore( 'alpha_m_trace', 'Noncollinear orbital-resolved DFT+U is not yet implemented', 1 )
 !
 ALLOCATE( unpert_ats(0) )
 lambda_ns(:,:,:) = 0.d0
