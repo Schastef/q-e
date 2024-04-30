@@ -167,11 +167,11 @@ SUBROUTINE write_ns
   !
   IF (nspin==1) nsum = 2.d0 * nsum 
   !
+  ! in orbital-resolved DFT+U, the Hubbard manifold can be
+  ! smaller than the entire shell. With an active Hubbard_alpha_m,
+  ! the routine alpha_m_trace prints the sum over the occupied Hubbard
+  ! states
   IF ( .NOT. orbital_resolved ) &
-      ! in orbital-resolved DFT+U, the Hubbard manifold can be
-      ! smaller than the entire shell. With an active Hubbard_alpha_m,
-      ! the routine alpha_m_trace prints the sum over the occupied Hubbard
-      ! states
       WRITE( stdout, '(/5x,a,1x,f9.4)') 'Number of occupied Hubbard levels =', nsum
   !
   IF (rsrv.GT.0.d0) &
@@ -193,7 +193,7 @@ SUBROUTINE write_ns_nc
   USE io_global,         ONLY : stdout
   USE scf,               ONLY : rho
   USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, &
-                                Hubbard_U
+                                Hubbard_U, Hubbard_Um_nc, Hubbard_alpha_m_nc
   !
   IMPLICIT NONE
   !
@@ -211,7 +211,8 @@ SUBROUTINE write_ns_nc
      ! 
      nt = ityp (na)
      !
-     IF (Hubbard_U(nt) /= 0.d0 .OR. Hubbard_alpha(nt) /= 0.d0) THEN
+     IF (Hubbard_U(nt) /= 0.d0 .OR. Hubbard_alpha(nt) /= 0.d0 .OR. &
+         & ANY(Hubbard_Um_nc(:,nt) /= 0.d0) .OR. ANY(Hubbard_alpha_m_nc(:,nt) /= 0.d0) ) THEN
         !     
         ldim = 2 * Hubbard_l(nt) + 1
         !

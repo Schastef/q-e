@@ -2470,9 +2470,16 @@ CONTAINS
             ldim =  2*hu_l+1 ! Compute number of magnetic quantum orbitals
             !
             ! Set up array to store orbital-resolved DFT+U parameters
-            IF (is_um .OR. is_alpha_m) THEN   
-               ALLOCATE(hu_um(ldim,nspin))
-               ALLOCATE(hu_alpha_m(ldim,nspin))
+            IF (is_um .OR. is_alpha_m) THEN
+               IF (noncolin) THEN
+                  ! only need one dimension for noncollinear case
+                  ! retain the extra dimension of spin for compatibility
+                  ALLOCATE(hu_um(2*ldim,1))
+                  ALLOCATE(hu_alpha_m(2*ldim,1)) 
+               ELSE
+                  ALLOCATE(hu_um(ldim,nspin))
+                  ALLOCATE(hu_alpha_m(ldim,nspin))
+               ENDIF
                hu_alpha_m(:,:) = 0.0
                hu_um(:,:) = 0.0
             ENDIF
@@ -3002,10 +3009,13 @@ CONTAINS
             !     If so, store all those indices in a vector, which we later
             !     use to transfer the hu_um_temp into the actual Hubbard_Um array.
             neigvals = nfield - 3
-            IF ( neigvals > (nspin*ldim)) &
-               ! sanity check: there can't be more eigenvalues than nspin*(2l+1)
+            ! sanity check: there can't be more eigenvalues than 2*(2l+1)
+            IF ( neigvals > (2*ldim) ) THEN
+            ! ... or more than (2l+1) in the closed-shell case
+               IF ( nspin == 1 .AND. (.NOT. noncolin)) &
                CALL errore( 'card_hubbard', &
                'Too many target orbitals selected for orbital-resolved DFT+U', i )
+            ENDIF
             !
             ALLOCATE(target_indices(neigvals)) ! allocate a vector to store the eigenvalue indices
             !
@@ -3019,9 +3029,12 @@ CONTAINS
                IF (io_stat /= 0 )  CALL errore( 'card_hubbard', &
                      'Must use integer values to specify eigenvalue indices &
                          in orbital-resolved DFT+U.', i )
-               IF ( eigval_index < 1 .OR. eigval_index > (nspin*ldim) )  CALL errore( 'card_hubbard', &
+               IF ( eigval_index < 1 .OR. eigval_index > (2*ldim) )  CALL errore( 'card_hubbard', &
                      'The eigenvalues targeted by orbital-resolved U or ALPHA must range &
-                      &from 1 to nspin*(2*l+1)', i )
+                      &from 1 to 2*(2*l+1)', i )
+               IF ( (.NOT. noncolin) .AND. eigval_index > (nspin*ldim) )  CALL errore( 'card_hubbard', &
+                     'The eigenvalues targeted by orbital-resolved U or ALPHA cannot be larger &
+                      &than nspin*(2*l+1) in the colinear case.', i )
                !
                ! everything is alright: store the eigenvalue indices in the vector
                target_indices(field-3) = eigval_index
@@ -3030,8 +3043,10 @@ CONTAINS
             ! Assign the orbital-resolved Hubbard parameter to the
             ! temporary array using the vector of target eigvals
             DO j = 1, SIZE(target_indices)
-               IF ( target_indices(j) <= ldim ) THEN 
-                  ! In this case we are in the spin-up channel or nspin==1.
+               IF ( (target_indices(j) <= ldim) .OR. noncolin ) THEN 
+                  ! We are EITHER 1) in the spin-up channel, 2) nspin==1
+                  ! or 3) nspin==4 (noncolinear magnetism). In this case,
+                  ! we also want to store indices >ldim
                   IF ( is_um ) THEN
                      hu_um(target_indices(j),1) = hu_um_temp
                   ELSE
@@ -3075,22 +3090,24 @@ CONTAINS
                ENDIF
             ENDIF
          ELSEIF (is_um .OR. is_alpha_m) THEN
-            DO is = 1, nspin
-               DO m = 1, ldim
-                  IF ( ABS(hu_um(m,is)) > eps16 ) THEN 
+            IF (noncolin) THEN
+               DO m = 1, 2*ldim
+                  IF ( ABS(hu_um(m,1)) > eps16 ) THEN 
                      !
-                     IF ( ABS(Hubbard_Um(m,is,hu_nt)) < eps16 ) THEN
-                        ! make sure we're not overwriting values that were already set
-                        Hubbard_Um(m,is,hu_nt) = hu_um(m,is)
+                     ! make sure we're not overwriting values that were already set
+                     IF ( ABS(Hubbard_Um_nc(m,hu_nt)) < eps16 ) THEN
+                        !
+                        Hubbard_Um_nc(m,hu_nt) = hu_um(m,1)
                      ELSE
                         WRITE(stdout,'(/5x,"Problem in the HUBBARD card for U on line ",i5)') i
                         CALL errore( 'card_hubbard', &
                                  & 'A Hubbard U parameter for this eigenvalue index was already set.', i )
                      ENDIF
                   !
-                  ELSEIF ( ABS(hu_alpha_m(m,is)) > eps16 ) THEN
-                     IF ( ABS(Hubbard_alpha_m(m,is,hu_nt)) < eps16 ) THEN
-                        Hubbard_alpha_m(m,is,hu_nt) = hu_alpha_m(m,is)
+                  ELSEIF ( ABS(hu_alpha_m(m,1)) > eps16 ) THEN
+                     !
+                     IF ( ABS(Hubbard_alpha_m_nc(m,hu_nt)) < eps16 ) THEN
+                        Hubbard_alpha_m_nc(m,hu_nt) = hu_alpha_m(m,1)
                      ELSE
                         WRITE(stdout,'(/5x,"Problem in the HUBBARD card for ALPHA on line ",i5)') i
                         CALL errore( 'card_hubbard', &
@@ -3098,7 +3115,32 @@ CONTAINS
                      ENDIF
                   ENDIF
                ENDDO
-            ENDDO
+            ELSE !colinear or closed-shell case
+               DO is = 1, nspin
+                  DO m = 1, ldim
+                     IF ( ABS(hu_um(m,is)) > eps16 ) THEN 
+                        !
+                        IF ( ABS(Hubbard_Um(m,is,hu_nt)) < eps16 ) THEN
+                           ! make sure we're not overwriting values that were already set
+                           Hubbard_Um(m,is,hu_nt) = hu_um(m,is)
+                        ELSE
+                           WRITE(stdout,'(/5x,"Problem in the HUBBARD card for U on line ",i5)') i
+                           CALL errore( 'card_hubbard', &
+                                    & 'A Hubbard U parameter for this eigenvalue index was already set.', i )
+                        ENDIF
+                     !
+                     ELSEIF ( ABS(hu_alpha_m(m,is)) > eps16 ) THEN
+                        IF ( ABS(Hubbard_alpha_m(m,is,hu_nt)) < eps16 ) THEN
+                           Hubbard_alpha_m(m,is,hu_nt) = hu_alpha_m(m,is)
+                        ELSE
+                           WRITE(stdout,'(/5x,"Problem in the HUBBARD card for ALPHA on line ",i5)') i
+                           CALL errore( 'card_hubbard', &
+                                    & 'A Hubbard ALPHA parameter for this eigenvalue index was already set.', i )
+                        ENDIF
+                     ENDIF
+                  ENDDO
+               ENDDO
+            ENDIF
             DEALLOCATE(hu_um)
             DEALLOCATE(hu_alpha_m)
          !
@@ -3205,13 +3247,13 @@ CONTAINS
                     & 'Currently DFT+U+V does not support orbital-resolved Hubbard U parameters', i)
             IF (ANY(ABS(Hubbard_alpha_m(:,:,:))>eps16)) CALL errore('card_hubbard', &
                     & 'Currently DFT+U+V does not support orbital-resolved Hubbard ALPHA parameters', i)
-         ELSEIF (ANY(ABS(Hubbard_Um(:,:,:))>eps16) .OR. ANY(ABS(Hubbard_alpha_m(:,:,:))>eps16)) THEN
+            !
+         ELSEIF (ANY(ABS(Hubbard_Um(:,:,:))>eps16) .OR. ANY(ABS(Hubbard_alpha_m(:,:,:))>eps16) .OR. &
+            & ANY(ABS(Hubbard_Um_nc(:,:))>eps16) .OR. ANY(ABS(Hubbard_alpha_m_nc(:,:))>eps16)) THEN
             ! Orbital-resolved DFT+U
             lda_plus_u_kind = 0
             orbital_resolved = .true.
             !
-            IF (noncolin) CALL errore('card_hubbard', &
-                    & 'Currently, orbital-resolved DFT+U is not implemented with noncolin=.true.', i)
             IF (ANY(Hubbard_U(:)>eps16)) CALL errore('card_hubbard', &
                     & 'Cannot use shell-averaged Hubbard U parameters when using orbital-resolved DFT+U', i)
             IF (ANY(Hubbard_alpha(:)>eps16)) CALL errore('card_hubbard', &

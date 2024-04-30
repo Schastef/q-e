@@ -728,6 +728,7 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   USE cell_base,       ONLY : omega, tpiba2
   USE gvect,           ONLY : gg, gstart
   USE control_flags,   ONLY : gamma_only
+  USE noncollin_module,ONLY : noncolin
   USE paw_onecenter,   ONLY : paw_ddot
   USE mp_bands,        ONLY : intra_bgrp_comm
   USE mp,              ONLY : mp_sum
@@ -831,7 +832,11 @@ FUNCTION rho_ddot( rho1, rho2, gf, g0 )
   !
   IF (lda_plus_u ) THEN 
       IF ( orbital_resolved ) THEN
-         rho_ddot = rho_ddot + ns_ddot_um( rho1, rho2 )
+         IF ( noncolin ) THEN
+            rho_ddot = rho_ddot + ns_ddot_um_nc( rho1, rho2 )
+         ELSE
+            rho_ddot = rho_ddot + ns_ddot_um( rho1, rho2 )
+         ENDIF
       ELSE
          rho_ddot = rho_ddot + ns_ddot( rho1, rho2 )
       ENDIF
@@ -1100,15 +1105,9 @@ FUNCTION ns_ddot_um( rho1, rho2 )
       lambda1(:,:) = 0.D0
       lambda2(:,:) = 0.D0
       !
-      IF (nspin == 4 ) THEN
-         !!! FIXME: FOR NC orbital-resolved U, we need a different definition of lambda and vet
-         !CALL diag_ns_nc( ldim, rho1%ns_nc(1:2*ldim,1:ldim,:,na), lambda1(1:2*ldim), vet1(1:2*ldim,1:2*ldim) )
-         !CALL diag_ns_nc( ldim, rho2%ns_nc(1:2*ldim,1:ldim,:,na), lambda2(1:2*ldim), vet2(1:2*ldim,1:2*ldim) )
-      ELSE
-         CALL diag_ns( ldim, rho1%ns(1:ldim,1:ldim,:,na), lambda1(1:ldim,:), vet1(1:ldim,1:ldim,:) )
-         CALL diag_ns( ldim, rho2%ns(1:ldim,1:ldim,:,na), lambda2(1:ldim,:), vet2(1:ldim,1:ldim,:) )
-      ENDIF
       ! diagonalize old- and new occupation matrix
+      CALL diag_ns( ldim, rho1%ns(1:ldim,1:ldim,:,na), lambda1(1:ldim,:), vet1(1:ldim,1:ldim,:) )
+      CALL diag_ns( ldim, rho2%ns(1:ldim,1:ldim,:,na), lambda2(1:ldim,:), vet2(1:ldim,1:ldim,:) )
       ! 
       DO is = 1, nspin
          ! order eigenvectors
@@ -1129,7 +1128,6 @@ FUNCTION ns_ddot_um( rho1, rho2 )
                index1 = FINDLOC(order1,m,dim=1)
                index2 = FINDLOC(order2,m,dim=1)
                !
-               ! **Check if the following also works for the NC case**
                ns_ddot_um = ns_ddot_um + 0.5D0 * Hubbard_Um(m,is,nt) * &
                       lambda1(index1,is) * lambda2(index2,is)
                !
@@ -1156,6 +1154,99 @@ FUNCTION ns_ddot_um( rho1, rho2 )
 END FUNCTION ns_ddot_um
 !
 !----------------------------------------------------------------------------
+!----------------------------------------------------------------------------
+FUNCTION ns_ddot_um_nc( rho1, rho2 )
+   !---------------------------------------------------------------------------
+   !! Calculates \(U/2 \sum_i \text{ns1}(i)\ \text{ns2}(i)\) used as an estimate
+   !! of the self-consistency error on the orbital-resolved DFT+U correction to the energy.
+   !
+   USE kinds,     ONLY : DP
+   USE ldaU,      ONLY : Hubbard_l, ldim_back, &
+                         lda_plus_u_kind, is_hubbard, eigenvecs_ref, &
+                         Hubbard_lmax, Hubbard_Um_nc, apply_um
+   USE ions_base, ONLY : nat, ityp
+   USE constants, ONLY : eps16, RYTOEV
+   USE io_global, ONLY : stdout
+   !
+   IMPLICIT NONE  
+   !
+   TYPE(mix_type), INTENT(IN) :: rho1
+   !! first Hubbard ns
+   TYPE(mix_type), INTENT(IN) :: rho2
+   !! second Hubbard ns
+   REAL(DP) :: ns_ddot_um_nc
+   !! output: see function comments
+   !
+   ! ... local variables
+   !
+   COMPLEX(DP)  :: vet1(2*(2*Hubbard_lmax+1),2*(2*Hubbard_lmax+1))
+   COMPLEX(DP)  :: vet2(2*(2*Hubbard_lmax+1),2*(2*Hubbard_lmax+1))
+   INTEGER      :: order1(2*(2*Hubbard_lmax+1)), order2(2*(2*Hubbard_lmax+1))
+   INTEGER      :: na, ldim, is, m, index1, index2
+   REAL(DP)     :: lambda1(2*(2*Hubbard_lmax+1)), lambda2(2*(2*Hubbard_lmax+1))
+   !
+   ns_ddot_um_nc = 0.D0
+   !
+   IF (.NOT. apply_um) RETURN
+   ! if apply_um is still .FALSE.
+   ! do not (yet) apply Hubbard U corrections.
+   !
+   DO na = 1, nat
+     nt = ityp(na)
+     IF ( is_hubbard(nt) ) THEN
+       !
+       ldim = 2 * Hubbard_l(nt) + 1
+       !
+       vet1(:,:) = CMPLX(0.D0,0.D0, kind=dp)
+       vet2(:,:) = CMPLX(0.D0,0.D0, kind=dp)
+       lambda1(:) = 0.D0
+       lambda2(:) = 0.D0
+       !
+       ! diagonalize old- and new occupation matrix
+       CALL diag_ns_nc( ldim, rho1%ns(1:ldim,1:ldim,:,na), lambda1(1:2*ldim), vet1(1:2*ldim,1:2*ldim) )
+       CALL diag_ns_nc( ldim, rho2%ns(1:ldim,1:ldim,:,na), lambda2(1:2*ldim), vet2(1:2*ldim,1:2*ldim) )
+       ! 
+       ! order eigenvectors
+       order1(:) = 0
+       order2(:) = 0
+       CALL order_eigenvecs( order1(1:2*ldim), vet1(1:2*ldim,1:2*ldim), &
+                               eigenvecs_ref(1:2*ldim,1:2*ldim,1,na), 2*ldim )
+       CALL order_eigenvecs( order2(1:2*ldim), vet2(1:2*ldim,1:2*ldim), &
+                               eigenvecs_ref(1:2*ldim,1:2*ldim,1,na), 2*ldim )
+       !
+       IF ( ANY(ABS(Hubbard_Um_nc(:,nt)) .GT. eps16) ) THEN
+          ! compute U(m)/2*SUM(ns1*ns2)
+          DO m = 1, 2*ldim
+             !
+             ! find the index where the order vector is
+             ! equal to m to apply the same Hubbard_Um
+             ! to the same eigenstates 
+             index1 = FINDLOC(order1,m,dim=1)
+             index2 = FINDLOC(order2,m,dim=1)
+             !
+             ns_ddot_um_nc = ns_ddot_um_nc + 0.5D0 * Hubbard_Um_nc(m,nt) * &
+                           lambda1(index1) * lambda2(index2)
+             !
+             ! This can be removed once the merge request is approved
+#if defined(__DEBUG)
+             WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " , index2:", i1)') m, is,index1,index2
+             WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ", f7.4,", ns_ddot_um_nc: ", f7.4)') &
+                            Hubbard_Um_nc(m,nt)*RYTOEV,lambda1(index1),lambda2(index2),ns_ddot_um_nc
+#endif
+          !
+          ENDDO
+       !
+       ENDIF
+      !
+      ENDIF
+   !
+   ENDDO
+   !
+RETURN
+   !
+ END FUNCTION ns_ddot_um_nc
+ !
+ !----------------------------------------------------------------------------
 FUNCTION local_tf_ddot( rho1, rho2, ngm0, g0 )
   !----------------------------------------------------------------------------
   !! Calculates \(4\pi/G^2\ \rho_1(-G)\ \rho_2(G) = V1_\text{Hartree}(-G)\ \rho_2(G)\)

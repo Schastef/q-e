@@ -31,12 +31,14 @@ MODULE ldaU
   !! the rotations in spin space for all symmetries
   REAL(DP) :: eth
   !! the Hubbard contribution to the energy
-  REAL(DP) :: Hubbard_U(ntypx) !!! Change to 4 for NC implementation
+  REAL(DP) :: Hubbard_U(ntypx)
   !! the Hubbard U (main Hubbard channel)
   REAL(DP) :: Hubbard_U2(ntypx)
   !! the Hubbard U (second (and third) Hubbard channel)
   REAL(DP) :: Hubbard_Um(lqmax,2,ntypx)
   !! the (spin-)orbital-resolved Hubbard U
+  REAL(DP) :: Hubbard_Um_nc(2*lqmax,ntypx)
+  !! the (spin-)orbital-resolved Hubbard U (noncolinear case)
   REAL(DP) :: Hubbard_J0(ntypx)
   !! the Hubbard J, in simplified DFT+U
   REAL(DP) :: Hubbard_J(3,ntypx)
@@ -48,8 +50,10 @@ MODULE ldaU
   !! the Hubbard alpha (used to calculate U)
   REAL(DP) :: Hubbard_alpha_back(ntypx)
   !! the Hubbard alpha (used to calculate U on background states)
-  REAL(DP) :: Hubbard_alpha_m(lqmax,2,ntypx) !!! Change to 4 for NC implementation
-  !! the Hubbard alpha used to calculate orbital-resolved U(m,s) parameters
+  REAL(DP) :: Hubbard_alpha_m(lqmax,2,ntypx)
+  !! the Hubbard alpha used to calculate orbital-resolved U parameters
+  REAL(DP) :: Hubbard_alpha_m_nc(2*lqmax,ntypx)
+  !! the Hubbard alpha used to calculate orbital-resolved U parameters (noncolinear case)
   REAL(DP) :: Hubbard_beta(ntypx)
   !! the Hubbard beta (used to calculate J0)
   REAL(DP) :: Hubbard_occ(ntypx,3)
@@ -261,20 +265,24 @@ CONTAINS
        !
        DO nt = 1, ntyp
           !
-          is_hubbard(nt) = Hubbard_U(nt) /= 0.0_DP          .OR. &
-                           Hubbard_U2(nt)/= 0.0_dp          .OR. &
-                           ANY(Hubbard_Um(:,:,nt) /= 0.0_DP).OR. &
-                           Hubbard_alpha(nt) /= 0.0_DP      .OR. &
-                           Hubbard_alpha_back(nt) /= 0.0_dp .OR. &
-                           ANY(Hubbard_alpha_m(:,:,nt) /= 0.0_DP) .OR. &
-                           Hubbard_J0(nt) /= 0.0_DP         .OR. &
+          is_hubbard(nt) = Hubbard_U(nt) /= 0.0_DP                   .OR. &
+                           Hubbard_U2(nt)/= 0.0_dp                   .OR. &
+                           ANY(Hubbard_Um(:,:,nt) /= 0.0_DP)         .OR. &
+                           ANY(Hubbard_Um_nc(:,nt) /= 0.0_DP)        .OR. &
+                           Hubbard_alpha(nt) /= 0.0_DP               .OR. &
+                           Hubbard_alpha_back(nt) /= 0.0_dp          .OR. &
+                           ANY(Hubbard_alpha_m(:,:,nt) /= 0.0_DP)    .OR. &
+                           ANY(Hubbard_alpha_m_nc(:,nt) /= 0.0_DP)   .OR. &
+                           Hubbard_J0(nt) /= 0.0_DP                  .OR. &
                            Hubbard_beta(nt) /= 0.0_DP  
           !
           is_hubbard_back(nt) = Hubbard_U2(nt)/= 0.0_dp     .OR. &
                                 Hubbard_alpha_back(nt) /= 0.0_dp                 
           !
-          orbital_resolved =  ANY(Hubbard_Um(:,:,:) /= 0.0_DP).OR. &
-                              ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP)
+          orbital_resolved =  ANY(Hubbard_Um(:,:,:) /= 0.0_DP)       .OR. &
+                              ANY(Hubbard_Um_nc(:,nt) /= 0.0_DP)     .OR. &
+                              ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP)  .OR. &
+                              ANY(Hubbard_alpha_m_nc(:,nt) /= 0.0_DP)
           !
           IF ( is_hubbard(nt) ) THEN
              ! Hubbard_l is read from the input file (HUBBARD card)
@@ -315,10 +323,19 @@ CONTAINS
        ENDDO !nt
        !
        IF (orbital_resolved) THEN
-          ALLOCATE(lambda_ns(ldmx,nspin,nat))
-          ALLOCATE(eigenvecs_ref(ldmx,ldmx,nspin,nat))
-          lambda_ns(:,:,:) = 0.0_DP
-          eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)  
+          IF (noncolin) THEN
+             ! need to store eigenvectors and eigenvalues in a 2*ldim array
+             ! retain extra-spin dimension for compatibility
+             ALLOCATE(lambda_ns(2*ldmx,1,nat))
+             ALLOCATE(eigenvecs_ref(2*ldmx,2*ldmx,1,nat))
+             lambda_ns(:,:,:) = 0.0_DP
+             eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)
+          ELSE
+             ALLOCATE(lambda_ns(ldmx,nspin,nat))
+             ALLOCATE(eigenvecs_ref(ldmx,ldmx,nspin,nat))
+             lambda_ns(:,:,:) = 0.0_DP
+             eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)
+          ENDIF
        ENDIF
        !
        IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) .OR. ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP) ) THEN

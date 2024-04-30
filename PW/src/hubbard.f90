@@ -16,7 +16,7 @@ SUBROUTINE hub_summary()
                                    Hubbard_beta, Hubbard_alpha_back, is_hubbard_back,  &
                                    Hubbard_J, Hubbard_l, Hubbard_n, Hubbard_Um, &
                                    lda_plus_u, Hubbard_alpha_m, hub_pot_fix, apply_um, &
-                                   orbital_resolved
+                                   orbital_resolved, Hubbard_Um_nc, Hubbard_alpha_m_nc
     USE lsda_mod,           ONLY : nspin 
     USE noncollin_module,   ONLY : lspinorb
     USE ions_base,          ONLY : ntyp => nsp
@@ -29,8 +29,8 @@ SUBROUTINE hub_summary()
     INTEGER :: nt, is, ldim, m1
     !
     WRITE(stdout,'(5x,a)') 'Hubbard projectors: ' // TRIM(Hubbard_projectors)
-    IF (lda_plus_u_kind == 0) THEN
-      IF (orbital_resolved) CONTINUE !For orbital-resolved DFT+U, printing see below!
+    IF (lda_plus_u_kind == 0 .AND. (.NOT. orbital_resolved)) THEN
+       !For orbital-resolved DFT+U, printing see below!
        WRITE( stdout, '(5x,"Hubbard parameters of DFT+U (Dudarev formulation) in eV:")')
        DO nt = 1, ntyp
           IF (is_hubbard(nt)) THEN
@@ -114,6 +114,26 @@ SUBROUTINE hub_summary()
                      WRITE( stdout,'(5x,"spin-channel ",i2,": ", 8f8.4)'), &
                               is,(Hubbard_alpha_m(m1,is,nt)*rytoev, m1=1, ldim)
                   ENDDO
+               ENDIF
+               !
+               IF (ANY(ABS(Hubbard_Um_nc(:,nt)) .GT. eps16)) THEN
+                  WRITE(stdout,'(5x,a,i1,a)')  &
+                     'U' // '(' // TRIM(atm(nt)) // '-', Hubbard_n(nt), &
+                     l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
+                  !
+                  ldim = 2*Hubbard_l(nt)+1
+                  WRITE( stdout,'(5x,15f8.4)'), &
+                           (Hubbard_Um_nc(m1,nt)*rytoev, m1=1, 2*ldim)
+               ENDIF
+               !
+               IF (ANY(ABS(Hubbard_alpha_m_nc(:,nt)) .GT. eps16)) THEN
+                  WRITE(stdout,'(5x,a,i1,a)')  &
+                     'ALPHA' // '(' // TRIM(atm(nt)) // '-', Hubbard_n(nt), &
+                     l_to_spdf(Hubbard_l(nt),.FALSE.) // ')'
+                  !
+                  ldim = 2*Hubbard_l(nt)+1
+                  WRITE( stdout,'(5x,15f8.4)'), &
+                           (Hubbard_alpha_m_nc(m1,nt)*rytoev, m1=1, 2*ldim)
                ENDIF
          ENDIF
       ENDDO
@@ -390,12 +410,11 @@ SUBROUTINE diag_ns_nc( ldim, ns_nc, lambda, eigenvecs_current )
    USE kinds,                ONLY : DP
    USE lsda_mod,             ONLY : nspin
    USE io_global,            ONLY : stdout
-   USE noncollin_module,     ONLY : npol
    IMPLICIT NONE
    !
    INTEGER, INTENT(IN)        :: ldim
    !! Number of magnetic quantum orbitals (2l+1)
-   REAL(DP), INTENT(IN)       :: ns_nc(ldim,ldim,4)
+   COMPLEX(DP), INTENT(IN)       :: ns_nc(ldim,ldim,4)
    !! Occupation matrix (undiagonalized)
    REAL(DP), INTENT(OUT)      :: lambda(2*ldim)
    !! Occupation eigenvalues
@@ -408,7 +427,6 @@ SUBROUTINE diag_ns_nc( ldim, ns_nc, lambda, eigenvecs_current )
    INTEGER                    :: m1, m2
    !
    !
-   CALL errore( 'diag_ns_nc', 'Noncollinear orbital-resolved DFT+U is not yet implemented', 1 )
    f(:,:) = CMPLX(0.d0,0.d0, kind=dp)
    eigenvecs_current(:,:) = CMPLX(0.d0,0.d0, kind=dp)
    lambda(:) = 0.d0
