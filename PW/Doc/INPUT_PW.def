@@ -128,15 +128,16 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
             [ J0 label(N)-manifold(N) j0_val(N) ]
               V  label(N)-manifold(N) label(M)-manifold(M) N M v_val(N,M)
           if (DFT+U (orbital-resolved))
-              U     label(1)-shell(1) u_val(1)      eigenstate(1) [... eigenstate(2l+1)] 
-            [ ALPHA label(1)-shell(1) alpha_val(1)  eigenstate(1) [... eigenstate(2l+1)]  ]
+              U     label(1)-shell(1) u_val(1)      eigenstate(1) [... eigenstate(4l+2)] 
+            [ ALPHA label(1)-shell(1) alpha_val(1)  eigenstate(1) [... eigenstate(4l+2)]  ]
               .....
-              U     label(n)-shell(n) u_val(n)      eigenstate(n) [... eigenstate(2l+1)]  
-            [ ALPHA label(n)-shell(n) alpha_val(n)  eigenstate(n) [... eigenstate(2l+1)]  ]
+              U     label(n)-shell(n) u_val(n)      eigenstate(n) [... eigenstate(4l+2)]  
+            [ ALPHA label(n)-shell(n) alpha_val(n)  eigenstate(n) [... eigenstate(4l+2)]  ]
         All Hubbard parameters must be specified in eV.
         manifold  = 3d, 2p, 4f...
         shell  = 3d, 2p, 4f...
         paramType = U, J, B, E2, or E3
+        eigenstate = 1, 2, 3, ..., 10 (d-shell)
         Check Doc/Hubbard_input.pdf for more details. ]
     }
 
@@ -4647,7 +4648,7 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
                                 @i shell         = specs of the nl-subshell (e.g., 3d, 2p...)
                                 @i u_val         = value of the @i U parameter (in eV)
                                 @i eigenstate(m) = index/indices of the m-th eigenstate(s) belonging to the @i shell
-                                                that will be targeted by @b U corrections (see below)
+                                                   that will be targeted by @b U corrections (see below)
                             }
                             info {
                                 @b Syntax of the @i eigenstate parameter:
@@ -4655,8 +4656,8 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
                                 @b CASE ( @ref nspin == 1 ):
                                     Provide one up to 2l+1 (e.g., 5 for a d-shell) eigenstate indices varying
                                     between 1 and 2l+1. 
-                                    These values correspond to the m-th eigenstate(s) of the @i shell, to 
-                                    be targeted by Hubbard U corrections (see PW/examples/example15).
+                                    These values correspond to the m-th eigenstate(s) of the @i shell occupancy 
+                                    matrix, to be targeted by Hubbard U corrections (see PW/examples/example15).
 
                                     @b Example:
                                         HUBBARD (ortho-atomic)
@@ -4666,14 +4667,25 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
                                 @b CASE ( @ref nspin == 2 ):
                                     Provide one up to 2*(2l+1) (e.g., 10 for a d-shell) eigenstate indices varying
                                     between 1 and 2*(2l+1). These values correspond to the m-th eigenstate(s) of
-                                    the @i shell, to be targeted by Hubbard U corrections.
+                                    the @i shell collinear occupancy matrix, to be targeted by Hubbard U corrections.
                                     Indices from 1 to 2l+1 target spin-up eigenstates, while those from (2l+2)
                                     to 2*(2l+1) target the  spin-down ones (see PW/examples/example16).
 
                                     @b Example:
                                         HUBBARD (ortho-atomic)
                                         U Mn-3d 4.70  3 4 5 8 9 10
-                                        U Ni-3d 3.50  1 2 6 7    
+                                        U Ni-3d 3.50  1 2 6 7
+
+                                @b CASE ( @ref noncolin = .true. ):
+                                    Provide one up to 2*(2l+1) (e.g., 10 for a d-shell) eigenstate indices varying
+                                    between 1 and 2*(2l+1). These values correspond to the m-th eigenstate(s) of
+                                    the noncollinear occupancy matrix of the @i shell, to be targeted by Hubbard U
+                                    corrections.
+
+                                    @b Example:
+                                        HUBBARD (ortho-atomic)
+                                        U Mn-3d 4.70  3 4 5 8 9 10
+                                        U Ni-3d 3.50  1 2 6 7  
                             }                                   
                         }
                     }
@@ -4699,7 +4711,8 @@ input_description -distribution {Quantum ESPRESSO} -package PWscf -program pw.x 
                                     @i shell         = specs of the nl-subshell (e.g., 3d, 2p...)
                                     @i alpha_val     = value of the @i ALPHA parameter (in eV)
                                     @i eigenstate(m) = index/indices of the m-th eigenstate(s) belonging to the @i shell
-                                                    that will be targeted by @b ALPHA (see definition above)
+                                                       that will be targeted by @b ALPHA (same syntax as for orbital-resolved
+                                                       Hubbard U)
 
                                     @b Example:
                                         HUBBARD (ortho-atomic)

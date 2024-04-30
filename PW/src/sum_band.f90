@@ -144,15 +144,6 @@ SUBROUTINE sum_band()
           CALL new_nsg() 
       ENDIF
        !
-    ELSEIF (lda_plus_u_kind==3) THEN
-       !
-       IF (noncolin) THEN
-         CALL errore('sum_band', &
-          & 'noncollinear orbital-resolved DFT+U is not implemented',1)  
-       ELSE
-          CALL new_ns( rho%ns )
-       ENDIF
-       !
     ENDIF
   ENDIF
 #if defined (__OSCDFT)

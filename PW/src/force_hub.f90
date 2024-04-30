@@ -82,7 +82,7 @@ SUBROUTINE force_hub( forceh )
    IF (ANY(Hubbard_J(:,:)>eps16)) CALL errore( "force_hub", &
                    " forces in the DFT+U+J scheme are not implemented", 1 )
    !
-   IF (lda_plus_u_kind==0 .OR. lda_plus_u_kind==3) THEN
+   IF (lda_plus_u_kind==0) THEN
       ! ... DFT+U
       lhubb = .FALSE.
       ldim = 2*Hubbard_lmax + 1
@@ -191,7 +191,7 @@ SUBROUTINE force_hub( forceh )
          !
          ijkb0 = ofsbeta(alpha) ! positions of beta functions for atom alpha
          !
-         IF (lda_plus_u_kind==0 .OR. lda_plus_u_kind==3) THEN
+         IF (lda_plus_u_kind==0) THEN
             !
             DO ipol = 1, 3  ! forces are calculated for coordinate ipol ...
                !
@@ -344,7 +344,7 @@ SUBROUTINE force_hub( forceh )
    !
    CALL deallocate_bec_type_acc( proj )
    !
-   IF (lda_plus_u_kind.EQ.0 .OR. lda_plus_u_kind .EQ. 3) THEN
+   IF (lda_plus_u_kind.EQ.0) THEN
       IF (noncolin) THEN
          DEALLOCATE(dns_nc)
       ELSE        
@@ -1632,7 +1632,7 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
          ENDIF
          !$acc parallel loop
          DO ig = 1, npw
-            IF (lda_plus_u_kind==0 .OR. lda_plus_u_kind==3) THEN
+            IF (lda_plus_u_kind==0) THEN
                gvec = g(ipol,igk_k(ig,ik)) * tpiba
             ELSEIF (lda_plus_u_kind==2) THEN
                gvec = (g(ipol,igk_k(ig,ik)) + xki) * tpiba

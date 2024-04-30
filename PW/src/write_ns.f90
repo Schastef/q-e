@@ -17,7 +17,8 @@ SUBROUTINE write_ns
   USE io_global,  ONLY : stdout
   USE scf,        ONLY : rho
   USE ldaU,       ONLY : Hubbard_l, ldim_u, lda_plus_u_kind, is_hubbard, &
-                         is_hubbard_back, ldim_back, reserv, reserv_back
+                         is_hubbard_back, ldim_back, reserv, reserv_back, &
+                         orbital_resolved
   !
   IMPLICIT NONE
   !
@@ -166,12 +167,11 @@ SUBROUTINE write_ns
   !
   IF (nspin==1) nsum = 2.d0 * nsum 
   !
-  IF ( lda_plus_u_kind.NE.3 ) &
-      ! in orbital-resolved DFT+U, the Hubbard manifold can be
-      ! smaller than the entire shell. With an active Hubbard_alpha_m,
-      ! the routine alpha_m_trace prints the sum over the occupied Hubbard
-      ! states
-      !s
+  ! in orbital-resolved DFT+U, the Hubbard manifold can be
+  ! smaller than the entire shell. With an active Hubbard_alpha_m,
+  ! the routine alpha_m_trace prints the sum over the occupied Hubbard
+  ! states
+  IF ( .NOT. orbital_resolved ) &
       WRITE( stdout, '(/5x,a,1x,f9.4)') 'Number of occupied Hubbard levels =', nsum
   !
   IF (rsrv.GT.0.d0) &
@@ -192,8 +192,8 @@ SUBROUTINE write_ns_nc
   USE noncollin_module,  ONLY : npol
   USE io_global,         ONLY : stdout
   USE scf,               ONLY : rho
-  USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, &
-                                Hubbard_U
+  USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, Hubbard_U, &
+                                Hubbard_Um_nc, Hubbard_alpha_m_nc
   !
   IMPLICIT NONE
   !
@@ -211,7 +211,8 @@ SUBROUTINE write_ns_nc
      ! 
      nt = ityp (na)
      !
-     IF (Hubbard_U(nt) /= 0.d0 .OR. Hubbard_alpha(nt) /= 0.d0) THEN
+     IF (Hubbard_U(nt) /= 0.d0 .OR. ANY(Hubbard_Um_nc(:,nt) /= 0.d0) .OR. &
+       & Hubbard_alpha(nt) /= 0.d0 .OR. ANY(Hubbard_alpha_m_nc(:,nt) /= 0.d0) ) THEN
         !     
         ldim = 2 * Hubbard_l(nt) + 1
         !
@@ -797,7 +798,8 @@ SUBROUTINE read_ns()
   USE mp_images,          ONLY : intra_image_comm
   USE io_global,          ONLY : ionode, ionode_id
   USE scf,                ONLY : rho, v
-  USE ldaU,               ONLY : lda_plus_u_kind, nsg, v_nsg, hub_back
+  USE ldaU,               ONLY : lda_plus_u_kind, nsg, v_nsg, &
+                                 hub_back, orbital_resolved
   USE noncollin_module,   ONLY : noncolin
   USE io_files,           ONLY : restart_dir
   !
@@ -825,13 +827,6 @@ SUBROUTINE read_ns()
         ENDIF
      ELSEIF (lda_plus_u_kind.EQ.2) THEN
         READ( UNIT = iunocc, FMT = * , iostat = ierr) nsg
-     ELSEIF (lda_plus_u_kind.EQ.3) THEN
-        IF (noncolin) THEN
-           CALL errore('read_ns', &
-           & 'noncollinear orbital-resolved DFT+U is not implemented',1)
-        ELSE
-           READ( UNIT = iunocc, FMT = *, iostat = ierr ) rho%ns
-        ENDIF
      ENDIF
      CLOSE(UNIT=iunocc,STATUS='keep')
      !
@@ -852,13 +847,6 @@ SUBROUTINE read_ns()
         ENDIF
      ELSEIF (lda_plus_u_kind.EQ.2) THEN
         nsg(:,:,:,:,:) = (0.d0, 0.d0)
-     ELSEIF (lda_plus_u_kind.EQ.3) THEN
-        IF (noncolin) THEN
-           CALL errore('read_ns', &
-           & 'noncollinear orbital-resolved DFT+U is not implemented',1) 
-        ELSE
-           rho%ns(:,:,:,:) = 0.D0
-        ENDIF
      ENDIF
      !
   ENDIF
@@ -868,10 +856,18 @@ SUBROUTINE read_ns()
   IF (lda_plus_u_kind.EQ.0) THEN
      IF (noncolin) THEN
         CALL mp_bcast(rho%ns_nc, ionode_id, intra_image_comm)
-        CALL v_hubbard_nc (rho%ns_nc, v%ns_nc, eth) 
+        IF (orbital_resolved) THEN
+           CALL v_hubbard_resolved_nc (rho%ns_nc, v%ns_nc, eth) 
+        ELSE
+           CALL v_hubbard_nc (rho%ns_nc, v%ns_nc, eth)
+        ENDIF
      ELSE
         CALL mp_bcast(rho%ns, ionode_id, intra_image_comm)
-        CALL v_hubbard (rho%ns, v%ns, eth)
+        IF (orbital_resolved) THEN
+           CALL v_hubbard_resolved (rho%ns, v%ns, eth)
+        ELSE
+           CALL v_hubbard (rho%ns, v%ns, eth)
+        ENDIF
      ENDIF
      IF (hub_back) THEN
         CALL mp_bcast(rho%nsb, ionode_id, intra_image_comm)
@@ -892,14 +888,6 @@ SUBROUTINE read_ns()
         CALL v_hubbard_extended_nc (nsg, v_nsg, eth)
      ELSE
         CALL v_hubbard_extended (nsg, v_nsg, eth)
-     ENDIF
-  ELSEIF (lda_plus_u_kind.EQ.3) THEN
-     IF (noncolin) THEN
-        CALL errore('read_ns', &
-          & 'noncollinear orbital-resolved DFT+U is not implemented',1) 
-     ELSE
-        CALL mp_bcast(rho%ns, ionode_id, intra_image_comm)
-        CALL v_hubbard_resolved (rho%ns, v%ns, eth)
      ENDIF
   ENDIF
   !
