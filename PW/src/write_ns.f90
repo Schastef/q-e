@@ -192,8 +192,8 @@ SUBROUTINE write_ns_nc
   USE noncollin_module,  ONLY : npol
   USE io_global,         ONLY : stdout
   USE scf,               ONLY : rho
-  USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, &
-                                Hubbard_U, Hubbard_Um_nc, Hubbard_alpha_m_nc
+  USE ldaU,              ONLY : Hubbard_l, Hubbard_alpha, Hubbard_U, &
+                                Hubbard_Um_nc, Hubbard_alpha_m_nc
   !
   IMPLICIT NONE
   !
@@ -211,8 +211,8 @@ SUBROUTINE write_ns_nc
      ! 
      nt = ityp (na)
      !
-     IF (Hubbard_U(nt) /= 0.d0 .OR. Hubbard_alpha(nt) /= 0.d0 .OR. &
-         & ANY(Hubbard_Um_nc(:,nt) /= 0.d0) .OR. ANY(Hubbard_alpha_m_nc(:,nt) /= 0.d0) ) THEN
+     IF (Hubbard_U(nt) /= 0.d0 .OR. ANY(Hubbard_Um_nc(:,nt) /= 0.d0) .OR. &
+       & Hubbard_alpha(nt) /= 0.d0 .OR. ANY(Hubbard_alpha_m_nc(:,nt) /= 0.d0) ) THEN
         !     
         ldim = 2 * Hubbard_l(nt) + 1
         !
@@ -798,7 +798,8 @@ SUBROUTINE read_ns()
   USE mp_images,          ONLY : intra_image_comm
   USE io_global,          ONLY : ionode, ionode_id
   USE scf,                ONLY : rho, v
-  USE ldaU,               ONLY : lda_plus_u_kind, nsg, v_nsg, hub_back, orbital_resolved
+  USE ldaU,               ONLY : lda_plus_u_kind, nsg, v_nsg, &
+                                 hub_back, orbital_resolved
   USE noncollin_module,   ONLY : noncolin
   USE io_files,           ONLY : restart_dir
   !

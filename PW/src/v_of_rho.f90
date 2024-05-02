@@ -20,7 +20,7 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
   USE noncollin_module, ONLY : noncolin, nspin_lsda
   USE ions_base,        ONLY : nat, tau
   USE ldaU,             ONLY : lda_plus_u, lda_plus_u_kind, ldmx_b, &
-                               nsg, v_nsg, apply_um, orbital_resolved
+                               nsg, v_nsg, apply_U, orbital_resolved
   USE xc_lib,           ONLY : xclib_dft_is
   USE scf,              ONLY : scf_type
   USE cell_base,        ONLY : alat
@@ -125,7 +125,6 @@ SUBROUTINE v_of_rho( rho, rho_core, rhog_core, &
         ELSE
            CALL v_hubbard_extended (nsg, v_nsg, eth)
         ENDIF
-        !
      ELSE
         !
         CALL errore('v_of_rho', 'Not allowed value of lda_plus_u_kind',1)
@@ -1732,7 +1731,7 @@ USE kinds,                ONLY : DP
 USE ions_base,            ONLY : nat, ityp
 USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_Um, &
                                  Hubbard_alpha_m, lambda_ns, &
-                                 eigenvecs_ref, apply_um, hub_pot_fix
+                                 eigenvecs_ref, apply_U, hub_pot_fix
 USE lsda_mod,             ONLY : nspin
 USE constants,            ONLY : eps16, RYTOEV
 USE control_flags,        ONLY : iverbosity, dfpt_hub
@@ -1749,13 +1748,15 @@ REAL(DP), INTENT(OUT) :: eth
 !
 !  ... local variables
 !
+! Hubbard potential in the diagonal representation
+REAL(DP)                 :: v_hub_diag(2*Hubbard_lmax+1,nspin,nat), temp
 REAL(DP)                 :: effU, effalpha
-COMPLEX(DP)              :: v_hub_diag(2*Hubbard_lmax+1,nspin,nat), temp
+! eigenvectors of the ns occupation matrix in the current iteration
 COMPLEX(DP)              :: eigenvecs_current(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin)
-!! eigenvectors of the ns occupation matrix in the current iteration
 !
 INTEGER                  :: is, na, nt, m1, m2, m3, ldim, m_order
-INTEGER                  :: order(2*Hubbard_lmax+1,nspin)
+! the ordering vector for the orbital-tracking routine
+INTEGER                  :: order(2*Hubbard_lmax+1)
 !
 !
 eth    = 0.d0
@@ -1764,14 +1765,13 @@ lambda_ns(:,:,:) = 0.d0
 !
 v_hub(:,:,:,:) = 0.d0
 v_hub_diag(:,:,:) = 0.d0 
-! Hubbard potential in the diagonal representation
 !
-IF ( .NOT. apply_um ) RETURN
+IF ( .NOT. apply_U ) RETURN
 ! Do not apply corrections before the eigenstates have stabilized
 ! The eigenstates are considered stable a) when starting from a
 ! converged charge density or b) when the treshold of iterative 
-! diagonalization gets small enough (typically within 3-6 iterations)
-! this is checked in electrons.f90
+! diagonalization gets small enough (typically within 3-6 iterations).
+! This is controlled by electrons.f90.
 ! 
 DO na = 1, nat
    !
@@ -1792,15 +1792,15 @@ DO na = 1, nat
       DO is = 1, nspin
          !
          ! sort eigenvectors with respect to the (reference) order established in eigvecs_first
-         order(:,is) = 0
-         CALL order_eigenvecs( order(1:ldim,is), eigenvecs_current(1:ldim,1:ldim,is), &
+         order(:) = 0
+         CALL order_eigenvecs( order(1:ldim), eigenvecs_current(1:ldim,1:ldim,is), &
                                  eigenvecs_ref(1:ldim,1:ldim,is,na), ldim )
          !
          DO m1 = 1, ldim
             !
             ! calculate Hubbard potential and -energy
             ! using the eigenvalues and their ordering
-            m_order = order(m1,is)
+            m_order = order(m1)
             effU = Hubbard_Um(m_order,is,nt)
             effalpha = Hubbard_alpha_m(m_order,is,nt)
             !
@@ -1880,7 +1880,7 @@ USE kinds,                ONLY : DP
 USE ions_base,            ONLY : nat, ityp
 USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_Um_nc, &
                                  Hubbard_alpha_m_nc, lambda_ns, &
-                                 eigenvecs_ref, apply_um, hub_pot_fix
+                                 eigenvecs_ref, apply_U, hub_pot_fix
 USE lsda_mod,             ONLY : nspin
 USE constants,            ONLY : eps16, RYTOEV
 USE control_flags,        ONLY : iverbosity, dfpt_hub
@@ -1889,7 +1889,7 @@ USE io_global,            ONLY : stdout
 IMPLICIT NONE
 !
 COMPLEX(DP), INTENT(IN) :: ns(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat)
-!! occupation matrixs
+!! occupation matrix
 COMPLEX(DP), INTENT(OUT):: v_hub(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat)
 !! Hubbard potential
 REAL(DP), INTENT(OUT) :: eth
@@ -1898,14 +1898,13 @@ REAL(DP), INTENT(OUT) :: eth
 !  ... local variables
 !
 REAL(DP)                 :: effU, effalpha
-COMPLEX(DP)              :: v_hub_diag(2*(2*Hubbard_lmax+1),nat), temp
-COMPLEX(DP)              :: v_hub_temp(2*(2*Hubbard_lmax+1),2*(2*Hubbard_lmax+1))
-COMPLEX(DP)              :: eigenvecs_current(2*(2*Hubbard_lmax+1),2*(2*Hubbard_lmax+1))
-!! eigenvectors of the ns occupation matrix in the current iteration
+COMPLEX(DP)              :: v_hub_diag(4*Hubbard_lmax+2,nat), temp
+COMPLEX(DP)              :: v_hub_temp(4*Hubbard_lmax+2,4*Hubbard_lmax+2)
+COMPLEX(DP)              :: eigenvecs_current(4*Hubbard_lmax+2,4*Hubbard_lmax+2)
 !
 INTEGER                  :: is, na, nt, m1, m2, m3, ldim, m_order
 !
-INTEGER                  :: order(2*(2*Hubbard_lmax+1)) 
+INTEGER                  :: order(4*Hubbard_lmax+2) 
 !! ordering vector
 !
 eth    = 0.d0
@@ -1916,7 +1915,7 @@ v_hub(:,:,:,:) = 0.d0
 v_hub_diag(:,:) = 0.d0 
 ! Hubbard potential in the diagonal representation
 !
-IF ( .NOT. apply_um ) RETURN
+IF ( .NOT. apply_U ) RETURN
 ! Do not apply corrections before the eigenstates have stabilized
 ! The eigenstates are considered stable a) when starting from a
 ! converged charge density or b) when the treshold of iterative 
@@ -1928,7 +1927,7 @@ DO na = 1, nat
    nt = ityp (na)
    !
    IF ( ANY(ABS(Hubbard_Um_nc(:,nt)) .GT. eps16) .OR. &
-         ANY(ABS(Hubbard_alpha_m_nc(:,nt)) .GT. eps16) ) THEN       
+        ANY(ABS(Hubbard_alpha_m_nc(:,nt)) .GT. eps16) ) THEN       
       !
       ldim = 2 * Hubbard_l(nt) + 1
       eigenvecs_current(:,:) = CMPLX(0.d0,0.d0, kind=dp)
@@ -1963,7 +1962,7 @@ DO na = 1, nat
          v_hub_diag(m1,na) = v_hub_diag(m1,na) - &
                                     effU * lambda_ns(m1,1,na)
          !
-         ! The following can be eliminated once code is approved
+         ! The following block can be eliminated once code is approved
 #if defined(__DEBUG)
          WRITE( stdout,'(/5x,"v_of_rho (NC):")')
          WRITE( stdout,'(/5x,"AT:",i2," ,m_order:",i2,", LAMBDA:",f7.5," U:",f7.5)') &
@@ -1989,7 +1988,7 @@ DO na = 1, nat
                temp = temp + CONJG(eigenvecs_current(m1,m3))* &
                   v_hub_diag(m3,na)*eigenvecs_current(m2,m3)
             ENDDO
-            v_hub_temp(m1,m2) = DBLE(temp)
+            v_hub_temp(m1,m2) = temp
          ENDDO
       ENDDO
       ! now, sort the different quadrants of v_hub_temp into the actual
@@ -2008,7 +2007,7 @@ DO na = 1, nat
          ! if this routine is executed for the first time,
          ! save the current eigenvecs as reference eigenvecs
          eigenvecs_ref(1:2*ldim,1:2*ldim,1,na) = &
-                      eigenvecs_current(1:2*ldim,1:2*ldim)
+                     & eigenvecs_current(1:2*ldim,1:2*ldim)
       ENDIF
       !
    ENDIF

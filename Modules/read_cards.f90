@@ -3005,7 +3005,7 @@ CONTAINS
             ! ... orbital-resolved DFT+U: read and validate eigenvalue numbers:
             !     read the fields that follow the Hubbard U value (nfield>3)
             !     and check if these are integers between 1 and 2*l+1 (if nspin=1)
-            !     or 2*(2*l+1) if nspin=2.
+            !     or 2*(2*l+1) if nspin==2 or nspin==4 (noncolinear).
             !     If so, store all those indices in a vector, which we later
             !     use to transfer the hu_um_temp into the actual Hubbard_Um array.
             neigvals = nfield - 3
@@ -3044,9 +3044,10 @@ CONTAINS
             ! temporary array using the vector of target eigvals
             DO j = 1, SIZE(target_indices)
                IF ( (target_indices(j) <= ldim) .OR. noncolin ) THEN 
-                  ! We are EITHER 1) in the spin-up channel, 2) nspin==1
-                  ! or 3) nspin==4 (noncolinear magnetism). In this case,
-                  ! we also want to store indices >ldim
+                  ! We are EITHER 1) in the spin-up channel with nspin==2,
+                  ! 2) nspin==1, or 3) nspin==4 (noncolinear magnetism).
+                  ! In this case, we also want to store indices 
+                  ! >ldim in the "first" spin channel
                   IF ( is_um ) THEN
                      hu_um(target_indices(j),1) = hu_um_temp
                   ELSE

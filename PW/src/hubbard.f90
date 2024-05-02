@@ -15,7 +15,7 @@ SUBROUTINE hub_summary()
                                    Hubbard_U, Hubbard_J0, Hubbard_U2, Hubbard_alpha, &
                                    Hubbard_beta, Hubbard_alpha_back, is_hubbard_back,  &
                                    Hubbard_J, Hubbard_l, Hubbard_n, Hubbard_Um, &
-                                   lda_plus_u, Hubbard_alpha_m, hub_pot_fix, apply_um, &
+                                   lda_plus_u, Hubbard_alpha_m, hub_pot_fix, apply_U, &
                                    orbital_resolved, Hubbard_Um_nc, Hubbard_alpha_m_nc
     USE lsda_mod,           ONLY : nspin 
     USE noncollin_module,   ONLY : lspinorb
@@ -30,7 +30,7 @@ SUBROUTINE hub_summary()
     !
     WRITE(stdout,'(5x,a)') 'Hubbard projectors: ' // TRIM(Hubbard_projectors)
     IF (lda_plus_u_kind == 0 .AND. (.NOT. orbital_resolved)) THEN
-       !For orbital-resolved DFT+U, printing see below!
+       !Printing of orbital-resolved DFT+U is defined at the end of the routine
        WRITE( stdout, '(5x,"Hubbard parameters of DFT+U (Dudarev formulation) in eV:")')
        DO nt = 1, ntyp
           IF (is_hubbard(nt)) THEN
@@ -141,8 +141,8 @@ SUBROUTINE hub_summary()
     !
     WRITE(stdout, '(/5x,"Internal variables: lda_plus_u =",l, ", lda_plus_u_kind = ",i1)') &
             lda_plus_u, lda_plus_u_kind
-    WRITE(stdout, '(/5x,"Internal variables: orbital_resolved =",l, ", hub_pot_fix =",l, ", apply_um = ",l)') &
-            orbital_resolved, hub_pot_fix, apply_um
+    WRITE(stdout, '(/5x,"Internal variables: orbital_resolved =",l, ", hub_pot_fix =",l, ", apply_U = ",l)') &
+            orbital_resolved, hub_pot_fix, apply_U
     !
     RETURN
     !
@@ -284,6 +284,7 @@ SUBROUTINE order_eigenvecs(order, eigvec1, eigvec2, ldim)
 ! while that of orthogonal vectors is 0, this information is used
 ! to keep track of the magnetic quantum orbitals
 ! during orbital-resolved DFT+U calculations.
+! The idea was first proposed in JCTC 15,4871 (2019)
 !
 USE kinds,     ONLY : DP
 USE io_global, ONLY : stdout
@@ -339,8 +340,6 @@ SUBROUTINE diag_ns( ldim, ns, lambda, eigenvecs_current )
 !
 !! Diagonalizes the ns matrix and returns the
 !! resulting eigenvalues & eigenvectors.
-!! Used by multiple subroutines 
-!! (v_hub_selective, ns_ddot_um, alpha_m_trace)
 !
 USE kinds,                ONLY : DP
 USE lsda_mod,             ONLY : nspin
@@ -402,10 +401,8 @@ END SUBROUTINE diag_ns
 SUBROUTINE diag_ns_nc( ldim, ns_nc, lambda, eigenvecs_current )
    !---------------------------------------------------------------------
    !
-   !! Diagonalizes the ns matrix and returns the
-   !! resulting eigenvalues & eigenvectors.
-   !! Used by multiple subroutines 
-   !! (v_hub_selective, ns_ddot_um, alpha_m_trace)
+   !! Diagonalizes the noncollinear (complex) ns matrix and
+   !! returns the resulting eigenvalues & eigenvectors.
    !
    USE kinds,                ONLY : DP
    USE lsda_mod,             ONLY : nspin
@@ -414,7 +411,7 @@ SUBROUTINE diag_ns_nc( ldim, ns_nc, lambda, eigenvecs_current )
    !
    INTEGER, INTENT(IN)        :: ldim
    !! Number of magnetic quantum orbitals (2l+1)
-   COMPLEX(DP), INTENT(IN)       :: ns_nc(ldim,ldim,4)
+   COMPLEX(DP), INTENT(IN)    :: ns_nc(ldim,ldim,4)
    !! Occupation matrix (undiagonalized)
    REAL(DP), INTENT(OUT)      :: lambda(2*ldim)
    !! Occupation eigenvalues
@@ -598,7 +595,7 @@ IF (has_second_manifold) THEN
          !
          DO m1 = 1, ldim
             !
-            ! check if U_m of the resepective eigenstate /= 0.0
+            ! check if Um of the resepective eigenstate /= 0.0
             ! if yes, sum this state's occupation eigenvalue
             !
             IF ( Hubbard_Um(order(m1,is),is,nt) .NE. 0.d0 ) THEN
@@ -629,200 +626,170 @@ RETURN
 !
 END SUBROUTINE alpha_m_trace
 !-----------------------------------------------------------------------
-
-! !----------------------------------------------------------------------------
-! SUBROUTINE alpha_m_trace( ns )
-!    !---------------------------------------------------------------------
-!    !
-!    !! Sums up and prints orbital occupation eigenvalues of states
-!    !! perturbed by nonzero Hubbard_alpha_m. Also prints occupation eigenvalues
-!    !! of other states having the same Hubbard U manifold as a perturbed species. 
-!    !! Useful for the self-consistent computation of Hubbard parameters.
-!    !
-!    USE kinds,                ONLY : DP
-!    USE ions_base,            ONLY : nat, ityp
-!    USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_n, &
-!                                     Hubbard_alpha_m, lambda_ns, &
-!                                     eigenvecs_ref, Hubbard_Um
-!    USE lsda_mod,             ONLY : nspin
-!    USE io_global,            ONLY : stdout
-!    USE constants,            ONLY : rytoev, eps16
-!    USE upf_utils,            ONLY : l_to_spdf
-!    !
-!    IMPLICIT NONE
-!    !
-!    REAL(DP), INTENT(IN)     :: ns(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat)
-!    !! Occupation matrix
-!    !
-!    !  ... local variables
-!    !
-!    COMPLEX(DP), ALLOCATABLE :: eigenvecs_current(:,:,:)
-!    !
-!    INTEGER, ALLOCATABLE     :: eigval_list(:), unpert_ats(:), pert_nt2(:)
-!    INTEGER                  :: i, is, na, na2, nt, nt2, m1, m2, ldim, eigval_add
-!    INTEGER                  :: order(2*Hubbard_lmax+1,nspin), m_order
-!    !
-!    REAL(DP)                 :: tralpha, u
-!    !
-!    LOGICAL                  :: has_second_manifold
-!    !
-!    CHARACTER(len=6)         :: manifold
-!    !
-!    !
-!    ALLOCATE( unpert_ats(0), pert_nt2 (0) )
-!    lambda_ns(:,:,:) = 0.d0
-!    ! orbital occupations (=eigenvalues of rho%ns)
-!    !
-!    WRITE( stdout,'(/5x,"Perturbed atoms (active HUBBARD_ALPHA):")')
-!    DO na = 1, nat
-!       !
-!       nt = ityp (na)
-!       !
-!       WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
-!       ldim = 2*Hubbard_l(nt)+1
-!       tralpha = 0.0
-!       ALLOCATE( eigval_list(0), eigenvecs_current(ldim,ldim,nspin) )
-!       !
-!       IF ( ANY(Hubbard_alpha_m(:,:,nt) /= 0.d0) ) THEN
-!          ! ... case a) the species is directly affected by Hubbard_alpha_m:
-!          !             print the sum over the perturbed manifold's occupation eigenvalues
-!          !
-!          ! diagonalize the occupation matrix
-!          CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(1:ldim,1:ldim,na), eigenvecs_current )
-!          !
-!          DO is = 1, nspin
-!             !
-!             IF ( ANY(eigenvecs_ref(:,:,is,na) .NE. 0.0d0) ) THEN
-!                ! order the eigenstates
-!                order(:,is) = 0
-!                CALL order_eigenvecs( order(:,is), eigenvecs_current(:,:,is), &
-!                      eigenvecs_ref(:,:,is,na), ldim )
-!             ELSE
-!                ! if this routine is called, there should always be reference 
-!                ! eigenvectors because if Hubbard_alpha /=0 the Hubbard 
-!                ! corrections are applied starting from the first iteration
-!                CALL errore( 'alpha_m_trace', 'missing reference eigenvectors', 1 )
-!                !
-!             ENDIF
-!             !
-!             DO m1 = 1, ldim    
-!                !
-!                IF (ABS(Hubbard_alpha_m(order(m1,is),is,nt)) .GE. eps16) THEN
-!                   ! sum up the occupation of the perturbed states
-!                   tralpha = tralpha + lambda_ns(order(m1,is),is,na)
-!                   u = Hubbard_Um(order(m1,is),is,nt)*rytoev
-!                   !
-!                   ! Replicate the input sturcture of the HUBBARD card
-!                   eigval_add = 0
-!                   IF ( is .EQ.2 ) eigval_add = ldim
-!                   !
-!                   eigval_list = [ eigval_list,order(m1,is)+eigval_add ]
-!                ENDIF
-!                !
-!             ENDDO
-!          ENDDO
-!          !
-!          IF (nspin ==1) tralpha = tralpha*2
-!          !
-!          WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
-!                & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
-!          !
-!       ELSEIF ( ANY(Hubbard_Um(:,:,nt) .NE. 0.d0) .AND. ALL(Hubbard_alpha_m(:,:,nt) .EQ. 0.d0) ) THEN
-!          ! ...case b) the species is NOT directly affected by Hubbard_alpha_m
-!          !            but (eventually, checked below) has a Hubbard_U manifold 
-!          !            equal to that of a species WITH active Hubbard_alpha_m.
-!          !
-!          DO na2 = 1, nat
-!             !
-!             nt2 = ityp (na2)
-!             !
-!             IF( ANY(Hubbard_alpha_m(:,:,nt2) .NE. 0.d0) ) THEN
-!                !
-!                IF (ALL(Hubbard_Um(:,:,nt) .EQ. Hubbard_Um(:,:,nt2))) THEN
-!                   ! the U manifolds are identical (same manifold & U parameters)
-!                   has_second_manifold = .TRUE.
-!                   !
-!                   IF ( .NOT. ANY(na == unpert_ats) ) THEN
-!                      ! store the atom index of the unperturbed atom and the type
-!                      ! of its perturbed counterpart in arrays (unless already there)
-!                      unpert_ats = [ unpert_ats,na ]
-!                      pert_nt2 =   [ pert_nt2,nt2 ]
-!                   ENDIF
-!                   !
-!                ENDIF
-!                !
-!             ENDIF
-!             !
-!          ENDDO
-!          !
-!       ENDIF
-!       !
-!    DEALLOCATE( eigval_list )
-!    DEALLOCATE( eigenvecs_current)
-!    !
-!    ENDDO
-!    !
-!    IF (has_second_manifold) THEN
-!       ! ...case b) continuation: now print the occupations
-!       !            of the states with Hubbard_U manifolds
-!       !            equal to those of perturbed species
-!       WRITE( stdout,'(/5x,"Atoms with Hubbard U manifolds identical to those of perturbed atoms:")')
-!       !
-!       DO i = 1, SIZE(unpert_ats)
-!          !
-!          na = unpert_ats(i)
-!          nt = ityp (na)
-!          nt2 = pert_nt2(i)
-!          !
-!          WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
-!          ldim = 2*Hubbard_l(nt)+1
-!          tralpha = 0.0
-!          ALLOCATE( eigval_list(0) )
-!          ALLOCATE( eigenvecs_current(ldim,ldim,nspin))
-!          !
-!          ! diagonalize the occupation matrix
-!          CALL diag_ns( ldim, ns(1:ldim,1:ldim,:,na), lambda_ns(1:ldim,1:ldim,na), eigenvecs_current )
-!          !
-!          DO is = 1, nspin
-!             !
-!             IF ( ANY(eigenvecs_ref(:,:,is,na) .NE. 0.0d0) ) THEN
-!                order(:,is) = 0
-!                CALL order_eigenvecs( order(:,is), eigenvecs_current(:,:,is), &
-!                      eigenvecs_ref(:,:,is,na), ldim )
-!             ELSE
-!                CALL errore( 'alpha_m_trace', 'missing reference eigenvectors', 1 )
-!             ENDIF
-!             !
-!             DO m1 = 1, ldim
-!                !
-!                ! Important: check if alpha_m of nt2 (!!!) /= 0.0
-!                ! and sum up over the occupations these states in na
-!                !
-!                IF ( Hubbard_alpha_m(order(m1,is),is,nt2) .NE. 0.d0 ) THEN
-!                   tralpha = tralpha + lambda_ns(order(m1,is),is,na)
-!                   u = Hubbard_Um(order(m1,is),is,nt)*rytoev
-!                   !
-!                   eigval_add = 0
-!                   IF ( is .EQ.2 ) eigval_add = ldim
-!                   !
-!                   eigval_list = [ eigval_list,order(m1,is)+eigval_add ]
-!                ENDIF
-!                !
-!             ENDDO
-!          ENDDO
-!          !
-!          IF (nspin ==1) tralpha = tralpha*2
-!          WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
-!          & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
-!          !
-!       DEALLOCATE( eigval_list )
-!       DEALLOCATE( eigenvecs_current)
-!       ENDDO
-!    ENDIF
-!    !
-!    DEALLOCATE( unpert_ats, pert_nt2 )
-!    !
-!    RETURN
-!    !
-!    END SUBROUTINE alpha_m_trace
-!    !-----------------------------------------------------------------------
+!----------------------------------------------------------------------------
+SUBROUTINE alpha_m_nc_trace( ns_nc )
+!---------------------------------------------------------------------
+!
+!! Sums up and prints orbital occupation eigenvalues of states
+!! perturbed by nonzero Hubbard_alpha_m. Also prints occupation eigenvalues
+!! of other states having the same Hubbard U manifold as a perturbed species. 
+!! Useful for the self-consistent computation of Hubbard parameters.
+!
+USE kinds,                ONLY : DP
+USE ions_base,            ONLY : nat, ityp
+USE ldaU,                 ONLY : Hubbard_lmax, Hubbard_l, Hubbard_n, &
+                                 Hubbard_alpha_m_nc, lambda_ns, &
+                                 eigenvecs_ref, Hubbard_Um_nc
+USE lsda_mod,             ONLY : nspin
+USE io_global,            ONLY : stdout
+USE constants,            ONLY : rytoev, eps16
+USE upf_utils,            ONLY : l_to_spdf
+!
+IMPLICIT NONE
+!
+COMPLEX(DP), INTENT(IN)     :: ns_nc(2*Hubbard_lmax+1,2*Hubbard_lmax+1,4,nat)
+!! Occupation matrix
+!
+!  ... local variables
+!
+COMPLEX(DP), ALLOCATABLE :: eigenvecs_current(:,:)
+!
+INTEGER, ALLOCATABLE     :: eigval_list(:), unpert_ats(:)
+INTEGER                  :: i, is, na, nt, m1, m2, ldim
+INTEGER                  :: order(4*Hubbard_lmax+2), m_order
+!
+REAL(DP)                 :: tralpha, u
+!
+LOGICAL                  :: has_second_manifold
+!
+CHARACTER(len=6)         :: manifold
+!
+!
+ALLOCATE( unpert_ats(0) )
+lambda_ns(:,:,:) = 0.d0
+! orbital occupations (=eigenvalues of rho%ns)
+!
+WRITE( stdout,'(/5x,"Occupations of perturbed manifolds (active HUBBARD ALPHA):")')
+DO na = 1, nat
+   !
+   nt = ityp (na)
+   !
+   WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
+   ldim = 2*Hubbard_l(nt)+1
+   tralpha = 0.0
+   ALLOCATE( eigval_list(0), eigenvecs_current(2*ldim,2*ldim) )
+   !
+   IF ( ANY( Hubbard_alpha_m_nc(:,nt) /= 0.d0) ) THEN
+      ! ... case a) the species is directly affected by Hubbard_alpha_m:
+      !             print the sum over the perturbed manifold's occupation eigenvalues
+      !
+      ! diagonalize the occupation matrix
+      CALL diag_ns_nc( ldim, ns_nc(1:ldim,1:ldim,:,na), lambda_ns(1:2*ldim,1,na), &
+                  eigenvecs_current(1:2*ldim,1:2*ldim) )
+      !
+      IF ( ANY(eigenvecs_ref(:,:,1,na) .NE. 0.0d0) ) THEN
+         ! order the eigenstates
+         order(:) = 0
+         CALL order_eigenvecs( order(:), eigenvecs_current(:,:), &
+               eigenvecs_ref(:,:,1,na), 2*ldim )
+      ELSE
+         ! if this routine is called, there should always be reference 
+         ! eigenvectors because if Hubbard_alpha /=0 the Hubbard 
+         ! corrections are applied starting from the first iteration
+         CALL errore( 'alpha_m_nc_trace', 'missing reference eigenvectors', 1 )
+         !
+      ENDIF
+      !
+      DO m1 = 1, 2*ldim    
+         !
+         IF (ABS(Hubbard_alpha_m_nc(order(m1),nt)) .GE. eps16) THEN
+            ! sum up the occupation of the perturbed states
+            tralpha = tralpha + lambda_ns(order(m1),1,na)
+            u = Hubbard_Um_nc(order(m1),nt)*rytoev
+            !
+            ! Replicate the input sturcture of the HUBBARD card
+            eigval_list = [ eigval_list,order(m1) ]
+         ENDIF
+         !
+      ENDDO
+      !
+      WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
+            & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+      !
+   ELSEIF ( ANY(Hubbard_Um_nc(:,nt) .NE. 0.d0) .AND. &
+            ALL(Hubbard_alpha_m_nc(:,nt) .EQ. 0.d0) ) THEN
+      ! ...case b) the species is NOT directly affected by Hubbard_alpha_m
+      !            but (eventually, checked below) has a Hubbard_U manifold 
+      !
+      has_second_manifold = .TRUE.
+      !
+      IF ( .NOT. ANY(na == unpert_ats) ) THEN
+         ! store the atom index of the unperturbed atom and the type
+         ! of its perturbed counterpart in arrays (unless already there)
+         unpert_ats = [ unpert_ats,na ]
+      ENDIF
+      !
+   ENDIF
+   !
+   DEALLOCATE( eigval_list )
+   DEALLOCATE( eigenvecs_current)
+   !
+ENDDO
+!
+IF (has_second_manifold) THEN
+   ! ...case b) continuation: now print the occupations
+   !            of the states with Hubbard_U manifolds
+   !            equal to those of perturbed species
+   WRITE( stdout,'(/5x,"Occupations of unperturbed manifolds (active HUBBARD U):")')
+   !
+   DO i = 1, SIZE(unpert_ats)
+      !
+      na = unpert_ats(i)
+      nt = ityp (na)
+      !
+      WRITE(manifold, "(i1,a1)")Hubbard_n(nt), l_to_spdf(Hubbard_l(nt),.FALSE.)
+      ldim = 2*Hubbard_l(nt)+1
+      tralpha = 0.0
+      ALLOCATE( eigval_list(0) )
+      ALLOCATE( eigenvecs_current(2*ldim,2*ldim) )
+      !
+      ! diagonalize the occupation matrix
+      CALL diag_ns_nc( ldim, ns_nc(1:ldim,1:ldim,:,na), lambda_ns(1:2*ldim,1,na), &
+                        eigenvecs_current(1:2*ldim,1:2*ldim) )
+      !
+      IF ( ANY(eigenvecs_ref(:,:,1,na) .NE. 0.0d0) ) THEN
+         order(:) = 0
+         CALL order_eigenvecs( order(:), eigenvecs_current(:,:), &
+               eigenvecs_ref(:,:,1,na), 2*ldim )
+      ELSE
+         CALL errore( 'alpha_m_trace', 'missing reference eigenvectors', 1 )
+      ENDIF
+      !
+      DO m1 = 1, 2*ldim
+         !
+         ! check if Um of the resepective eigenstate /= 0.0
+         ! if yes, sum this state's occupation eigenvalue
+         !
+         IF ( Hubbard_Um_nc(order(m1),nt) .NE. 0.d0 ) THEN
+            tralpha = tralpha + lambda_ns(order(m1),1,na)
+            u = Hubbard_Um_nc(order(m1),nt)*rytoev
+            !
+            eigval_list = [ eigval_list,order(m1) ]
+         ENDIF
+         !
+      ENDDO
+      !
+      WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
+      & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+      !
+   DEALLOCATE( eigval_list )
+   DEALLOCATE( eigenvecs_current)
+   ENDDO
+ENDIF
+!
+DEALLOCATE( unpert_ats )
+!
+RETURN
+   !
+END SUBROUTINE alpha_m_nc_trace
+   !-----------------------------------------------------------------------

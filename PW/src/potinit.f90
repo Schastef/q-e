@@ -40,8 +40,8 @@ SUBROUTINE potinit()
   USE ener,                 ONLY : ehart, etxc, vtxc, epaw, esol, vsol
   USE ldaU,                 ONLY : lda_plus_u, Hubbard_lmax, eth, &
                                    niter_with_fixed_ns, lda_plus_u_kind, &
-                                   nsg, nsgnew, apply_um, Hubbard_alpha, &
-                                   Hubbard_alpha_m, orbital_resolved
+                                   nsg, nsgnew, apply_U, hub_pot_fix, &
+                                   orbital_resolved
   USE noncollin_module,     ONLY : noncolin, domag, report, lforcet
   USE io_files,             ONLY : restart_dir, input_drho, check_file_exist
   USE mp,                   ONLY : mp_sum
@@ -92,7 +92,7 @@ SUBROUTINE potinit()
      ! ... if we restart from a preexisting charge density, the eigenstates
      ! ... are considered stable and we can apply orbital-resolved Hubbard 
      ! ... corrections starting from the first iteration
-     IF ( orbital_resolved ) apply_um = .TRUE.
+     IF ( orbital_resolved ) apply_U = .TRUE.
      !
      IF ( .NOT.lforcet ) THEN
         CALL read_scf ( rho, nspin, gamma_only )
@@ -160,10 +160,11 @@ SUBROUTINE potinit()
      IF (lda_plus_u) THEN
         !
         IF (lda_plus_u_kind == 0) THEN
-           IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) .OR. ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP)) &
-              WRITE( stdout, '(5X,"WARNING: applying Hubbard_alpha without &
-                     &restarting from a converged potential")' )
-           IF ( orbital_resolved .AND. (.NOT. apply_um) ) THEN
+           IF ( hub_pot_fix ) &
+              CALL errore( 'potinit', &
+                     'cannot apply Hubbard alpha without &
+                     &restarting from a converged potential', 1 )
+           IF ( orbital_resolved .AND. (.NOT. apply_U) ) THEN
               WRITE( stdout, '(/,5X,47("="))')
               WRITE( stdout, '(/,5X,"Not restarting from a converged ", &
                                 &    "potential:",/,5X,             &

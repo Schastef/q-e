@@ -120,11 +120,11 @@ MODULE ldaU
   LOGICAL :: orbital_resolved
   !! if .TRUE., the orbital-resolved formulation of Hubbard corrections is used
   !! currently only affects Hubbard U and Hubbard alpha
-  LOGICAL :: apply_um
-  !!  Once set to .TRUE., the Hubbard potential and energy are
-  !!  calculated based on the diagonalized occupations. Before,
-  !!  Hubbard corrections are not applied in order to stabilize the eigenstates
-  !!  before storing reference eigenvectors.
+  LOGICAL :: apply_U
+  !!  In one-step orbital-resolved DFT+U calculations, once set to .TRUE.,
+  !!  the Hubbard potential and energy are calculated based on the diagonalized 
+  !!  occupations. Before, Hubbard corrections are not applied in order
+  !!  to stabilize the eigenstates before storing reference eigenvectors.
   LOGICAL :: iso_sys
   !! .TRUE. if the system is isolated (the code diagonalizes
   !! and prints the full occupation matrix)
@@ -240,7 +240,7 @@ CONTAINS
     lb  = .FALSE.
     hub_back = .FALSE.
     orbital_resolved = .FALSE.
-    apply_um = .FALSE.
+    apply_U = .FALSE.
     !
     is_hubbard(:) = .FALSE.
     is_hubbard_back(:) = .FALSE.
@@ -328,22 +328,24 @@ CONTAINS
              ! retain extra-spin dimension for compatibility
              ALLOCATE(lambda_ns(2*ldmx,1,nat))
              ALLOCATE(eigenvecs_ref(2*ldmx,2*ldmx,1,nat))
-             lambda_ns(:,:,:) = 0.0_DP
-             eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)
           ELSE
              ALLOCATE(lambda_ns(ldmx,nspin,nat))
              ALLOCATE(eigenvecs_ref(ldmx,ldmx,nspin,nat))
-             lambda_ns(:,:,:) = 0.0_DP
-             eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)
           ENDIF
+          !
+          lambda_ns(:,:,:) = 0.0_DP
+          eigenvecs_ref(:,:,:,:) = CMPLX(0.d0,0.d0, kind=DP)
        ENDIF
        !
-       IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) .OR. ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP) ) THEN
+       IF ( ANY(Hubbard_alpha(:) /= 0.0_DP) .OR. ANY(Hubbard_alpha_m(:,:,:) /= 0.0_DP) &
+          & .OR. ANY(Hubbard_alpha_m_nc(:,:) /= 0.0_DP)) THEN
           ! To apply LR-cDFT to calculate Hubbard parameters,
-          ! we fix the Hubbard potential. Also, if this is and orbital-
-          ! resolved calculations, turn on corrections before the first iteration.
+          ! we fix the Hubbard potential. Also, if this is an orbital-
+          ! resolved calculation, turn on corrections before the first iteration.
+          ! This supposes we are restarting from a converged charge density, which
+          ! is checked in potinit.f90.
           hub_pot_fix = .TRUE.
-          IF (orbital_resolved) apply_um = .TRUE.
+          IF (orbital_resolved) apply_U = .TRUE.
           WRITE(stdout,'(/5x,"NONZERO HUBBARD_ALPHA DETECTED:")')
           WRITE(stdout,'(/5x,"FIXING HUBBARD POTENTIAL TO THE &
                               &GROUND STATE ONE (PRB 98, 085127)")')

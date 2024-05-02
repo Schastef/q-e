@@ -1066,7 +1066,7 @@ FUNCTION ns_ddot_um( rho1, rho2 )
   USE kinds,     ONLY : DP
   USE ldaU,      ONLY : Hubbard_l, Hubbard_U, Hubbard_U2, ldim_back, &
                         lda_plus_u_kind, is_hubbard, eigenvecs_ref, &
-                        Hubbard_lmax, Hubbard_Um, apply_um
+                        Hubbard_lmax, Hubbard_Um, apply_U
   USE ions_base, ONLY : nat, ityp
   USE constants, ONLY : eps16, RYTOEV
   USE io_global, ONLY : stdout
@@ -1090,7 +1090,7 @@ FUNCTION ns_ddot_um( rho1, rho2 )
   !
   ns_ddot_um = 0.D0
   !
-  IF (.NOT. apply_um) RETURN
+  IF (.NOT. apply_U) RETURN
   ! if apply_um is still .FALSE.
   ! do not (yet) apply Hubbard U corrections.
   !
@@ -1133,12 +1133,15 @@ FUNCTION ns_ddot_um( rho1, rho2 )
                !
                ! This can be removed once the merge request is approved
 #if defined(__DEBUG)
-               WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " , index2:", i1)') m, is,index1,index2
-               WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ", f7.4,", ns_ddot_um: ", f7.4)') &
-                               Hubbard_Um(m,is,nt)*RYTOEV,lambda1(index1,is),lambda2(index2,is),ns_ddot_um
+               WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " ,&
+                      & index2:", i1)') m, is,index1,index2
+               WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ", &
+                      & f7.4,", ns_ddot_um: ", f7.4)') &
+                      Hubbard_Um(m,is,nt)*RYTOEV,lambda1(index1,is),lambda2(index2,is),ns_ddot_um
 #endif
             !
             ENDDO
+            !
          ENDIF
          !
       ENDDO
@@ -1163,7 +1166,7 @@ FUNCTION ns_ddot_um_nc( rho1, rho2 )
    USE kinds,     ONLY : DP
    USE ldaU,      ONLY : Hubbard_l, ldim_back, &
                          lda_plus_u_kind, is_hubbard, eigenvecs_ref, &
-                         Hubbard_lmax, Hubbard_Um_nc, apply_um
+                         Hubbard_lmax, Hubbard_Um_nc, apply_U
    USE ions_base, ONLY : nat, ityp
    USE constants, ONLY : eps16, RYTOEV
    USE io_global, ONLY : stdout
@@ -1179,15 +1182,17 @@ FUNCTION ns_ddot_um_nc( rho1, rho2 )
    !
    ! ... local variables
    !
-   COMPLEX(DP)  :: vet1(2*(2*Hubbard_lmax+1),2*(2*Hubbard_lmax+1))
-   COMPLEX(DP)  :: vet2(2*(2*Hubbard_lmax+1),2*(2*Hubbard_lmax+1))
-   INTEGER      :: order1(2*(2*Hubbard_lmax+1)), order2(2*(2*Hubbard_lmax+1))
+   ! For NC case we allocate arrays as 2*(2l+1)
+   COMPLEX(DP)  :: vet1(4*Hubbard_lmax+2,4*Hubbard_lmax+2)
+   COMPLEX(DP)  :: vet2(4*Hubbard_lmax+2,4*Hubbard_lmax+2)
+   REAL(DP)     :: lambda1(4*Hubbard_lmax+2), lambda2(4*Hubbard_lmax+2)
+   INTEGER      :: order1(4*Hubbard_lmax+2), order2(4*Hubbard_lmax+2)
    INTEGER      :: na, ldim, is, m, index1, index2
-   REAL(DP)     :: lambda1(2*(2*Hubbard_lmax+1)), lambda2(2*(2*Hubbard_lmax+1))
+
    !
    ns_ddot_um_nc = 0.D0
    !
-   IF (.NOT. apply_um) RETURN
+   IF (.NOT. apply_U) RETURN
    ! if apply_um is still .FALSE.
    ! do not (yet) apply Hubbard U corrections.
    !
@@ -1229,9 +1234,11 @@ FUNCTION ns_ddot_um_nc( rho1, rho2 )
              !
              ! This can be removed once the merge request is approved
 #if defined(__DEBUG)
-             WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " , index2:", i1)') m, is,index1,index2
-             WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ", f7.4,", ns_ddot_um_nc: ", f7.4)') &
-                            Hubbard_Um_nc(m,nt)*RYTOEV,lambda1(index1),lambda2(index2),ns_ddot_um_nc
+             WRITE(stdout,'(5X,"m: ", i1,", is: ", i1, ", index1:", i1, " , &
+                   & index2:", i1)') m, is,index1,index2
+             WRITE(stdout,'(5X,"U: ", f5.3,", lambda1: ", f7.4,", lambda2: ",&
+                   & f7.4,", ns_ddot_um_nc: ", f7.4)') &
+                   Hubbard_Um_nc(m,nt)*RYTOEV,lambda1(index1),lambda2(index2),ns_ddot_um_nc
 #endif
           !
           ENDDO
@@ -1239,7 +1246,7 @@ FUNCTION ns_ddot_um_nc( rho1, rho2 )
        ENDIF
       !
       ENDIF
-   !
+      !
    ENDDO
    !
 RETURN

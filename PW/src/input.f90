@@ -2012,7 +2012,7 @@ SUBROUTINE dftu_iosys ( ntyp, noncolin )
   Hubbard_n2_(1:ntyp)         = hubbard_n2(1:ntyp)
   Hubbard_l2_(1:ntyp)         = hubbard_l2(1:ntyp)
   Hubbard_n3_(1:ntyp)         = hubbard_n3(1:ntyp)
-  Hubbard_l3_(1:ntyp)         = hubbard_l3(1:ntyp)
+  Hubbard_l3_(1:ntyp)         = hubbard_l3(1:ntyp) 
   Hubbard_projectors_         = hubbard_projectors
   Hubbard_alpha_(1:ntyp)      = hubbard_alpha(1:ntyp) / rytoev
   Hubbard_alpha_m_(:,:,1:ntyp) = hubbard_alpha_m(:,:,1:ntyp) / rytoev
