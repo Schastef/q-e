@@ -125,6 +125,14 @@ MODULE ldaU
   !!  the Hubbard potential and energy are calculated based on the diagonalized 
   !!  occupations. Before, Hubbard corrections are not applied in order
   !!  to stabilize the eigenstates before storing reference eigenvectors.
+  LOGICAL :: orbital_resolved
+  !! if .TRUE., the orbital-resolved formulation of Hubbard corrections is used
+  !! currently only affects Hubbard U and Hubbard alpha
+  LOGICAL :: apply_U
+  !!  In one-step orbital-resolved DFT+U calculations, once set to .TRUE.,
+  !!  the Hubbard potential and energy are calculated based on the diagonalized 
+  !!  occupations. Before, Hubbard corrections are not applied in order
+  !!  to stabilize the eigenstates before storing reference eigenvectors.
   LOGICAL :: iso_sys
   !! .TRUE. if the system is isolated (the code diagonalizes
   !! and prints the full occupation matrix)
@@ -155,10 +163,12 @@ MODULE ldaU
   COMPLEX(DP), ALLOCATABLE :: eigenvecs_ref(:,:,:,:)
   !! Eigenvectors used for tracking
   !! orbitals in orbital-resolved DFT+U
-
+  !!
   !****************************************************
   !                Hubbard V part                     !
   !****************************************************
+  !
+  ! Inter atomic interaction should be cut off at some distance 
   !
   ! Inter atomic interaction should be cut off at some distance 
   ! that is the reason of having so many unitcell information. 
