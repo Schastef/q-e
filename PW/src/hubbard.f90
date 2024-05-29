@@ -541,7 +541,7 @@ DO na = 1, nat
       !
       IF (nspin ==1) tralpha = tralpha*2
       !
-      WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
+      WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
             & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
       !
    ELSEIF ( ANY(Hubbard_Um(:,:,nt) .NE. 0.d0) .AND. ALL(Hubbard_alpha_m(:,:,nt) .EQ. 0.d0) ) THEN
@@ -612,7 +612,7 @@ IF (has_second_manifold) THEN
       ENDDO
       !
       IF (nspin ==1) tralpha = tralpha*2
-      WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
+      WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
       & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
       !
    DEALLOCATE( eigval_list )
@@ -713,7 +713,7 @@ DO na = 1, nat
          !
       ENDDO
       !
-      WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
+      WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
             & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
       !
    ELSEIF ( ANY(Hubbard_Um_nc(:,nt) .NE. 0.d0) .AND. &
@@ -779,7 +779,7 @@ IF (has_second_manifold) THEN
          !
       ENDDO
       !
-      WRITE( stdout,'(/5x,"@ ATOM: ",i2," | MANIFOLD: ",a2," | U: ", f4.2, &
+      WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
       & " | OCCUPATION: ", f9.7," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
       !
    DEALLOCATE( eigval_list )
