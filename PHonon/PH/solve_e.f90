@@ -30,7 +30,7 @@ subroutine solve_e
   USE io_files,              ONLY : diropn
   USE mp,                    ONLY : mp_sum
   USE mp_pools,              ONLY : inter_pool_comm
-  USE mp_bands,              ONLY : intra_bgrp_comm
+  USE mp_bands,              ONLY : intra_bgrp_comm, inter_bgrp_comm
   USE klist,                 ONLY : ltetra, lgauss, xk, ngk, igk_k
   USE gvecs,                 ONLY : doublegrid
   USE fft_base,              ONLY : dfftp, dffts
@@ -163,6 +163,7 @@ subroutine solve_e
         !
         IF (nksq > 1) THEN
            CALL get_buffer(evc, lrwfc, iuwfc, ikk)
+           !$acc update device(evc)
         ENDIF
         !
         CALL init_us_2(npw, igk_k(1, ikk), xk(1, ikk), vkb, .true.)
