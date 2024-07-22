@@ -21,11 +21,18 @@ SUBROUTINE allocate_wfc()
   USE noncollin_module,    ONLY : npol
   USE wavefunctions,       ONLY : evc
   USE control_flags,       ONLY : use_gpu
+#if defined(__OPENMP_GPU)
+  USE omp_lib
+  USE wavefunctions,       ONLY : ntraits, pinned_alloc, traits
+#endif
   !
   IMPLICIT NONE
   INTEGER :: istat
   !
-  !
+#if defined(__OPENMP_GPU)
+  pinned_alloc = omp_init_allocator(omp_default_mem_alloc, ntraits, traits)
+  !$omp allocate(evc) allocator(pinned_alloc)
+#endif
   ALLOCATE( evc(npwx*npol,nbnd) )
 !civn: PIN evc memory here
 #if defined(__CUDA)
@@ -118,6 +125,9 @@ SUBROUTINE allocate_wfc_k()
   ALLOCATE( g2kin(npwx) )
   !$acc enter data create(g2kin) 
   !
+#if defined(__OPENMP_GPU)
+  !$omp target enter data map(alloc:vkb,g2kin)
+#endif
   !
   RETURN
   !

@@ -20,6 +20,8 @@
      USE kinds, ONLY :  DP
 #if defined (__CUDA)
      USE cudafor
+#elif defined(__OPENMP_GPU)
+     USE omp_lib
 #endif
 
      IMPLICIT NONE
@@ -36,15 +38,19 @@
        !! wavefunctions in the PW basis set.  
        !! noncolinear case: first index is a combined PW + spin index
        !
-!#if defined(__CUDA)
-!       attributes(PINNED) :: evc
-!#endif
+#if defined(__OPENMP_GPU)
+     ! ... tools to pin evc with omp
+     INTEGER, PARAMETER :: ntraits = 1
+     INTEGER(omp_allocator_handle_kind) :: pinned_alloc
+     TYPE(omp_alloctrait) :: traits(ntraits) =[omp_alloctrait(omp_atk_pinned,1)]
+#endif
      !
      COMPLEX(DP) , ALLOCATABLE, TARGET :: psic(:)
      !! additional memory for FFT
      COMPLEX(DP) , ALLOCATABLE, TARGET :: psic_nc(:,:)
      !! additional memory for FFT for the noncolinear case
-     !
+     COMPLEX(DP) , ALLOCATABLE, TARGET :: psicg(:)
+     !! additional memory again for FFT
      !
      ! electronic wave functions, CPV code
      ! distributed over gvector and bands
@@ -70,8 +76,19 @@
        IF( ALLOCATED( c0_bgrp ) ) DEALLOCATE( c0_bgrp )
        IF( ALLOCATED( cm_bgrp ) ) DEALLOCATE( cm_bgrp )
        IF( ALLOCATED( phi ) ) DEALLOCATE( phi )
-       IF( ALLOCATED( psic_nc ) ) DEALLOCATE( psic_nc )
-       IF( ALLOCATED( psic ) ) DEALLOCATE( psic )
+       IF( ALLOCATED( psic_nc ) ) THEN
+#if defined(__OPENMP_GPU)
+         !$omp target exit data map(delete:psic_nc)
+#endif
+         DEALLOCATE( psic_nc )
+       ENDIF
+       IF( ALLOCATED( psic ) ) THEN
+#if defined(__OPENMP_GPU)
+         !$omp target exit data map(delete:psic)
+#endif
+         DEALLOCATE( psic )
+       ENDIF
+       IF( ALLOCATED( psicg ) ) DEALLOCATE( psicg )
 #if defined(__CUDA)
        !$acc exit data delete(evc)
        IF(use_gpu) istat = cudaHostUnregister(C_LOC(evc(1,1)))

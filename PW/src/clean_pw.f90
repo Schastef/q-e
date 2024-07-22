@@ -33,7 +33,7 @@ SUBROUTINE clean_pw( lflag )
                                    vrs, kedtau, destroy_scf_type, vnew
   USE symm_base,            ONLY : irt
   USE symme,                ONLY : sym_rho_deallocate
-  USE wavefunctions,        ONLY : evc, psic, psic_nc
+  USE wavefunctions,        ONLY : evc, psic, psic_nc, psicg
   USE uspp,                 ONLY : deallocate_uspp
   USE uspp_param,           ONLY : upf
   USE atwfc_mod,            ONLY : deallocate_tab_atwfc
@@ -138,10 +138,26 @@ SUBROUTINE clean_pw( lflag )
   IF ( ALLOCATED( vltot  ) )     DEALLOCATE( vltot  )
   IF ( ALLOCATED( rho_core  ) )  DEALLOCATE( rho_core  )
   IF ( ALLOCATED( rhog_core ) )  DEALLOCATE( rhog_core )
-  IF ( ALLOCATED( psic    ) )    DEALLOCATE( psic    )
-  IF ( ALLOCATED( psic_nc ) )    DEALLOCATE( psic_nc )
+  IF ( ALLOCATED( psic ) ) THEN
+#if defined (__OPENMP_GPU)
+     !$omp target exit data map(delete:psic)
+#endif
+     DEALLOCATE( psic )
+  ENDIF
+  IF ( ALLOCATED( psic_nc ) ) THEN
+#if defined (__OPENMP_GPU)
+     !$omp target exit data map(delete:psic_nc)
+#endif
+     DEALLOCATE( psic_nc )
+  ENDIF
+  IF ( ALLOCATED( psicg ) )  DEALLOCATE( psicg )
   !$acc exit data delete(vrs)
-  IF ( ALLOCATED( vrs     ) )    DEALLOCATE( vrs     )
+  IF ( ALLOCATED( vrs ) )    THEN
+#if defined(__OPENMP_GPU)
+    !$omp target exit data map(delete:vrs)
+#endif
+    DEALLOCATE( vrs )
+  ENDIF
   !
   ! ... arrays allocated in allocate_locpot.f90 ( and never deallocated )
   !
@@ -160,6 +176,9 @@ SUBROUTINE clean_pw( lflag )
   ! ... arrays allocated in init_run.f90 ( and never deallocated )
   !
   !$acc exit data delete(g2kin)
+#if defined(__OPENMP_GPU)
+  !$omp target exit data map(delete:g2kin)
+#endif
   IF ( ALLOCATED( g2kin ) )      DEALLOCATE( g2kin )
   !$acc exit data delete(et)
   IF ( ALLOCATED( et ) )         DEALLOCATE( et )

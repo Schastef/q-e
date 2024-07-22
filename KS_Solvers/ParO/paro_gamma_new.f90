@@ -111,7 +111,6 @@ SUBROUTINE paro_gamma_new( h_psi_ptr, s_psi_ptr, hs_psi_ptr, g_1psi_ptr, overlap
   !$acc end host_data
 
   ALLOCATE ( psi(npwx,nvecx), hpsi(npwx,nvecx), spsi(npwx,nvecx), ew(nvecx), conv(nbnd) )
-
   CALL start_clock( 'paro:init' ); 
   conv(:) =  .FALSE. ; nconv = COUNT ( conv(:) )
   !$acc kernels
@@ -119,7 +118,15 @@ SUBROUTINE paro_gamma_new( h_psi_ptr, s_psi_ptr, hs_psi_ptr, g_1psi_ptr, overlap
   !$acc end kernels
 
   !$acc host_data use_device(psi, hpsi, spsi)
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:psi,hpsi)
+  !$omp target update to(psi,hpsi)     
+#endif
   call h_psi_ptr (npwx,npw,nbnd,psi,hpsi) ! computes H*psi
+#if defined(__OPENMP_GPU)
+  !$omp target update from(hpsi)    
+  !$omp end target data
+#endif
   call s_psi_ptr (npwx,npw,nbnd,psi,spsi) ! computes S*psi
   !$acc end host_data
 

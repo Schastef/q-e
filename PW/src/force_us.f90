@@ -12,7 +12,7 @@ SUBROUTINE force_us( forcenl )
   !! The nonlocal potential contribution to forces.
   !
   USE kinds,                ONLY : DP
-  USE control_flags,        ONLY : gamma_only, offload_type
+  USE control_flags,        ONLY : gamma_only, offload_type, offload_cpu
   USE cell_base,            ONLY : tpiba
   USE ions_base,            ONLY : nat, ntyp => nsp, ityp
   USE klist,                ONLY : nks, xk, ngk, igk_k
@@ -100,7 +100,11 @@ SUBROUTINE force_us( forcenl )
      ENDIF
      !
      !$acc update device( evc )
+#if defined(__OPENMP_GPU)
+     CALL calbec( offload_cpu, npw, vkb, evc, becp )
+#else
      CALL calbec( offload_type, npw, vkb, evc, becp )
+#endif
      IF (noncolin) THEN
        !$acc kernels
        becpnc = becp%nc
@@ -124,7 +128,11 @@ SUBROUTINE force_us( forcenl )
            ENDDO
         ENDDO
         !
+#if defined(__OPENMP_GPU)
+        CALL calbec( offload_cpu, npw, vkb1, evc, dbecp )
+#else
         CALL calbec( offload_type, npw, vkb1, evc, dbecp )
+#endif
         IF (noncolin) THEN
           !$acc kernels
           dbecpnc = dbecp%nc
@@ -246,9 +254,9 @@ SUBROUTINE force_us( forcenl )
                 ! ... this is \sum_j q_{ij} <beta_j|psi>
                 !
                 !$acc host_data use_device(aux, qq_at, becprd)
-                CALL MYDGEMM( 'N','N', nh(nt), becp_nbnd_loc, nh(nt),      &
-                              1.0_DP, qq_at(1,1,na), nhm, becprd(ijkb0+1,1), &
-                              nkb, 0.0_DP, aux, nh(nt) )
+                CALL MYDGEMM2( 'N','N', nh(nt), becp_nbnd_loc, nh(nt),      &
+                               1.0_DP, qq_at(1,1,na), nhm, becprd(ijkb0+1,1), &
+                               nkb, 0.0_DP, aux, nh(nt),.FALSE. )
                 !$acc end host_data
                 !
                 ! ... multiply by -\epsilon_n
@@ -271,9 +279,9 @@ SUBROUTINE force_us( forcenl )
                 ! ... add  \sum_j d_{ij} <beta_j|psi>
                 !
                 !$acc host_data use_device(aux, deeq, becprd)
-                CALL MYDGEMM( 'N','N', nh(nt), becp_nbnd_loc, nh(nt), &
-                              1.0_DP, deeq(1,1,na,current_spin), nhm, &
-                              becprd(ijkb0+1,1), nkb, 1.0_DP, aux, nh(nt) )
+                CALL MYDGEMM2( 'N','N', nh(nt), becp_nbnd_loc, nh(nt), &
+                               1.0_DP, deeq(1,1,na,current_spin), nhm, &
+                               becprd(ijkb0+1,1), nkb, 1.0_DP, aux, nh(nt),.FALSE. )
                 !$acc end host_data
                 !
                 ! ... Auxiliary variable to perform the reduction with gpu kernels

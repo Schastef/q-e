@@ -100,6 +100,9 @@
        ALLOCATE( igtongl(ngm) )
        ! FIXME  why dimensions in the following directive?
        !$acc enter data create( mill(1:3,1:ngm), g(1:3,1:ngm), gg(1:ngm), igtongl(1:ngm) ) 
+#if defined(__OPENMP_GPU)
+       !$omp target enter data map(alloc: g)
+#endif
        !
        RETURN 
        !
@@ -125,6 +128,9 @@
        DEALLOCATE( gg )
        END IF
        IF( ALLOCATED( g ) )  THEN 
+#if defined(__OPENMP_GPU)
+         !$omp target exit data map(delete:g)
+#endif
 !$acc    exit data delete(g) 
          DEALLOCATE( g )
        END IF 
@@ -159,6 +165,9 @@
          DEALLOCATE( gg )
        END IF
        IF( ALLOCATED( g ) )  THEN
+#if defined(__OPENMP_GPU)
+         !$omp target exit data map(delete:g)
+#endif
 !$acc    exit data delete(g) 
          DEALLOCATE( g )
        END IF 

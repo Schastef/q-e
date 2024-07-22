@@ -60,6 +60,7 @@ qe_add_library(qe_upflib ${src_upflib})
 target_link_libraries(qe_upflib
     PUBLIC
         qe_openacc_fortran
+	qe_openmp_fortran
         qe_xml
     PRIVATE
         qe_mpi_fortran

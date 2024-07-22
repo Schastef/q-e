@@ -267,7 +267,13 @@ SUBROUTINE sum_band()
      !
      ! ... Here we add the (unsymmetrized) Ultrasoft contribution to the charge
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:becsum)
+#endif
      CALL addusdens( rho%of_g )
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
   ENDIF
   !
@@ -337,7 +343,7 @@ SUBROUTINE sum_band()
        REAL(DP) :: w1, w2
          ! weights
        INTEGER  :: npw, incr, j
-       INTEGER ::  ierr, ebnd, i, brange
+       INTEGER ::  ierr, ebnd, i, brange, ns, dffts_nnr
        REAL(DP) :: kplusgi
        COMPLEX(DP), ALLOCATABLE :: grad_psic(:,:)
        !$acc declare device_resident(grad_psic)
@@ -348,6 +354,19 @@ SUBROUTINE sum_band()
        incr = 2
        !$acc enter data create(psic)
        IF (xclib_dft_is('meta') .OR. lxdm) ALLOCATE( grad_psic(npwx,2) )
+       !
+       ns = SIZE(rho%of_r,2)
+       dffts_nnr = dffts%nnr
+       !
+#if defined(__OPENMP_GPU)
+       !$omp target data map(alloc:rho%of_r)
+       !$omp target teams distribute parallel do collapse(2)
+#endif
+       DO j = 1, ns
+         DO i = 1, dffts_nnr
+           rho%of_r(i,j)=0.d0
+         ENDDO
+       ENDDO
        !
        k_loop: DO ik = 1, nks
           !
@@ -380,12 +399,16 @@ SUBROUTINE sum_band()
              !
           ENDDO
           !
+#if defined(__OPENMP_GPU)
+          !$omp target data map(to:evc)
+#endif
+          !
           DO ibnd = ibnd_start, ibnd_end, incr
              !
              ebnd = ibnd
              IF ( ibnd < ibnd_end ) ebnd = ebnd + 1
              !
-             CALL wave_g2r( evc(1:npw,ibnd:ebnd), psic, dffts )
+             CALL wave_g2r( evc(1:npw,ibnd:ebnd), psic, dffts, omp_mod=0 )
              !
              w1 = wg(ibnd,ik) / omega
              !
@@ -403,7 +426,7 @@ SUBROUTINE sum_band()
                 !
              ENDIF
              !
-             CALL get_rho_gamma( rho%of_r(:,current_spin), dffts%nnr, w1, w2, psic )
+             CALL get_rho_gamma( rho%of_r(:,current_spin), dffts%nnr, w1, w2, psic, omp_mod=0 )
              !
              IF (xclib_dft_is('meta') .OR. lxdm) THEN
                 !
@@ -437,6 +460,10 @@ SUBROUTINE sum_band()
           IF ( okvan ) CALL sum_bec( ik, current_spin, ibnd_start, ibnd_end, &
                this_bgrp_nbnd )
           !
+#if defined(__OPENMP_GPU)
+          !$omp end target data
+#endif
+          !
        ENDDO k_loop
        !
        IF (xclib_dft_is('meta') .OR. lxdm) THEN
@@ -444,6 +471,12 @@ SUBROUTINE sum_band()
           !$acc update host(rho%kin_r)
        END IF
        !$acc exit data delete(psic)
+       !
+#if defined(__OPENMP_GPU)
+       !$omp target update from(rho%of_r)
+       !$omp end target data
+#endif
+       !
        RETURN
        !
      END SUBROUTINE sum_band_gamma
@@ -466,11 +499,12 @@ SUBROUTINE sum_band()
        !
        REAL(DP) :: w1
        ! weights
-       INTEGER :: npw, ipol, na, np
+       INTEGER :: npw, ipol, na, np, ns, dffts_nnr
        !
        INTEGER  :: idx, incr
        COMPLEX(DP), ALLOCATABLE :: psicd(:)
        COMPLEX(DP), ALLOCATABLE :: grad_psic(:,:)
+       !
        ! polaron calculation
        REAL(DP), ALLOCATABLE :: rho_p(:)
        COMPLEX(DP), ALLOCATABLE :: psic_p(:)
@@ -505,6 +539,19 @@ SUBROUTINE sum_band()
        ENDIF
        ALLOCATE( psicd(dffts%nnr*incr) )
        ! ... This is used as reduction variable on the device
+       !
+       ns = SIZE(rho%of_r,2)
+       dffts_nnr = dffts%nnr
+       !
+#if defined(__OPENMP_GPU)
+       !$omp target data map(alloc:rho%of_r)
+       !$omp target teams distribute parallel do collapse(2)
+#endif
+       DO j = 1, ns
+         DO i = 1, dffts_nnr
+           rho%of_r(i,j)=0.d0
+         ENDDO
+       ENDDO
        !
        k_loop: DO ik = 1, nks
           !
@@ -552,6 +599,12 @@ SUBROUTINE sum_band()
              rho%pol_r(:,1) = rho_p(:)
              wg_p = wg_p + wg(ibnd_p,ik)
           ENDIF
+          !
+          ! ... here we compute the band energy: the sum of the eigenvalues
+          !
+#if defined(__OPENMP_GPU)
+          !$omp target data map(to:evc)
+#endif
           !
           DO ibnd = ibnd_start, ibnd_end, incr
              !
@@ -606,11 +659,11 @@ SUBROUTINE sum_band()
                 !
              ELSE
                 !
-                CALL wave_g2r( evc(1:npw,ibnd:ibnd), psicd, dffts, igk=igk_k(:,ik) )
+                CALL wave_g2r( evc(1:npw,ibnd:ibnd), psicd, dffts, igk=igk_k(:,ik), omp_mod=0 )
                 !
                 ! ... increment the charge density ...
                 !
-                CALL get_rho_gpu( rho%of_r(:,current_spin), dffts%nnr, w1, psicd )
+                CALL get_rho_gpu( rho%of_r(:,current_spin), dffts%nnr, w1, psicd, omp_mod=0 )
                 !
                 IF (xclib_dft_is('meta') .OR. lxdm) THEN
                    !$acc data present(g,igk_k,evc,rho%kin_r) copyin(xk)
@@ -636,9 +689,20 @@ SUBROUTINE sum_band()
           !
           ! ... If we have a US pseudopotential we compute here the becsum term
           !
-          IF ( okvan ) CALL sum_bec ( ik, current_spin, ibnd_start,ibnd_end,this_bgrp_nbnd ) 
+          IF ( okvan ) CALL sum_bec( ik, current_spin, ibnd_start,ibnd_end,this_bgrp_nbnd ) 
+          !
+          !*evc
+#if defined(__OPENMP_GPU)
+          !$omp end target data
+#endif
           !
        END DO k_loop
+       !
+       !*rho%of_r
+#if defined(__OPENMP_GPU)
+       !$omp target update from(rho%of_r)
+       !$omp end target data
+#endif
        !
        IF(sic .and. pol_type == 'h') THEN
           wg_p = 1.0 - wg_p
@@ -660,7 +724,7 @@ SUBROUTINE sum_band()
      END SUBROUTINE sum_band_k
      !
      !---------------
-     SUBROUTINE get_rho_gpu(rho_loc, nrxxs_loc, w1_loc, psic_loc)
+     SUBROUTINE get_rho_gpu(rho_loc, nrxxs_loc, w1_loc, psic_loc, omp_mod)
         !------------
         !
         IMPLICIT NONE
@@ -670,21 +734,41 @@ SUBROUTINE sum_band()
         REAL(DP) :: w1_loc
         COMPLEX(DP), INTENT(IN) :: psic_loc(:)
         INTEGER :: ir
+        INTEGER, INTENT(IN), OPTIONAL :: omp_mod
+        LOGICAL :: omp_offload
         !
-        !$acc data present(rho_loc, psic_loc)
-        !$acc parallel loop
-        DO ir = 1, nrxxs_loc
-           !
-           rho_loc(ir) = rho_loc(ir) + &
-                         w1_loc * ( DBLE( psic_loc(ir) )**2 + &
-                                   AIMAG( psic_loc(ir) )**2 )
-        END DO
-        !$acc end data
+        omp_offload = .FALSE.
+#if defined(__OPENMP_GPU)
+        IF (PRESENT(omp_mod))  omp_offload = omp_mod==0
+#endif
+        !
+        IF (omp_offload) THEN
+#if defined(__OPENMP_GPU)
+          !$omp target teams distribute parallel do
+#endif
+          DO ir = 1, nrxxs_loc
+             !
+             rho_loc(ir) = rho_loc(ir) + &
+                           w1_loc * ( DBLE( psic_loc(ir) )**2 + &
+                                     AIMAG( psic_loc(ir) )**2 )
+             !
+          ENDDO
+        ELSE
+          !$acc data present(rho_loc, psic_loc)
+          !$acc parallel loop
+          DO ir = 1, nrxxs_loc
+             !
+             rho_loc(ir) = rho_loc(ir) + &
+                           w1_loc * ( DBLE( psic_loc(ir) )**2 + &
+                                     AIMAG( psic_loc(ir) )**2 )
+          END DO
+          !$acc end data
+        END IF
         !
      END SUBROUTINE get_rho_gpu
      !
      !-----------------
-     SUBROUTINE get_rho_gamma( rho_loc, nrxxs_loc, w1_loc, w2_loc, psic_loc )
+     SUBROUTINE get_rho_gamma( rho_loc, nrxxs_loc, w1_loc, w2_loc, psic_loc, omp_mod )
         !--------------
         !
         IMPLICIT NONE
@@ -694,17 +778,39 @@ SUBROUTINE sum_band()
         REAL(DP) :: w1_loc, w2_loc
         COMPLEX(DP), INTENT(IN) :: psic_loc(nrxxs_loc)
         INTEGER :: ir
+        INTEGER, INTENT(IN), OPTIONAL :: omp_mod
+        LOGICAL :: omp_offload
         !
-        !$acc data present(rho_loc, psic_loc)
-        !$acc parallel loop
-        DO ir = 1, nrxxs_loc
-           !
-           rho_loc(ir) = rho_loc(ir) + &
+        omp_offload = .FALSE.
+#if defined(__OPENMP_GPU)
+        IF (PRESENT(omp_mod))  omp_offload = omp_mod==0
+#endif
+        !
+        IF (omp_offload) THEN
+#if defined(__OPENMP_GPU)
+          !$omp target teams distribute parallel do
+#endif
+          DO ir = 1, nrxxs_loc
+            !
+            rho_loc(ir) = rho_loc(ir) + &
                          w1_loc * DBLE( psic_loc(ir) )**2 + &
                          w2_loc * AIMAG( psic_loc(ir) )**2
-           !
-        END DO
-        !$acc end data
+            !
+          END DO
+          !
+        ELSE
+          !
+          !$acc data present(rho_loc, psic_loc)
+          !$acc parallel loop
+          DO ir = 1, nrxxs_loc
+             !
+             rho_loc(ir) = rho_loc(ir) + &
+                           w1_loc * DBLE( psic_loc(ir) )**2 + &
+                           w2_loc * AIMAG( psic_loc(ir) )**2
+             !
+          END DO
+          !$acc end data
+        END IF
         !
      END SUBROUTINE get_rho_gamma
      !
