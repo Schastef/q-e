@@ -243,11 +243,17 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
                     END DO
                  END DO
                  !
+#if defined (__OPENMP_GPU)
+                 CALL ZGEMM ( 'C', 'N', npol*nhnt, npol*nhnt, this_bgrp_nbnd, &
+                      (1.0_dp,0.0_dp), auxk1, this_bgrp_nbnd, auxk2, this_bgrp_nbnd, &
+                      (0.0_dp,0.0_dp), aux_nc, npol*nhnt )
+#else
                  !$acc host_data use_device(auxk1, auxk2, aux_nc)
                  CALL MYZGEMM ( 'C', 'N', npol*nhnt, npol*nhnt, this_bgrp_nbnd, &
                       (1.0_dp,0.0_dp), auxk1, this_bgrp_nbnd, auxk2, this_bgrp_nbnd, &
                       (0.0_dp,0.0_dp), aux_nc, npol*nhnt )
                  !$acc end host_data
+#endif
                  !
               ELSE IF ( gamma_only ) THEN
                  !
@@ -261,11 +267,17 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
                        auxg2(ibnd_loc,ih) = becp%r(ikb,ibnd_loc) * wg(ibnd,ik)
                     END DO
                  END DO
+#if defined(__OPENMP_GPU)
+                 CALL DGEMM ( 'T', 'N', nhnt, nhnt, nbnd_loc, &
+                      1.0_dp, auxg1, nbnd_loc,    &
+                      auxg2, nbnd_loc, 0.0_dp, aux_gk, nhnt )
+#else
                  !$acc host_data use_device(auxg1, auxg2, aux_gk)
                  CALL MYDGEMM ( 'T', 'N', nhnt, nhnt, nbnd_loc, &
                       1.0_dp, auxg1, nbnd_loc,    &
                       auxg2, nbnd_loc, 0.0_dp, aux_gk, nhnt )
                  !$acc end host_data
+#endif
                  !
                  if (tqr) then
                    !$acc parallel loop collapse(2)
@@ -275,11 +287,17 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
                       auxg2(ibnd_loc,ih) = et(ibnd,ik) * auxg2(ibnd_loc,ih)
                       END DO
                    END DO
+#if defined(__OPENMP_GPU)
+                   CALL DGEMM ( 'T', 'N', nhnt, nhnt, nbnd_loc, &
+                        1.0_dp, auxg1, nbnd_loc,    &
+                        auxg2, nbnd_loc, 0.0_dp, aux_egk, nhnt )
+#else
                    !$acc host_data use_device(auxg1, auxg2, aux_egk)
                    CALL MYDGEMM ( 'T', 'N', nhnt, nhnt, nbnd_loc, &
                         1.0_dp, auxg1, nbnd_loc,    &
                         auxg2, nbnd_loc, 0.0_dp, aux_egk, nhnt )
                    !$acc end host_data
+#endif
                  end if
                  !
               ELSE
@@ -296,11 +314,17 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
                  !
                  ! only the real part is computed
                  !
+#if defined(__OPENMP_GPU)
+                 CALL DGEMM ( 'C', 'N', nhnt, nhnt, 2*this_bgrp_nbnd, &
+                      1.0_dp, auxk1, 2*this_bgrp_nbnd, auxk2, 2*this_bgrp_nbnd, &
+                      0.0_dp, aux_gk, nhnt )
+#else
                  !$acc host_data use_device(auxk1, auxk2, aux_gk)
                  CALL MYDGEMM ( 'C', 'N', nhnt, nhnt, 2*this_bgrp_nbnd, &
                       1.0_dp, auxk1, 2*this_bgrp_nbnd, auxk2, 2*this_bgrp_nbnd, &
                       0.0_dp, aux_gk, nhnt )
                  !$acc end host_data
+#endif
                  !
                  if (tqr) then
                    !$acc parallel loop collapse(2)
@@ -310,11 +334,17 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
                       END DO
                    END DO
 
+#if defined(__OPENMP_GPU)
+                   CALL DGEMM ( 'C', 'N', nhnt, nhnt, 2*this_bgrp_nbnd, &
+                        1.0_dp, auxk1, 2*this_bgrp_nbnd, auxk2, 2*this_bgrp_nbnd, &
+                        0.0_dp, aux_egk, nhnt )
+#else
                    !$acc host_data use_device(auxk1, auxk2, aux_egk)
                    CALL MYDGEMM ( 'C', 'N', nhnt, nhnt, 2*this_bgrp_nbnd, &
                         1.0_dp, auxk1, 2*this_bgrp_nbnd, auxk2, 2*this_bgrp_nbnd, &
                         0.0_dp, aux_egk, nhnt )
                    !$acc end host_data
+#endif
                  end if
 
               END IF
