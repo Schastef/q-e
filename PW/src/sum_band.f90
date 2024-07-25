@@ -538,6 +538,9 @@ SUBROUTINE sum_band()
           incr = many_fft
        ENDIF
        ALLOCATE( psicd(dffts%nnr*incr) )
+#if defined(__OPENMP_GPU)
+       !$omp target enter data map(alloc:psicd)
+#endif
        ! ... This is used as reduction variable on the device
        !
        ns = SIZE(rho%of_r,2)
@@ -648,13 +651,13 @@ SUBROUTINE sum_band()
                 hm_vec(1)=group_size ; hm_vec(2)=npw ; hm_vec(3)=group_size
                 !
                 CALL wave_g2r( evc(:,ibnd:ibnd+group_size-1), psicd, &
-                     dffts, igk=igk_k(:,ik), howmany_set=hm_vec )
+                     dffts, igk=igk_k(:,ik), howmany_set=hm_vec, omp_mod=0 )
                 !
                 ! ... increment the charge density ...
                 !
                 DO i = 0, group_size-1
                    w1 = wg(ibnd+i,ik) / omega
-                   CALL get_rho_gpu( rho%of_r(:,current_spin), dffts%nnr, w1, psicd(i*dffts%nnr+1:) )
+                   CALL get_rho_gpu( rho%of_r(:,current_spin), dffts%nnr, w1, psicd(i*dffts%nnr+1:), omp_mod=0 )
                 ENDDO
                 !
              ELSE
@@ -710,6 +713,9 @@ SUBROUTINE sum_band()
           DEALLOCATE(rho_p)
        END IF
        !
+#if defined(__OPENMP_GPU)
+    !$omp target exit data map(delete:psicd)
+#endif
        DEALLOCATE( psicd )
        !
        IF (xclib_dft_is('meta') .OR. lxdm) THEN
