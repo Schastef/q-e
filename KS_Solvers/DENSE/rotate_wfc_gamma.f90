@@ -73,16 +73,15 @@ SUBROUTINE rotate_wfc_gamma( h_psi_ptr, s_psi_ptr, overlap, &
   !
   ! ... set Im[ psi(G=0) ] -  needed for numerical stability
   !
-#if defined(__OPENMP_GPU)
-  !$omp target data map(alloc:psi,aux)
-  !$omp target update to(psi,aux)
-#endif
   IF ( gstart == 2 ) THEN
-     !$omp target teams distribute parallel do
      DO j = 1, nstart
         psi(1,j) = CMPLX( DBLE( psi(1,j) ), 0.D0,kind=DP)
      END DO
   ENDIF
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:psi,aux)
+  !$omp target update to(psi,aux)
+#endif
   !
   call start_clock('rotwfcg:hpsi'); !write(*,*) 'start rotwfcg:hpsi' ; FLUSH(6)
   CALL h_psi_ptr( npwx, npw, nstart, psi, aux )
