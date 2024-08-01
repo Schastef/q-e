@@ -13,11 +13,10 @@ SUBROUTINE vloc_psi_tg_gamma( lda, n, m, psi, v, hpsi )
   !
   USE parallel_include
   USE kinds,                   ONLY : DP
-  USE control_flags,           ONLY : many_fft
   USE mp_bands,                ONLY : me_bgrp
   USE fft_base,                ONLY : dffts
   USE fft_wave
-  USE wavefunctions,           ONLY : psic, psicg
+  USE wavefunctions,           ONLY : psic
   USE fft_helper_subroutines,  ONLY : fftx_ntgrp, tg_get_group_nr3, &
                                       tg_get_recip_inc
   !
@@ -38,8 +37,7 @@ SUBROUTINE vloc_psi_tg_gamma( lda, n, m, psi, v, hpsi )
   !
   ! ... local variables
   !
-  INTEGER :: ibnd, j, incr, right_nr3, right_inc, nnr
-  INTEGER :: group_size, pack_size, remainder, howmany, hm_vec(3), ierr
+  INTEGER :: ibnd, j, incr, right_nr3, right_inc
   COMPLEX(DP) :: fp, fm
   COMPLEX(DP), ALLOCATABLE :: vpsi(:,:) 
   ! ... Variables for task groups
@@ -124,9 +122,8 @@ SUBROUTINE vloc_psi_tg_k( lda, n, m, psi, v, hpsi )
   USE mp_bands,               ONLY : me_bgrp
   USE fft_base,               ONLY : dffts
   USE fft_wave
-  USE control_flags,          ONLY : many_fft
   USE fft_helper_subroutines, ONLY : fftx_ntgrp, tg_get_nnr, tg_get_group_nr3
-  USE wavefunctions,          ONLY : psic, psicg
+  USE wavefunctions,          ONLY : psic
   !
   IMPLICIT NONE
   !
@@ -145,8 +142,9 @@ SUBROUTINE vloc_psi_tg_k( lda, n, m, psi, v, hpsi )
   !
   ! ... local variables
   !
-  INTEGER :: ibnd, ebnd, j, incr, nnr
+  INTEGER :: ibnd, j, incr
   INTEGER :: i, iin, right_nnr, right_nr3, right_inc
+  COMPLEX(DP), ALLOCATABLE :: vpsi(:,:)
   ! ... chunking parameters
   INTEGER, PARAMETER :: blocksize = 256
   INTEGER :: numblock
@@ -370,13 +368,14 @@ SUBROUTINE vloc_psi_gamma( lda, n, m, psi, v, hpsi )
   !
   ! ... local variables
   !
-  INTEGER :: ibnd, j, incr, brange, ebnd
+  INTEGER :: ibnd, j, incr, brange, ebnd, nnr
   REAL(DP) :: fac
   COMPLEX(DP) :: fp, fm
   COMPLEX(DP), ALLOCATABLE :: vpsi(:,:) 
   !
   CALL start_clock( 'vloc_psi' )
   incr = 2
+  nnr = dffts%nnr
   !
   IF ( dffts%has_task_groups ) CALL errore('vloc_psi','no task groups!',1)
   ALLOCATE( vpsi(n,incr) )
@@ -394,7 +393,7 @@ SUBROUTINE vloc_psi_gamma( lda, n, m, psi, v, hpsi )
 #if defined(__OPENMP_GPU)
      !$omp target teams distribute parallel do
 #endif
-     DO j = 1, dffts%nnr
+     DO j = 1, nnr
         psic(j) = psic(j) * v(j)
      ENDDO
      !
@@ -403,7 +402,7 @@ SUBROUTINE vloc_psi_gamma( lda, n, m, psi, v, hpsi )
         brange=2 ;  fac=0.5d0
      ENDIF
      !
-     CALL wave_r2g( psic(1:dffts%nnr), vpsi(:,1:brange), dffts, omp_mod=0 )
+     CALL wave_r2g( psic(1:nnr), vpsi(:,1:brange), dffts, omp_mod=0 )
      !
 #if defined(__OPENMP_GPU)
      !$omp target teams distribute parallel do map(to:fac,ibnd,m) 
