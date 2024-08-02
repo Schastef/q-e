@@ -578,6 +578,7 @@ SUBROUTINE vloc_psi_nc( lda, n, m, psi, v, hpsi )
   CALL start_clock( 'vloc_psi' )
   !
   incr = 1
+  v_siz = dffts%nnr
   !
   IF (dffts%has_task_groups ) CALL errore('vloc_psi','no task groups!',3)
   !
@@ -591,7 +592,7 @@ SUBROUTINE vloc_psi_nc( lda, n, m, psi, v, hpsi )
 #if defined(__OPENMP_GPU)
      !$omp target teams distribute parallel do
 #endif
-     DO j = 1, dffts%nnr 
+     DO j = 1, v_siz 
         psic_nc(j,:) = (0.d0,0.d0)
      ENDDO
      !
@@ -599,14 +600,14 @@ SUBROUTINE vloc_psi_nc( lda, n, m, psi, v, hpsi )
         ii = lda*(ipol-1)+1
         ie = lda*(ipol-1)+n
         CALL wave_g2r( psi(ii:ie,ibnd:ibnd), psic_nc(:,ipol), dffts, &
-             igk=igk_k(:,current_k) )
+             igk=igk_k(:,current_k), omp_mod=0 )
      ENDDO
      !
      IF (domag) THEN
 #if defined(__OPENMP_GPU)
         !$omp target teams distribute parallel do
 #endif
-        DO j = 1, dffts%nnr
+        DO j = 1, v_siz 
            sup  = psic_nc(j,1) * (v(j,1)+v(j,4)) + &
                 psic_nc(j,2) * (v(j,2)-(0.d0,1.d0)*v(j,3))
            sdwn = psic_nc(j,2) * (v(j,1)-v(j,4)) + &
@@ -618,14 +619,14 @@ SUBROUTINE vloc_psi_nc( lda, n, m, psi, v, hpsi )
 #if defined(__OPENMP_GPU)
         !$omp target teams distribute parallel do
 #endif
-        DO j = 1, dffts%nnr
+        DO j = 1, v_siz 
            psic_nc(j,:) = psic_nc(j,:) * v(j,1)
         ENDDO
      ENDIF
      !
      DO ipol = 1, npol
-        CALL wave_r2g( psic_nc(1:dffts%nnr,ipol), vpsi(1:n,:), dffts, &
-             igk=igk_k(:,current_k) )
+        CALL wave_r2g( psic_nc(1:v_siz,ipol), vpsi(1:n,:), dffts, &
+             igk=igk_k(:,current_k), omp_mod=0 )
 #if defined(__OPENMP_GPU)
         !$omp target teams distribute parallel do
 #elif defined(__OPENMP)

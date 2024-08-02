@@ -629,21 +629,21 @@ SUBROUTINE sum_band()
                 ! ... Noncollinear case without task groups
                 !
                 CALL wave_g2r( evc(1:npw,ibnd:ibnd), psic_nc(:,1), &
-                     dffts, igk=igk_k(:,ik) )
+                     dffts, igk=igk_k(:,ik), omp_mod=0 )
                 CALL wave_g2r( evc(npwx+1:npwx+npw,ibnd:ibnd), psic_nc(:,2), &
-                     dffts, igk=igk_k(:,ik) )
+                     dffts, igk=igk_k(:,ik), omp_mod=0 )
                 !
                 ! ... Increment the charge density
                 !
                 DO ipol = 1, npol
-                   CALL get_rho_gpu( rho%of_r(:,1), dffts%nnr, w1, psic_nc(:,ipol) )
+                   CALL get_rho_gpu( rho%of_r(:,1), dffts%nnr, w1, psic_nc(:,ipol), omp_mod=0 )
                 ENDDO
                 !
                 ! ... In this case, calculate also the three
                 ! ... components of the magnetization (stored in rho%of_r(ir,2-4))
                 !
                 IF (domag) &
-                   CALL get_rho_domag( rho%of_r(:,:), dffts%nnr, w1, psic_nc(1:,1:) )
+                   CALL get_rho_domag( rho%of_r(:,:), dffts%nnr, w1, psic_nc(1:,1:), omp_mod=0 )
                 !
              ELSE IF ( incr > 1 ) THEN
                 !
@@ -821,7 +821,7 @@ SUBROUTINE sum_band()
      END SUBROUTINE get_rho_gamma
      !
      !--------------
-     SUBROUTINE get_rho_domag( rho_loc, nrxxs_loc, w1_loc, psic_loc )
+     SUBROUTINE get_rho_domag( rho_loc, nrxxs_loc, w1_loc, psic_loc, omp_mod )
         !-----------
         !
         IMPLICIT NONE
@@ -831,25 +831,53 @@ SUBROUTINE sum_band()
         REAL(DP) :: w1_loc
         COMPLEX(DP), INTENT(IN) :: psic_loc(:, :)
         INTEGER :: ir
-
-        !$acc data present( rho_loc, psic_loc)
-        !$acc parallel loop
-        DO ir = 1, nrxxs_loc
-           !
-           rho_loc(ir,2) = rho_loc(ir,2) + w1_loc*2.D0* &
-                          (DBLE(psic_loc(ir,1))* DBLE(psic_loc(ir,2)) + &
-                          AIMAG(psic_loc(ir,1))*AIMAG(psic_loc(ir,2)))
+        INTEGER, INTENT(IN), OPTIONAL :: omp_mod
+        LOGICAL :: omp_offload
+        !
+        omp_offload = .FALSE.
+#if defined(__OPENMP_GPU)
+        IF (PRESENT(omp_mod))  omp_offload = omp_mod==0
+#endif
+        !
+        IF (omp_offload) THEN
+#if defined(__OPENMP_GPU)
+          !$omp target teams distribute parallel do
+#endif
+          DO ir = 1, nrxxs_loc
+             !
+             rho_loc(ir,2) = rho_loc(ir,2) + w1_loc*2.D0* &
+                            (DBLE(psic_loc(ir,1))* DBLE(psic_loc(ir,2)) + &
+                            AIMAG(psic_loc(ir,1))*AIMAG(psic_loc(ir,2)))
  
-           rho_loc(ir,3) = rho_loc(ir,3) + w1_loc*2.D0* &
-                          (DBLE(psic_loc(ir,1))*AIMAG(psic_loc(ir,2)) - &
-                           DBLE(psic_loc(ir,2))*AIMAG(psic_loc(ir,1)))
+             rho_loc(ir,3) = rho_loc(ir,3) + w1_loc*2.D0* &
+                            (DBLE(psic_loc(ir,1))*AIMAG(psic_loc(ir,2)) - &
+                             DBLE(psic_loc(ir,2))*AIMAG(psic_loc(ir,1)))
 
-           rho_loc(ir,4) = rho_loc(ir,4) + w1_loc* &
-                          (DBLE(psic_loc(ir,1))**2+AIMAG(psic_loc(ir,1))**2 &
-                          -DBLE(psic_loc(ir,2))**2-AIMAG(psic_loc(ir,2))**2)
-           !
-        END DO
-        !$acc end data
+             rho_loc(ir,4) = rho_loc(ir,4) + w1_loc* &
+                            (DBLE(psic_loc(ir,1))**2+AIMAG(psic_loc(ir,1))**2 &
+                            -DBLE(psic_loc(ir,2))**2-AIMAG(psic_loc(ir,2))**2)
+             !
+          END DO
+        ELSE
+          !$acc data present( rho_loc, psic_loc)
+          !$acc parallel loop
+          DO ir = 1, nrxxs_loc
+             !
+             rho_loc(ir,2) = rho_loc(ir,2) + w1_loc*2.D0* &
+                            (DBLE(psic_loc(ir,1))* DBLE(psic_loc(ir,2)) + &
+                            AIMAG(psic_loc(ir,1))*AIMAG(psic_loc(ir,2)))
+ 
+             rho_loc(ir,3) = rho_loc(ir,3) + w1_loc*2.D0* &
+                            (DBLE(psic_loc(ir,1))*AIMAG(psic_loc(ir,2)) - &
+                             DBLE(psic_loc(ir,2))*AIMAG(psic_loc(ir,1)))
+
+             rho_loc(ir,4) = rho_loc(ir,4) + w1_loc* &
+                            (DBLE(psic_loc(ir,1))**2+AIMAG(psic_loc(ir,1))**2 &
+                            -DBLE(psic_loc(ir,2))**2-AIMAG(psic_loc(ir,2))**2)
+             !
+          END DO
+          !$acc end data
+        END IF
 
      END SUBROUTINE get_rho_domag
      !
