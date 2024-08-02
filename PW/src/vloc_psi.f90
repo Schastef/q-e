@@ -41,7 +41,7 @@ SUBROUTINE vloc_psi_tg_gamma( lda, n, m, psi, v, hpsi )
   COMPLEX(DP) :: fp, fm
   COMPLEX(DP), ALLOCATABLE :: vpsi(:,:) 
   ! ... Variables for task groups
-  INTEGER :: v_siz, idx, ebnd, brange
+  INTEGER :: v_siz, idx, brange
   REAL(DP) :: fac
   REAL(DP), ALLOCATABLE :: tg_v(:)
   COMPLEX(DP), ALLOCATABLE :: tg_psic(:), tg_vpsi(:,:)
@@ -346,10 +346,11 @@ SUBROUTINE vloc_psi_gamma( lda, n, m, psi, v, hpsi )
   !
   USE parallel_include
   USE kinds,                   ONLY : DP
+  USE control_flags,           ONLY : many_fft
   USE mp_bands,                ONLY : me_bgrp
   USE fft_base,                ONLY : dffts
   USE fft_wave
-  USE wavefunctions,           ONLY : psic
+  USE wavefunctions,           ONLY : psic, psicg
   !
   IMPLICIT NONE
   !
@@ -369,50 +370,123 @@ SUBROUTINE vloc_psi_gamma( lda, n, m, psi, v, hpsi )
   ! ... local variables
   !
   INTEGER :: ibnd, j, incr, brange, ebnd, nnr
+  INTEGER :: idx, group_size, pack_size, remainder, howmany, hm_vec(3)
   REAL(DP) :: fac
   COMPLEX(DP) :: fp, fm
   COMPLEX(DP), ALLOCATABLE :: vpsi(:,:) 
   !
   CALL start_clock( 'vloc_psi' )
-  incr = 2
+  incr = 2*many_fft
   nnr = dffts%nnr
   !
   IF ( dffts%has_task_groups ) CALL errore('vloc_psi','no task groups!',1)
-  ALLOCATE( vpsi(n,incr) )
+  IF (many_fft>1) THEN
+    ALLOCATE( vpsi(dffts%nnr,incr) ) 
+  ELSE
+    ALLOCATE( vpsi(n,incr) )
+  ENDIF 
 #if defined(__OPENMP_GPU)
   !$omp target enter data map(alloc:vpsi)
 #endif
   !
-  DO ibnd = 1, m, incr
-     !
-     ebnd = ibnd
-     IF ( ibnd < m ) ebnd = ibnd + 1
-     !
-     CALL wave_g2r( psi(1:n,ibnd:ebnd), psic, dffts, omp_mod=0 )
+  IF (many_fft > 1) THEN
      !
 #if defined(__OPENMP_GPU)
-     !$omp target teams distribute parallel do
+     !$omp target data map(alloc:psicg)
 #endif
-     DO j = 1, nnr
-        psic(j) = psic(j) * v(j)
-     ENDDO
-     !
-     brange=1 ;  fac=1.d0
-     IF ( ibnd<m ) THEN
-        brange=2 ;  fac=0.5d0
-     ENDIF
-     !
-     CALL wave_r2g( psic(1:nnr), vpsi(:,1:brange), dffts, omp_mod=0 )
-     !
+     DO ibnd = 1, m, incr
+        !
+        group_size = MIN(2*many_fft, m-(ibnd-1))
+        pack_size = (group_size/2) ! This is FLOOR(group_size/2)
+        remainder = group_size - 2*pack_size
+        howmany = pack_size + remainder
+        hm_vec(1)=group_size ; hm_vec(2)=n ; hm_vec(3)=howmany
+        !
+        CALL wave_g2r( psi(:,ibnd:ibnd+group_size-1), psicg, dffts, &
+                       howmany_set=hm_vec, omp_mod=0 )
+        !
 #if defined(__OPENMP_GPU)
-     !$omp target teams distribute parallel do map(to:fac,ibnd,m) 
+        !$omp target teams distribute parallel do collapse(2)
 #endif
-     DO j = 1, n
-        hpsi(j,ibnd) = hpsi(j,ibnd) + fac*vpsi(j,1)
-        IF ( ibnd<m ) hpsi(j,ibnd+1) = hpsi(j,ibnd+1) + fac*vpsi(j,2)
+        DO idx = 0, howmany-1
+          DO j = 1, nnr
+            psicg(idx*nnr+j) = psicg(idx*nnr+j) * v(j)
+          ENDDO
+        ENDDO
+        !
+        CALL wave_r2g( psicg, vpsi(1:n,1:group_size), dffts, howmany_set=hm_vec, omp_mod=0 )
+        !
+        IF ( pack_size > 0 ) THEN
+           !*** PROVISIONAL DUPLICATION OF LOOPS DUE TO COMPILER BUG ***
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do collapse(2)
+#endif
+           DO idx = 0, pack_size-1
+              DO j = 1, n
+                 hpsi(j,ibnd+idx*2)   = hpsi(j,ibnd+idx*2)   + vpsi(j,idx*2+1)
+                 !hpsi(j,ibnd+idx*2+1) = hpsi(j,ibnd+idx*2+1) + vpsi(j,idx*2+2)
+              ENDDO
+           ENDDO
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do collapse(2)
+#endif
+           DO idx = 0, pack_size-1
+              DO j = 1, n
+                 !hpsi(j,ibnd+idx*2)   = hpsi(j,ibnd+idx*2)   + vpsi(j,idx*2+1)
+                 hpsi(j,ibnd+idx*2+1) = hpsi(j,ibnd+idx*2+1) + vpsi(j,idx*2+2)
+              ENDDO
+           ENDDO
+        ENDIF
+        !
+        IF (remainder > 0) THEN
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do
+#endif
+           DO j = 1, n
+              hpsi(j,ibnd+group_size-1) = hpsi(j,ibnd+group_size-1) + &
+                                          vpsi(j,group_size)
+           ENDDO
+        ENDIF
+        !
+     ENDDO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
+     !   
+  ELSE
+     !
+     DO ibnd = 1, m, incr
+        !
+        ebnd = ibnd
+        IF ( ibnd < m ) ebnd = ibnd + 1
+        !
+        CALL wave_g2r( psi(1:n,ibnd:ebnd), psic, dffts, omp_mod=0 )
+        !
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
+        DO j = 1, nnr
+           psic(j) = psic(j) * v(j)
+        ENDDO
+        !
+        brange=1 ;  fac=1.d0
+        IF ( ibnd<m ) THEN
+           brange=2 ;  fac=0.5d0
+        ENDIF
+        !
+        CALL wave_r2g( psic(1:nnr), vpsi(:,1:brange), dffts, omp_mod=0 )
+        !
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do map(to:fac,ibnd,m) 
+#endif
+        DO j = 1, n
+           hpsi(j,ibnd) = hpsi(j,ibnd) + fac*vpsi(j,1)
+           IF ( ibnd<m ) hpsi(j,ibnd+1) = hpsi(j,ibnd+1) + fac*vpsi(j,2)
+        ENDDO
+        !
      ENDDO
      !
-  ENDDO
+  ENDIF
   !
 #if defined(__OPENMP_GPU)
   !$omp target exit data map(delete:vpsi)
@@ -442,7 +516,8 @@ SUBROUTINE vloc_psi_k( lda, n, m, psi, v, hpsi )
   USE mp_bands,               ONLY : me_bgrp
   USE fft_base,               ONLY : dffts
   USE fft_wave
-  USE wavefunctions,          ONLY : psic
+  USE control_flags,          ONLY : many_fft
+  USE wavefunctions,          ONLY : psic, psicg
   !
   IMPLICIT NONE
   !
@@ -461,68 +536,111 @@ SUBROUTINE vloc_psi_k( lda, n, m, psi, v, hpsi )
   !
   ! ... local variables
   !
-  INTEGER :: ibnd, j, incr
+  INTEGER :: ebnd, ibnd, j, incr
   INTEGER :: i, iin
   COMPLEX(DP), ALLOCATABLE :: vpsi(:,:)
   ! ... chunking parameters
   INTEGER, PARAMETER :: blocksize = 256
   INTEGER :: numblock
-  INTEGER :: idx, brange, v_siz
+  INTEGER :: idx, brange, v_siz, dffts_nnr, group_size, hm_vec(3), vszt
   !
   CALL start_clock( 'vloc_psi' )
   !
   IF (dffts%has_task_groups ) CALL errore('vloc_psi','no task groups!',2)
   !
-  v_siz = dffts%nnr
-  ALLOCATE( vpsi(lda,1) )
+  incr = many_fft
+  !
+  IF (many_fft>1) THEN
+     v_siz = dffts%nnr
+     vszt = v_siz*incr
+     ALLOCATE( vpsi(v_siz,incr) )
+  ELSE
+     dffts_nnr = dffts%nnr
+     ALLOCATE( vpsi(lda,1) )
+  END IF
 #if defined(__OPENMP_GPU)
   !$omp target enter data map(alloc:vpsi)
 #endif
   !
-  DO ibnd = 1, m
-     !
-     CALL wave_g2r( psi(1:n,ibnd:ibnd), psic, dffts, igk=igk_k(:,current_k), omp_mod=0 )
-     !
-!        write (6,*) 'wfc R '
-!        write (6,99) (psic(i), i=1,400)
+  IF (many_fft > 1) THEN
      !
 #if defined(__OPENMP_GPU)
-     !$omp target teams distribute parallel do
-#elif defined(__OPENMP)
-     !$omp parallel do
+     !$omp target data map(alloc:psicg)
 #endif
-     DO j = 1, v_siz
-        psic(j) = psic(j) * v(j)
-     ENDDO
-#if defined(__OPENMP)
-     !$omp end parallel do
-#endif
-     !
-!        write (6,*) 'v psi R '
-!        write (6,99) (psic(i), i=1,400)
-     !
-#if defined(__OPENMP_GPU)
-     CALL wave_r2g( psic(1:dffts%nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k), omp_mod=0 )
-#else
-     CALL wave_r2g( psic(1:dffts%nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k) )
-#endif
-     !
-#if defined(__OPENMP_GPU)
-     !$omp target teams distribute parallel do
-#elif defined(__OPENMP)
-     !$omp parallel do
-#endif
-     DO i = 1, n
-        hpsi(i,ibnd) = hpsi(i,ibnd) + vpsi(i,1)
-     ENDDO
-#if defined(__OPENMP)
-     !$omp end parallel do
-#endif
-     !
-!        write (6,*) 'v psi G ', ibnd
-!        write (6,99) (psic(i), i=1,400)
+     DO ibnd = 1, m, incr
         !
-  ENDDO
+        group_size = MIN(many_fft,m-(ibnd-1))
+        hm_vec(1)=group_size ; hm_vec(2)=n ; hm_vec(3)=group_size
+        ebnd = ibnd+group_size-1
+        !
+        CALL wave_g2r( psi(:,ibnd:ebnd), psicg, dffts, igk=igk_k(:,current_k), &
+                       howmany_set=hm_vec, omp_mod=0 )
+        !
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
+        DO idx = 0, group_size-1
+           DO j = 1, v_siz
+              psicg(idx*v_siz+j) = psicg(idx*v_siz+j) * v(j)
+           ENDDO
+        ENDDO
+        !
+        CALL wave_r2g( psicg, vpsi(1:v_siz,1:incr), dffts, igk=igk_k(:,current_k), &
+                       howmany_set=hm_vec, omp_mod=0 )
+        !
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
+        DO idx = 0, group_size-1
+           DO j = 1, n
+              hpsi(j,ibnd+idx) = hpsi(j,ibnd+idx) + vpsi(j,idx+1)
+           ENDDO
+        ENDDO
+        !
+     ENDDO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
+     !
+  ELSE
+     !
+     DO ibnd = 1, m
+        !
+        CALL wave_g2r( psi(1:n,ibnd:ibnd), psic, dffts, igk=igk_k(:,current_k), omp_mod=0 )
+        !
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#elif defined(__OPENMP)
+        !$omp parallel do
+#endif
+        DO j = 1, dffts_nnr
+           psic(j) = psic(j) * v(j)
+        ENDDO
+#if defined(__OPENMP)
+        !$omp end parallel do
+#endif
+        !
+#if defined(__OPENMP_GPU)
+        CALL wave_r2g( psic(1:dffts%nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k), omp_mod=0 )
+#else
+        CALL wave_r2g( psic(1:dffts%nnr), vpsi(1:n,:), dffts, igk=igk_k(:,current_k) )
+#endif
+        !
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#elif defined(__OPENMP)
+        !$omp parallel do
+#endif
+        DO i = 1, n
+           hpsi(i,ibnd) = hpsi(i,ibnd) + vpsi(i,1)
+        ENDDO
+#if defined(__OPENMP)
+        !$omp end parallel do
+#endif
+        !
+     ENDDO
+     !
+  END IF
   !
 #if defined(__OPENMP_GPU)
   !$omp target exit data map(delete:vpsi)
