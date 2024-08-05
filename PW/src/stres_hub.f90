@@ -1910,7 +1910,6 @@ SUBROUTINE matrix_element_of_dSdepsilon (ik, ipol, jpol, lA, A, lB, B, A_dS_B, l
             !$omp target data map(alloc:aux)
             !$omp target teams distribute parallel do collapse(2)
 #else
-            !$acc data create(aux)
             !$acc parallel loop collapse(2)
 #endif            
             DO ih = 1, nh_nt !nh(nt)

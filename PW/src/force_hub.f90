@@ -1084,7 +1084,6 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
             dproj2(m2,m1) = dproj1(m2,m1)
          enddo
       enddo
-      !$acc end kernels      
       !
    ELSEIF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ! ... In the 'ortho-atomic' case calculate d[(O^{-1/2})^T]
@@ -1739,7 +1738,6 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       dwfc(:,:) = (0.d0, 0.d0)
       !$acc data create(dwfc)
       !
-      !$acc data create(dwfc)
       !$acc kernels
 #if defined(__OPENMP_GPU)      
       !$omp target data map(alloc:dwfc)      
@@ -1849,7 +1847,6 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       ALLOCATE( dwfc(npwx*npol,ldim*npol) )
       !$acc data create(dwfc) present_or_copyin(wfcatom,overlap_inv)
       !
-      !$acc data create(dwfc) present_or_copyin(wfcatom,overlap_inv)
       !$acc kernels
 #if defined(__OPENMP_GPU)
       !$omp target data map(alloc:dwfc) map(to:wfcatom,overlap_inv)
@@ -2269,7 +2266,6 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    ALLOCATE( dbetaB(npol*nh(nt),lB) )
    ALLOCATE( betaB(npol*nh(nt),lB)  )
    ALLOCATE( qq(npol*nh(nt),npol*nh(nt)) )
-   !$acc data create(Adbeta,Abeta,dbetaB,betaB,qq)
    !
 #if defined(__OPENMP_GPU)
    !$omp target data map(alloc:qq) map(to:qq_at)
