@@ -291,7 +291,8 @@ PWLIBS += \
   utils_gpu.o \
   oscdft_functions_gpu.o
 
-
+pw_restart_new.o: pw_restart_new.f90
+	$(MPIF90) -eF -O0,fp3 -f free -x dir $(FDFLAGS) $(CUDA_F90FLAGS) $(IFLAGS) $(MODFLAGS) -c pw_restart_new.f90 -o pw_restart_new.o
 
 QEMODS=../../KS_Solvers/libks_solvers.a ../../dft-d3/libdftd3qe.a $(BASEMODS)
 
