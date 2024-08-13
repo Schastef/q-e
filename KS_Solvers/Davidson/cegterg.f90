@@ -126,7 +126,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nhpsi = 0
   CALL start_clock( 'cegterg' ); !write(*,*) 'start cegterg' ; FLUSH(6)
   !
-  !$acc data deviceptr(evc, e)
+  !$acc data deviceptr(e)
   !
   IF ( nvec > nvecx / 2 ) CALL errore( 'cegterg', 'nvecx is too small', 1 )
   !
@@ -203,7 +203,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      enddo
   enddo
 #else
-  !$acc host_data use_device(psi, hpsi, spsi, hc, sc)
+  !$acc host_data use_device(evc, psi, hpsi, spsi, hc, sc)
   CALL dev_memcpy(psi, evc, (/ 1 , npwx*npol /), 1, &
                             (/ 1 , nvec /), 1)
 #endif
@@ -732,10 +732,11 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         CALL divide(inter_bgrp_comm,nbase,n_start,n_end)
         my_n = n_end - n_start + 1; !write (*,*) nbase,n_start,n_end
-        !$acc host_data use_device(psi, vc)
+        !$acc host_data use_device(evc, psi, vc)
         CALL MYZGEMM( 'N','N', kdim, nvec, my_n, ONE, psi(1,n_start), kdmx, vc(n_start,1), nvecx, &
                     ZERO, evc, kdmx )
         !$acc end host_data
+        !$acc host_data use_device(evc)
 #if defined(__OPENMP_GPU)
         !$omp target update from(evc)
 #endif
@@ -743,6 +744,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
 #if defined(__OPENMP_GPU)
         !$omp target update to(evc)
 #endif
+        !$acc end host_data
         !
         IF ( notcnv == 0 ) THEN
            !
@@ -775,7 +777,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
            enddo
         enddo
 #else
-        !$acc host_data use_device(psi, hpsi, spsi, vc)
+        !$acc host_data use_device(evc, psi, hpsi, spsi, vc)
         CALL dev_memcpy(psi, evc, (/ 1, npwx*npol /), 1, &
                                       (/ 1, nvec /), 1)
 #endif

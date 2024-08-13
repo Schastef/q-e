@@ -9,6 +9,7 @@ MODFLAGS=$(BASEMOD_FLAGS)
 
 MODULES = \
 additional_kpoints.o \
+atomic_wfc_mod.o \
 autopilot.o \
 basic_algebra_routines.o \
 becmod.o \
@@ -216,12 +217,10 @@ w1gauss.o \
 deviatoric.o \
 customize_signals.o \
 qmmm_aux.o \
-sockets.o \
-stack.o
+sockets.o
 
 # GPU versions of modules
 MODULES += \
-  wavefunctions_gpu.o \
   cuda_subroutines.o \
   random_numbers_gpu.o
 

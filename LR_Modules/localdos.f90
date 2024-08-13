@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2018 Quantum ESPRESSO group
+! Copyright (C) 2001-2023 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -31,12 +31,9 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
   USE wvfct,            ONLY : nbnd, npwx, et
   USE becmod,           ONLY : calbec, bec_type, allocate_bec_type_acc, deallocate_bec_type_acc
   USE wavefunctions,    ONLY : evc, psic, psic_nc
-#if defined(__CUDA)
-  USE wavefunctions_gpum,   ONLY : evc_d
-#endif
   USE uspp,             ONLY : okvan, nkb, vkb
   USE uspp_param,       ONLY : upf, nh, nhm
-  USE qpoint,           ONLY : nksq
+  USE qpoint,           ONLY : nksq, ikks
   USE control_lr,       ONLY : nbnd_occ
   USE units_lr,         ONLY : iuwfc, lrwfc
   USE mp_pools,         ONLY : inter_pool_comm
@@ -52,7 +49,7 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
   ! output: the local density of states at Ef without augmentation
   REAL(DP) :: becsum1 ((nhm * (nhm + 1))/2, nat, nspin_mag)
   ! output: the local becsum at ef
-  real(DP) :: dos_ef
+  real(DP) :: dos_ef, check
   ! output: the density of states at Ef
   !
   !    local variables for Ultrasoft PP's
@@ -80,7 +77,7 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
   INTEGER, POINTER, DEVICE :: nl_d(:)
   !
   nl_d  => dffts%nl_d
-  evc_d = evc
+  !$acc update device(evc) 
 #else
   INTEGER, ALLOCATABLE :: nl_d(:)
   !
@@ -106,30 +103,28 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
   !
   !$acc data create(psic, psic_nc) copy(ldoss) 
   do ik = 1, nksq
-     if (lsda) current_spin = isk (ik)
-     npw = ngk(ik)
-     weight = wk (ik)
+     if (lsda) current_spin = isk (ikks(ik))
+     npw = ngk(ikks(ik))
+     weight = wk (ikks(ik))
      !
      ! unperturbed wfs in reciprocal space read from unit iuwfc
      !
      if (nksq > 1) then
-             call get_buffer (evc, lrwfc, iuwfc, ik)
-#if defined(__CUDA)
-             evc_d = evc
-#endif
+             call get_buffer (evc, lrwfc, iuwfc, ikks(ik))
+             !$acc update device(evc)
      endif
-     call init_us_2 (npw, igk_k(1,ik), xk (1, ik), vkb, .true.)
+     call init_us_2 (npw, igk_k(1,ikks(ik)), xk (1, ikks(ik)), vkb, .true.)
      !
-     !$acc data copyin(evc) present(vkb, becp)
+     !$acc data present(vkb, becp)
      call calbec ( offload_type, npw, vkb, evc, becp)
      !$acc end data
      !
-     do ibnd = 1, nbnd_occ (ik)
+     do ibnd = 1, nbnd_occ (ikks(ik))
         !
         if(ltetra) then
-           wdelta = dfpt_tetra_delta(ibnd,ik)
+           wdelta = dfpt_tetra_delta(ibnd,ikks(ik))
         else
-           wdelta = w0gauss ( (ef-et(ibnd,ik)) / degauss, ngauss) / degauss
+           wdelta = w0gauss ( (ef-et(ibnd,ikks(ik))) / degauss, ngauss) / degauss
         end if
         !
         w1 = weight * wdelta / omega
@@ -142,13 +137,8 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
            !$acc end kernels
            !$acc parallel loop present(igk_k, psic_nc)
            do ig = 1, npw
-#if defined(__CUDA)
-              psic_nc (nl_d (igk_k(ig,ik)), 1 ) = evc_d (ig, ibnd)
-              psic_nc (nl_d (igk_k(ig,ik)), 2 ) = evc_d (ig+npwx, ibnd)
-#else
-              psic_nc (nl_d (igk_k(ig,ik)), 1 ) = evc (ig, ibnd)
-              psic_nc (nl_d (igk_k(ig,ik)), 2 ) = evc (ig+npwx, ibnd)
-#endif
+              psic_nc (nl_d (igk_k(ig,ikks(ik))), 1 ) = evc (ig, ibnd)
+              psic_nc (nl_d (igk_k(ig,ikks(ik))), 2 ) = evc (ig+npwx, ibnd)
            enddo
            !$acc end parallel loop
            !$acc host_data use_device(psic_nc)
@@ -187,11 +177,7 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
            !$acc end kernels
            !$acc parallel loop present(psic)
            do ig = 1, npw
-#if defined(__CUDA)
-              psic (nl_d (igk_k(ig,ik) ) ) = evc_d (ig, ibnd)
-#else
-              psic (nl_d (igk_k(ig,ik) ) ) = evc (ig, ibnd)
-#endif
+              psic (nl_d (igk_k(ig,ikks(ik)) ) ) = evc (ig, ibnd)
            enddo
            !$acc end parallel loop
            !$acc host_data use_device(psic)

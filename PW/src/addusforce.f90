@@ -49,7 +49,7 @@ SUBROUTINE addusforce_g( forcenl )
                                  mill
   USE noncollin_module,   ONLY : nspin_mag
   USE scf,                ONLY : v, vltot
-  USE uspp,               ONLY : becsum, becsum_d, okvan
+  USE uspp,               ONLY : becsum, okvan
   USE uspp_param,         ONLY : upf, lmaxq, nh, nhm
   USE mp_bands,           ONLY : intra_bgrp_comm
   USE mp_pools,           ONLY : inter_pool_comm
@@ -113,14 +113,7 @@ SUBROUTINE addusforce_g( forcenl )
   ALLOCATE( ylmk0(ngm_l,lmaxq*lmaxq), qmod(ngm_l) )
   !$acc data create(ylmk0,qmod)
   !
-#if defined(__CUDA)
-  !$acc host_data use_device(g,gg,ylmk0)
-  CALL ylmr2_gpu( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
-  !$acc end host_data
-#else
   CALL ylmr2( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
-  !$acc update device(ylmk0)
-#endif
   !
   !$acc parallel loop
   DO ig = 1, ngm_l
@@ -209,17 +202,11 @@ SUBROUTINE addusforce_g( forcenl )
                  forceqx = 0
                  forceqy = 0
                  forceqz = 0
-                 !$acc parallel loop reduction(+:forceqx,forceqy,forceqz) present(becsum_d)
+                 !$acc parallel loop reduction(+:forceqx,forceqy,forceqz) present(becsum)
                  DO ijh = 1, nij
-#if defined(__CUDA)
-                   forceqx = forceqx + ddeeq(ijh,nb,1,is) * becsum_d(ijh,na,is)
-                   forceqy = forceqy + ddeeq(ijh,nb,2,is) * becsum_d(ijh,na,is)
-                   forceqz = forceqz + ddeeq(ijh,nb,3,is) * becsum_d(ijh,na,is)
-#else
                    forceqx = forceqx + ddeeq(ijh,nb,1,is) * becsum(ijh,na,is)
                    forceqy = forceqy + ddeeq(ijh,nb,2,is) * becsum(ijh,na,is)
                    forceqz = forceqz + ddeeq(ijh,nb,3,is) * becsum(ijh,na,is)
-#endif
                  ENDDO
                  forceq(1,na) = forceq(1,na) + forceqx
                  forceq(2,na) = forceq(2,na) + forceqy

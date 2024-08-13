@@ -23,7 +23,6 @@ addusforce.o \
 addusstress.o \
 allocate_fft.o \
 allocate_locpot.o \
-allocate_nlpot.o \
 allocate_wfc.o \
 atomic_rho.o \
 atomic_wfc.o \
@@ -212,6 +211,7 @@ setlocal.o \
 setup.o \
 scissor.o \
 sic.o \
+starting_scf_mod.o \
 stop_run.o \
 stres_cc.o \
 stres_ewa.o \
@@ -267,7 +267,8 @@ oscdft_occupations.o \
 oscdft_wfcO.o \
 oscdft_forces.o \
 oscdft_forces_subs.o \
-two_chem.o\
+d3hess_mod.o \
+two_chem.o \
 io_rho_xml.o
 
 
@@ -278,11 +279,8 @@ PWLIBS += \
   h_psi_gpu.o \
   vhpsi_gpu.o \
   vloc_psi_gpu.o \
-  pwcom_gpu.o \
-  scf_mod_gpu.o \
   usnldiag_gpu.o \
   add_vuspsi_gpu.o \
-  sum_band_gpu.o \
   newd_gpu.o \
   add_paw_to_deeq_gpu.o \
   add_vhub_to_deeq_gpu.o \
@@ -291,7 +289,6 @@ PWLIBS += \
   hs_psi_gpu.o \
   s_1psi_gpu.o \
   utils_gpu.o \
-  atomic_wfc_gpu.o \
   oscdft_functions_gpu.o
 
 

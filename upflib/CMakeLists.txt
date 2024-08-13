@@ -1,16 +1,15 @@
 set(src_upflib
     atom.f90
     atomic_number.f90
+    atwfc_mod.f90
     dqvan2.f90
     gen_us_dj.f90
     gen_us_dy.f90
     init_us_0.f90
     init_us_b0.f90
     init_us_1.f90
-    init_tab_atwfc.f90
-    init_tab_beta.f90
-    interp_atwfc.f90
-    init_us_2_base.f90
+    beta_mod.f90
+    init_us_2_acc.f90
     gth.f90
     paw_variables.f90
     pseudo_types.f90
@@ -42,7 +41,6 @@ set(src_upflib
     upf_to_internal.f90
     upf_utils.f90
     uspp.f90
-    uspp_data.f90
     uspp_param.f90
     vloc_mod.f90
     rhoc_mod.f90
@@ -52,9 +50,7 @@ set(src_upflib
     ylmr2.f90
     dylmr2.f90
     # GPU
-    init_us_2_base_gpu.f90
-    ylmr2_gpu.f90
-    dylmr2_gpu.f90)
+    ylmr2_gpu.f90)
 qe_enable_cuda_fortran("${src_upflib}")
 
 qe_add_library(qe_xml xmltools.f90 dom.f90 wxml.f90)
@@ -67,17 +63,9 @@ target_link_libraries(qe_upflib
 	qe_openmp_fortran
         qe_xml
     PRIVATE
-        qe_devxlib
         qe_mpi_fortran
         qe_lapack
         qe_utilx)
-
-# should the devxlib dependency be permanent or cuda-only?
-#if(QE_ENABLE_CUDA)
-#    target_link_libraries(qe_upflib
-#        PRIVATE
-#            qe_devxlib)
-#endif()
 
 ##############################################################
 # virtual_v2.x

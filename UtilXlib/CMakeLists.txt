@@ -35,13 +35,14 @@ set(src_util_c
     memusage.c
     ptrace.c)
 qe_add_library(qe_utilx_c ${src_util_c})
+set_target_properties(qe_utilx_c PROPERTIES Fortran_MODULE_DIRECTORY "")
 target_link_libraries(qe_utilx
     PUBLIC
         qe_utilx_c # cclock is exposed by the mytime module in clocks_handler
         qe_ext_prof_tool # to pass link options, PUBLIC is needed.
+        qe_mpi_fortran
     PRIVATE
-        qe_openmp_fortran
-        qe_mpi_fortran)
+        qe_openmp_fortran)
 
 qe_install_targets(qe_utilx qe_utilx_c)
 

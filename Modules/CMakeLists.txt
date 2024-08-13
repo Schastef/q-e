@@ -1,5 +1,6 @@
 set(src_modules
     additional_kpoints.f90 
+    atomic_wfc_mod.f90
     autopilot.f90 
     basic_algebra_routines.f90 
     becmod.f90 
@@ -201,7 +202,6 @@ set(src_modules
     w1gauss.f90
     deviatoric.f90
     # GPU
-    wavefunctions_gpu.f90
     random_numbers_gpu.f90
     cuda_subroutines.f90)
 qe_enable_cuda_fortran("${src_modules}")
@@ -211,9 +211,9 @@ qe_add_library(qe_modules ${src_modules})
 set(src_modules_c
     customize_signals.c
     qmmm_aux.c
-    sockets.c
-    stack.c)
+    sockets.c)
 qe_add_library(qe_modules_c ${src_modules_c})
+set_target_properties(qe_modules_c PROPERTIES Fortran_MODULE_DIRECTORY "")
 
 if(TARGET gitrev)
    add_dependencies(qe_modules gitrev)

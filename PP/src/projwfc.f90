@@ -222,9 +222,9 @@ PROGRAM do_projwfc
      IF ( lforcet ) CALL force_theorem ( ef_0, filproj )
   ENDIF
   !
-  IF ( ionode .AND. .NOT. lforcet ) THEN
+  IF ( .NOT. lforcet ) THEN
      IF ( tdosinboxes ) THEN
-        CALL partialdos_boxes (Emin, Emax, DeltaE, kresolveddos, filpdos, n_proj_boxes)
+        IF (ionode) CALL partialdos_boxes (Emin, Emax, DeltaE, kresolveddos, filpdos, n_proj_boxes)
      ELSE IF ( lsym .OR. kresolveddos ) THEN
         IF (noncolin) THEN
            CALL partialdos_nc (Emin, Emax, DeltaE, kresolveddos, filpdos)
@@ -898,7 +898,7 @@ SUBROUTINE projwave( filproj, filowdin, lsym, diag_basis, lwrite_ovp )
         !    AlexS - To project on real harmonics, not on spinors.  
         CALL atomic_wfc_nc_updown(ik, wfcatom)
      ELSE IF ( noncolin ) THEN
-        CALL atomic_wfc_nc_proj (ik, wfcatom)
+        CALL atomic_wfc_nc_proj(ik, wfcatom)
      ELSE
         CALL atomic_wfc (ik, wfcatom)
      ENDIF

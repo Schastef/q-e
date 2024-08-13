@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2004-2021 Quantum ESPRESSO group
+! Copyright (C) 2004-2024 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -15,13 +15,19 @@
 !
 MODULE uspp
   !
-  ! Ultrasoft PPs:
-  ! - Clebsch-Gordan coefficients "ap", auxiliary variables "lpx", "lpl"
-  ! - beta and q functions of the solid
-  !
+  !! Variables for ultrasoft PPs:
+  !! 1) Clebsch-Gordan coefficients "ap", auxiliary variables "lpx", "lpl"
+  !! 2) Atomic D_lm, Q_lm functions and related indices
+  !! FIXME: maybe 1) and 2) should better stay in module uspp_param
+  !! 3) Beta_l for the solid in G-space (vkb) and related indices
+  !!    (also: beta and dbeta for the Car-Parrinello code)
+  !! 4) self-consistent variables becsum, ebecsum, deeq
+  !! FIXME: Variables in 3) and 4) should better be defined and allocated
+  !!        outside upflib/
+  !!
   USE upf_kinds,   ONLY: DP
   USE upf_params,  ONLY: lmaxx, lqmax
-  USE upf_spinorb, ONLY: is_spinorbit, fcoef, fcoef_d 
+  USE upf_spinorb, ONLY: is_spinorbit, fcoef
   IMPLICIT NONE
   PRIVATE
   SAVE
@@ -29,11 +35,10 @@ MODULE uspp
   PUBLIC :: nlx, lpx, lpl, ap, aainit, indv, nhtol, nhtolm, ofsbeta, &
             nkb, nkbus, vkb, dvan, deeq, qq_at, qq_nt, nhtoj, ijtoh, beta, &
             becsum, ebecsum
-  PUBLIC :: lpx_d, lpl_d, ap_d, indv_d, nhtol_d, nhtolm_d, ofsbeta_d, &
-            dvan_d, qq_nt_d, nhtoj_d, ijtoh_d, becsum_d, ebecsum_d
+  PUBLIC :: dvan_d, qq_nt_d
   PUBLIC :: okvan, nlcc_any
   PUBLIC :: qq_so,   dvan_so,   deeq_nc,   fcoef 
-  PUBLIC :: dvan_so_d, fcoef_d
+  PUBLIC :: dvan_so_d
   PUBLIC :: dbeta
   !
   PUBLIC :: allocate_uspp, deallocate_uspp
@@ -49,43 +54,24 @@ MODULE uspp
        lpl(nlx,nlx,mx)    ! list of combined angular momenta  LM
   REAL(DP) :: ap(lqmax*lqmax,nlx,nlx)
                           ! Clebsch-Gordan coefficients for spherical harmonics
-  ! GPU vars
-  INTEGER, ALLOCATABLE ::  & ! for each pair of combined momenta lm(1),lm(2): 
-       lpx_d(:,:),         & ! maximum combined angular momentum LM
-       lpl_d(:,:,:)          ! list of combined angular momenta  LM
-  REAL(DP), ALLOCATABLE :: ap_d(:,:,:)
-#if defined (__CUDA)
-  attributes(DEVICE) :: lpx_d, lpl_d, ap_d
-#endif
-  !
   !
   INTEGER :: nkb,        &! total number of beta functions, with struct.fact.
              nkbus        ! as above, for US-PP only
   !
   INTEGER, ALLOCATABLE PINMEM ::&
-       indv(:,:),        &! indes linking  atomic beta's to beta's in the solid
+       indv(:,:),        &! index linking  atomic beta's to beta's in the solid
        nhtol(:,:),       &! correspondence n <-> angular momentum l
        nhtolm(:,:),      &! correspondence n <-> combined lm index for (l,m)
        ijtoh(:,:,:),     &! correspondence beta indexes ih,jh -> composite index ijh
        ofsbeta(:)      ! first beta (index in the solid) for each atom 
   !
-  ! GPU vars
-  !
-  INTEGER, ALLOCATABLE :: indv_d(:,:)
-  INTEGER, ALLOCATABLE :: nhtol_d(:,:)
-  INTEGER, ALLOCATABLE :: nhtolm_d(:,:)
-  INTEGER, ALLOCATABLE :: ijtoh_d(:,:,:)
-  INTEGER, ALLOCATABLE :: ofsbeta_d(:)
-#if defined (__CUDA)
-  attributes(DEVICE) :: indv_d, nhtol_d, nhtolm_d, ijtoh_d, ofsbeta_d
-#endif
-
   LOGICAL :: &
        okvan = .FALSE.,&  ! if .TRUE. at least one pseudo is Vanderbilt
        nlcc_any=.FALSE.   ! if .TRUE. at least one pseudo has core corrections
   ! 
-  !FIXME use !$acc declare create(vkb) to create and delete it automatically in the device
-  ! 
+  !!FIXME: vkb should be created and then computed and used on device only
+  !!FIXME: this should be done (if it works) with "$acc declare create(vkb)"
+  !
   COMPLEX(DP), ALLOCATABLE, TARGET PINMEM :: &
        vkb(:,:)                ! all beta functions in reciprocal space
   REAL(DP), ALLOCATABLE :: &
@@ -106,15 +92,11 @@ MODULE uspp
   !
   ! GPU vars
   !
-  REAL(DP),    ALLOCATABLE :: becsum_d(:,:,:)
-  REAL(DP),    ALLOCATABLE :: ebecsum_d(:,:,:)
   REAL(DP),    ALLOCATABLE :: dvan_d(:,:,:)
   REAL(DP),    ALLOCATABLE :: qq_nt_d(:,:,:)
-  REAL(DP),    ALLOCATABLE :: nhtoj_d(:,:)
   COMPLEX(DP), ALLOCATABLE :: dvan_so_d(:,:,:,:)
 #if defined(__CUDA)
-  attributes (DEVICE) :: becsum_d, ebecsum_d, dvan_d, qq_nt_d, &
-                         nhtoj_d, dvan_so_d
+  attributes (DEVICE) :: dvan_d, qq_nt_d, dvan_so_d
 #endif
 
   !
@@ -212,14 +194,6 @@ CONTAINS
     deallocate(rr)
     deallocate(r)
     !
-#if defined (__CUDA)
-    IF (ALLOCATED(ap_d)) DEALLOCATE(ap_d)
-    ALLOCATE(ap_d, SOURCE=ap)
-    IF (ALLOCATED(lpx_d)) DEALLOCATE(lpx_d)
-    ALLOCATE(lpx_d, SOURCE=lpx)
-    IF (ALLOCATED(lpl_d)) DEALLOCATE(lpl_d)
-    ALLOCATE(lpl_d, SOURCE=lpl)
-#endif
     return
   end subroutine aainit
   !
@@ -345,11 +319,15 @@ CONTAINS
     logical, intent(in) :: noncolin,lspinorb,tqr
     integer, intent(in) :: nhm,nsp,nat,nspin
     !
-    allocate( indv(nhm,nsp)   )
-    allocate( nhtol(nhm,nsp)  )
     allocate( nhtolm(nhm,nsp) )
+    allocate( indv(nhm,nsp)   )
+    !$acc enter data create(indv)
+    allocate( nhtol(nhm,nsp)  )
+    !$acc enter data create(nhtol)
     allocate( nhtoj(nhm,nsp)  )
+    !$acc enter data create(nhtoj)
     allocate( ijtoh(nhm,nhm,nsp) )
+    !$acc enter data create(ijtoh)
     allocate( deeq(nhm,nhm,nat,nspin) )
     !$acc enter data create(deeq)
     if ( noncolin ) then
@@ -366,12 +344,15 @@ CONTAINS
        !$acc enter data create(qq_so)
        allocate( dvan_so(nhm,nhm,nspin,nsp) )
        allocate( fcoef(nhm,nhm,2,2,nsp) )
+       !$acc enter data create(fcoef)
     else
        allocate( dvan(nhm,nhm,nsp) )
     endif
     allocate(becsum( nhm*(nhm+1)/2, nat, nspin))
+    !$acc enter data create(becsum)
     if (tqr) then
        allocate(ebecsum( nhm*(nhm+1)/2, nat, nspin))
+       !$acc enter data create(ebecsum)
     endif
     allocate( ofsbeta(nat) )
     !
@@ -380,25 +361,14 @@ CONTAINS
     if (use_gpu) then
       !
       if (nhm>0) then
-        allocate( indv_d(nhm,nsp)   )
-        allocate( nhtol_d(nhm,nsp)  )
-        allocate( nhtolm_d(nhm,nsp) )
-        allocate( nhtoj_d(nhm,nsp)  )
-        allocate( ijtoh_d(nhm,nhm,nsp) )
         allocate( qq_nt_d(nhm,nhm,nsp) )
         if ( lspinorb ) then
            allocate( dvan_so_d(nhm,nhm,nspin,nsp) )
-           allocate( fcoef_d(nhm,nhm,2,2,nsp) )
         else
            allocate( dvan_d(nhm,nhm,nsp) )
         endif
-        allocate(becsum_d( nhm*(nhm+1)/2, nat, nspin))
-        if (tqr) then
-           allocate(ebecsum_d( nhm*(nhm+1)/2, nat, nspin))
-        endif
         !
       endif
-      allocate( ofsbeta_d(nat) )
       !
     endif
     !
@@ -408,20 +378,36 @@ CONTAINS
   SUBROUTINE deallocate_uspp()
     !-----------------------------------------------------------------------
     IMPLICIT NONE
-    IF( ALLOCATED( nhtol ) )      DEALLOCATE( nhtol )
-    IF( ALLOCATED( indv ) )       DEALLOCATE( indv )
-    IF( ALLOCATED( nhtolm ) )     DEALLOCATE( nhtolm )
-    IF( ALLOCATED( nhtoj ) )      DEALLOCATE( nhtoj )
+    !
     IF( ALLOCATED( ofsbeta ) )    DEALLOCATE( ofsbeta )
-    IF( ALLOCATED( ijtoh ) )      DEALLOCATE( ijtoh )
-!FIXME in order to be created and deleted automatically by using !$acc declare create(vkb) in 
+    IF( ALLOCATED( nhtolm ) )      DEALLOCATE( nhtolm )
+    IF( ALLOCATED( nhtol ) ) THEN
+        !$acc exit data delete( nhtol ) 
+        DEALLOCATE( nhtol )
+    END IF
+    IF( ALLOCATED( indv ) ) THEN
+        !$acc exit data delete( indv ) 
+        DEALLOCATE( indv )
+    END IF
+    IF( ALLOCATED( ijtoh ) ) THEN
+        !$acc exit data delete( ijtoh ) 
+        DEALLOCATE( ijtoh )
+    END IF
+    IF( ALLOCATED( nhtoj ) ) THEN
+        !$acc exit data delete( nhtoj ) 
+        DEALLOCATE( nhtoj )
+    END IF
     IF( ALLOCATED( vkb ) ) THEN
         !$acc exit data delete(vkb ) 
         !$omp target exit data map(delete:vkb)
         DEALLOCATE( vkb )
     END IF 
+    !$acc exit data delete( becsum )
     IF( ALLOCATED( becsum ) )     DEALLOCATE( becsum )
-    IF( ALLOCATED( ebecsum ) )    DEALLOCATE( ebecsum )
+    IF( ALLOCATED( ebecsum ) ) THEN
+       !$acc exit data delete( ebecsum )
+       DEALLOCATE( ebecsum )
+    END IF
     IF( ALLOCATED( qq_at ) ) THEN
       !$acc exit data delete( qq_at )
       DEALLOCATE( qq_at )
@@ -441,26 +427,17 @@ CONTAINS
       !$acc exit data delete( deeq_nc )
       DEALLOCATE( deeq_nc )
     ENDIF
-    IF( ALLOCATED( fcoef ) )      DEALLOCATE( fcoef )
+    IF( ALLOCATED( fcoef ) ) THEN
+      !$acc exit data delete( fcoef )
+      DEALLOCATE( fcoef )
+    ENDIF
     IF( ALLOCATED( beta ) )       DEALLOCATE( beta )
     IF( ALLOCATED( dbeta ) )      DEALLOCATE( dbeta )
     !
     ! GPU variables
-    IF( ALLOCATED( ap_d ) )       DEALLOCATE( ap_d )
-    IF( ALLOCATED( lpx_d ) )      DEALLOCATE( lpx_d )
-    IF( ALLOCATED( lpl_d ) )      DEALLOCATE( lpl_d )
-    IF( ALLOCATED( indv_d ) )     DEALLOCATE( indv_d )
-    IF( ALLOCATED( nhtol_d ) )    DEALLOCATE( nhtol_d )
-    IF( ALLOCATED( nhtolm_d ) )   DEALLOCATE( nhtolm_d )
-    IF( ALLOCATED( ijtoh_d ) )    DEALLOCATE( ijtoh_d )
-    IF( ALLOCATED( ofsbeta_d)) DEALLOCATE( ofsbeta_d )
-    IF( ALLOCATED( becsum_d ) )   DEALLOCATE( becsum_d )
-    IF( ALLOCATED( ebecsum_d ) )  DEALLOCATE( ebecsum_d )
     IF( ALLOCATED( dvan_d ) )     DEALLOCATE( dvan_d )
     IF( ALLOCATED( qq_nt_d ) )    DEALLOCATE( qq_nt_d )
-    IF( ALLOCATED( nhtoj_d ) )    DEALLOCATE( nhtoj_d )
     IF( ALLOCATED( dvan_so_d ) )  DEALLOCATE( dvan_so_d )
-    IF( ALLOCATED( fcoef_d ) )    DEALLOCATE( fcoef_d )
     !
   END SUBROUTINE deallocate_uspp
   !

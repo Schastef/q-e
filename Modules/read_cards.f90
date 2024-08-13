@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2002-2014 Quantum ESPRESSO group
+! Copyright (C) 2002-2023 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -123,7 +123,7 @@ CONTAINS
       CHARACTER(len=256)         :: input_line
       CHARACTER(len=80)          :: card
       LOGICAL                    :: tend
-      INTEGER                    :: i
+      INTEGER                    :: i, ios
       !
       ! read_line reads from unit parse_unit
       !
@@ -145,7 +145,8 @@ CONTAINS
          input_line( i : i ) = capital( input_line( i : i ) )
       ENDDO
       !
-      READ (input_line, *) card
+      READ (input_line, *, iostat=ios) card
+      IF(ios/=0) card=''
       !
       IF ( trim(card) == 'AUTOPILOT' ) THEN
          !
@@ -759,6 +760,7 @@ CONTAINS
          IF (tend) GOTO 10
          IF (terr) GOTO 20
          READ(input_line, *, END=10, ERR=20) nkstot
+         IF ( nkstot <= 0 ) GO TO 20
          !
          IF (kband) THEN
 !
@@ -2620,9 +2622,9 @@ CONTAINS
                CALL errore( 'card_hubbard', 'Too many occurrences of V for the same couple of atoms', i)
             ENDIF
             !
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            !                    Read the data for the first atom                              !
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            !**********************************************************************************!
+            !*                   Read the data for the first atom                             *!
+            !**********************************************************************************!
             !
             ! Column 3: Read the atomic type name and the Hubbard manifold (e.g. Fe-3d)
             CALL get_field(2, field_str, input_line)
@@ -2756,9 +2758,9 @@ CONTAINS
                ENDIF
             ENDIF
             !
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            !                    Read the data for the second atom                             !
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            !**********************************************************************************!
+            !*                   Read the data for the second atom                            *!
+            !**********************************************************************************!
             !
             ! Column 3: Read the atomic type name and the Hubbard manifold (e.g. O-2p)
             CALL get_field(3, field_str, input_line)
@@ -3040,14 +3042,14 @@ CONTAINS
          ELSEIF (ANY(ABS(Hubbard_V(:,:,:))>eps16)) THEN
             ! DFT+U+V(+J0)
             lda_plus_u_kind = 2
-            IF (noncolin) CALL errore('card_hubbard', &
-                    'Hubbard V is not supported with noncolin=.true.', i)
-         ELSEIF (ANY(ABS(Hubbard_U(:))>eps16) .AND. noncolin) THEN
-            ! DFT+U
-            lda_plus_u_kind = 1
-         ELSEIF (ANY(ABS(Hubbard_U(:))>eps16) .OR. ANY(ABS(Hubbard_J0(:))>eps16)) THEN
+            ! 
+            IF (noncolin .and. ANY(Hubbard_J0(:)>eps16)) CALL errore('card_hubbard', &
+                    & 'Currently Hund J0 is not compatible with noncolin=.true.', i)
+         ELSEIF (ANY(Hubbard_U(:)>eps16) .OR. ANY(Hubbard_J0(:)>eps16)) THEN
             ! DFT+U(+J0)
             lda_plus_u_kind = 0
+            IF (noncolin .and. ANY(Hubbard_J0(:)>eps16)) CALL errore('card_hubbard', &
+                    & 'Currently Hund J0 is not compatible with noncolin=.true.', i)
          ELSE
             CALL errore('card_hubbard', 'Unknown case for lda_plus_u_kind...', i)
          ENDIF

@@ -31,11 +31,6 @@ SUBROUTINE allocate_fft
 #endif
   USE xc_lib,           ONLY : xclib_dft_is
   !
-  USE scf_gpum,  ONLY : using_vrs
-  !
-  USE wavefunctions_gpum, ONLY : using_psic, using_psic_nc, &
-                                        using_psic_d, using_psic_nc_d
-  !
   IMPLICIT NONE
   !
   ! ... First a bunch of checks
@@ -94,14 +89,12 @@ SUBROUTINE allocate_fft
       ALLOCATE( psicg(dffts%nnr*many_fft) )
     ENDIF
   ENDIF
+  !
   ALLOCATE( vrs(dfftp%nnr,nspin) )
 #if defined (__OPENMP_GPU)
   !$omp target enter data map(alloc:vrs)
 #endif
-#if defined(__CUDA)
-  CALL using_vrs(2)
-  CALL using_psic(2); CALL using_psic_d(0)
-#endif
+  !$acc enter data create (vrs)
   !
   IF (noncolin) THEN
     ALLOCATE( psic_nc(dfftp%nnr,npol) )
@@ -109,12 +102,6 @@ SUBROUTINE allocate_fft
     !$omp target enter data map(alloc:psic_nc)
 #endif
   ENDIF
-#if defined(__CUDA)
-  IF (noncolin) THEN
-     CALL using_psic_nc(2)
-     CALL using_psic_nc_d(0)
-  END IF
-#endif
   !
   IF ( report /= 0 ) THEN
      !

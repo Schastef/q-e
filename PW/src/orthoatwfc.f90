@@ -1,5 +1,5 @@
 !
-! Copyright (C) 2001-2022 Quantum ESPRESSO group
+! Copyright (C) 2001-2023 Quantum ESPRESSO group
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -12,7 +12,7 @@ SUBROUTINE orthoUwfc(save_wfcatom)
   !
   ! This routine saves to buffer "iunhub" atomic wavefunctions having an
   ! associated Hubbard U term * S, for DFT+U(+V) calculations. Same for 
-  ! "iunhub2" but without S (this is then used to computed Hubbard forces 
+  ! "iunhub_noS" but without S (this is then used to compute Hubbard forces
   ! and stresses). Atomic wavefunctions
   ! are orthogonalized if desired, depending upon the value of "Hubbard_projectors"
   ! "swfcatom" must NOT be allocated on input.
@@ -97,22 +97,12 @@ SUBROUTINE orthoUwfc(save_wfcatom)
      !
      IF (noncolin) THEN
        CALL atomic_wfc_nc_updown (ik, wfcatom)
-       !$acc update device(wfcatom)
-#if defined(__OPENMP_GPU)       
-       !$omp target update to(wfcatom)
-#endif
      ELSE
-       IF(use_gpu) THEN
-         !$acc host_data use_device(wfcatom)
-         CALL atomic_wfc_gpu( ik, wfcatom )
-         !$acc end host_data
-       ELSE
-         CALL atomic_wfc (ik, wfcatom)
-#if defined(__OPENMP_GPU)         
-         !$omp target update to(wfcatom)
-#endif         
-       END IF
+       CALL atomic_wfc (ik, wfcatom)
      ENDIF
+#if defined(__OPENMP_GPU)         
+     !$omp target update to(wfcatom)
+#endif         
      npw = ngk (ik)
      CALL init_us_2 (npw, igk_k(1,ik), xk (1, ik), vkb, use_gpu)
 #if defined(__OPENMP_GPU)     
@@ -142,7 +132,7 @@ SUBROUTINE orthoUwfc(save_wfcatom)
      IF ( nks > 1 ) CALL save_buffer (wfcU, nwordwfcU, iunhub, ik)
      !
      ! If save_wfcatom=.TRUE. copy the orthonormalized wfcatom to wfcU and save
-     ! to unit iunhubnoS
+     ! to unit iunhub_noS
      !
      IF (save_wfcatom.and..not.use_gpu) THEN
         IF (orthogonalize_wfc) CALL ortho_swfc ( npw, normalize_only, natomwfc, wfcatom, swfcatom, .TRUE. )
@@ -182,7 +172,6 @@ SUBROUTINE orthoUwfc_k (ik, lflag)
   !
   USE kinds,            ONLY : DP
   USE io_global,        ONLY : stdout
-  USE io_files,         ONLY : iunhub, nwordwfcU
   USE ions_base,        ONLY : nat
   USE basis,            ONLY : natomwfc, wfcatom, swfcatom
   USE klist,            ONLY : nks, xk, ngk, igk_k
@@ -192,7 +181,7 @@ SUBROUTINE orthoUwfc_k (ik, lflag)
   USE becmod,           ONLY : allocate_bec_type_acc, deallocate_bec_type_acc, &
                                bec_type, becp, calbec
   USE control_flags,    ONLY : gamma_only, offload_type
-  USE noncollin_module, ONLY : noncolin 
+  USE noncollin_module, ONLY : noncolin, npol
   IMPLICIT NONE
   !
   INTEGER, INTENT(IN) :: ik ! the k point under consideration
@@ -230,7 +219,7 @@ SUBROUTINE orthoUwfc_k (ik, lflag)
   ENDIF
   !
   IF (Hubbard_projectors=="ortho-atomic") THEN
-     ALLOCATE(aux(npwx,natomwfc))
+     ALLOCATE(aux(npwx*npol,natomwfc))
      ! Copy atomic wfcs (phi)
      aux(:,:) = wfcatom(:,:)
   ENDIF
@@ -341,22 +330,12 @@ SUBROUTINE orthoatwfc (orthogonalize_wfc)
      !
      IF (noncolin) THEN
        CALL atomic_wfc_nc_updown (ik, wfcatom)
-       !$acc update device(wfcatom)
+     ELSE
+       CALL atomic_wfc (ik, wfcatom)
+     ENDIF
 #if defined(__OPENMP_GPU)       
        !$omp target update to(wfcatom)
 #endif
-     ELSE
-       IF(use_gpu) THEN 
-         !$acc host_data use_device(wfcatom)
-         CALL atomic_wfc_gpu( ik, wfcatom )
-         !$acc end host_data
-       ELSE
-         CALL atomic_wfc (ik, wfcatom)
-#if defined(__OPENMP_GPU)         
-         !$omp target update to(wfcatom)
-#endif         
-       END IF
-     ENDIF
      npw = ngk (ik)
      !
      CALL init_us_2 (npw, igk_k(1,ik), xk (1, ik), vkb, use_gpu)

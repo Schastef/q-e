@@ -46,7 +46,7 @@ SUBROUTINE addusdens_g(rho)
   USE gvect,                ONLY : ngm, gg, g, &
                                    eigts1, eigts2, eigts3, mill
   USE noncollin_module,     ONLY : noncolin, nspin_mag
-  USE uspp,                 ONLY : okvan, becsum, becsum_d
+  USE uspp,                 ONLY : okvan, becsum
   USE uspp_param,           ONLY : upf, lmaxq, nh, nhm
   USE control_flags,        ONLY : gamma_only
   USE mp_pools,             ONLY : inter_pool_comm
@@ -99,16 +99,11 @@ SUBROUTINE addusdens_g(rho)
   ALLOCATE( ylmk0(ngm_l,lmaxq*lmaxq) )
   !$acc data create(qmod,qgm,ylmk0)
   !
-#if defined(__CUDA)
-  !$acc host_data use_device(g,gg,ylmk0)
-  CALL ylmr2_gpu( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
-  !$acc end host_data
-#elif defined(__OPENMP_GPU)
+#if defined(__OPENMP_GPU)
   !$omp target data map(to:gg,eigts1,eigts2,eigts3,mill) map(alloc:ylmk0,qmod) map(from:aux)
   CALL ylmr2_omp( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
 #else
   CALL ylmr2( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
-  !$acc update device(ylmk0)
 #endif
   !
   !$acc parallel loop collapse(2)
@@ -158,17 +153,13 @@ SUBROUTINE addusdens_g(rho)
               nb = nb + 1
               !tbecsum(:,nb,:) = becsum(1:nij,na,1:nspin_mag)
               !
-              !$acc parallel loop collapse(2)
+              !$acc parallel loop collapse(2) present(becsum)
 #if defined(__OPENMP_GPU)
               !$omp target teams distribute parallel do collapse(2)
 #endif
               DO im = 1, nspin_mag
                  DO ij = 1, nij
-#if defined(__CUDA)
-                   tbecsum(ij,nb,im) = becsum_d(ij,na,im)
-#else
                    tbecsum(ij,nb,im) = becsum(ij,na,im)
-#endif
                  ENDDO
               ENDDO
               !

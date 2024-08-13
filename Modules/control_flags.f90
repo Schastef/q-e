@@ -280,12 +280,14 @@ MODULE control_flags
 #endif
   !
   INTEGER, PUBLIC :: &
+  !
 #if defined(__OPENMP_GPU) && defined(__OMP_MANY_FFT) || defined(__CUDA)
     many_fft = 16              ! the size of FFT batches in vloc_psi and
                                ! sumband. Only use in accelerated subroutines.
 #else
     many_fft = 1               ! [temporary preproc split for platforms other than AMD and NVIDIA]
 #endif
+  !
   INTEGER  :: ortho_max = 0      ! maximum number of iterations in routine ortho
   REAL(DP) :: ortho_eps = 0.0_DP ! threshold for convergence in routine ortho
   !
@@ -293,13 +295,11 @@ MODULE control_flags
   !
   INTEGER, PUBLIC :: iesr = 1
   !
-  ! ... Real-sapce algorithms
+  ! ... Real-space algorithms
   !
   LOGICAL,          PUBLIC :: tqr=.FALSE. ! if true the Q are in real space
-
-  !LOGICAL,          PUBLIC :: real_space=.false. ! beta functions in real space
   !
-  ! ... Augmetation charge and beta smoothing
+  ! ... Augmentation charge and beta smoothing
   !
   LOGICAL,          PUBLIC :: tq_smoothing=.FALSE. ! if true the Q are smoothed
   LOGICAL,          PUBLIC :: tbeta_smoothing=.FALSE. ! if true the betas are smoothed
@@ -310,7 +310,6 @@ MODULE control_flags
 
   LOGICAL,          PUBLIC :: treinit_gvecs = .FALSE.
 
-  LOGICAL,          PUBLIC :: diagonalize_on_host = .FALSE.
   !
   ! ...  end of module-scope declarations
   !
