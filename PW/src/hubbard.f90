@@ -474,7 +474,7 @@ REAL(DP), INTENT(IN)     :: ns(2*Hubbard_lmax+1,2*Hubbard_lmax+1,nspin,nat)
 COMPLEX(DP), ALLOCATABLE :: eigenvecs_current(:,:,:)
 !
 INTEGER, ALLOCATABLE     :: eigval_list(:), unpert_ats(:)
-INTEGER                  :: i, is, na, nt, m1, m2, ldim, eigval_add
+INTEGER                  :: i, is, na, nt, m, m1, m2, ldim, eigval_add
 INTEGER                  :: order(2*Hubbard_lmax+1,nspin), m_order
 !
 REAL(DP)                 :: tralpha, u
@@ -509,7 +509,7 @@ DO na = 1, nat
       !
       DO is = 1, nspin
          !
-         IF ( ANY(eigenvecs_ref(:,:,is,na) .NE. 0.0d0) ) THEN
+         IF ( ANY(eigenvecs_ref(:,:,is,na) /= 0.0d0) ) THEN
             ! order the eigenstates
             order(:,is) = 0
             CALL order_eigenvecs( order(1:ldim,is), eigenvecs_current(1:ldim,1:ldim,is), &
@@ -524,7 +524,7 @@ DO na = 1, nat
          !
          DO m1 = 1, ldim    
             !
-            IF (ABS(Hubbard_alpha_m(order(m1,is),is,nt)) .GE. eps16) THEN
+            IF (ABS(Hubbard_alpha_m(order(m1,is),is,nt)) >= eps16) THEN
                ! sum up the occupation of the perturbed states
                tralpha = tralpha + lambda_ns(order(m1,is),is,na)
                u = Hubbard_Um(order(m1,is),is,nt)*rytoev
@@ -542,7 +542,8 @@ DO na = 1, nat
       IF (nspin ==1) tralpha = tralpha*2
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-            & " | OCCUPATION: ", f10.8," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+            & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
+
       !
    ELSEIF ( ANY(Hubbard_Um(:,:,nt) .NE. 0.d0) .AND. ALL(Hubbard_alpha_m(:,:,nt) .EQ. 0.d0) ) THEN
       ! ...case b) the species is NOT directly affected by Hubbard_alpha_m
@@ -613,7 +614,7 @@ IF (has_second_manifold) THEN
       !
       IF (nspin ==1) tralpha = tralpha*2
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-      & " | OCCUPATION: ", f10.8," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+      & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
       !
    DEALLOCATE( eigval_list )
    DEALLOCATE( eigenvecs_current)
@@ -714,7 +715,7 @@ DO na = 1, nat
       ENDDO
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-            & " | OCCUPATION: ", f10.8," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+            & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
       !
    ELSEIF ( ANY(Hubbard_Um_nc(:,nt) .NE. 0.d0) .AND. &
             ALL(Hubbard_alpha_m_nc(:,nt) .EQ. 0.d0) ) THEN
@@ -780,7 +781,7 @@ IF (has_second_manifold) THEN
       ENDDO
       !
       WRITE( stdout,'(/5x,"@ ATOM: ",i3," | MANIFOLD: ",a2," | U: ", f4.2, &
-      & " | OCCUPATION: ", f10.8," | EIGVALS:", (*(i2,1x)))'),na,manifold,u,tralpha,eigval_list
+      & " | OCCUPATION: ", f10.8," | EIGVALS:", 21i3)'),na,manifold,u,tralpha,(eigval_list(m),m=1,SIZE(eigval_list))
       !
    DEALLOCATE( eigval_list )
    DEALLOCATE( eigenvecs_current)
