@@ -236,8 +236,7 @@ SUBROUTINE init_wfc ( ik )
   !
   USE kinds,                ONLY : DP
   USE bp,                   ONLY : lelfield
-  USE becmod,               ONLY : allocate_bec_type, deallocate_bec_type, &
-                                   allocate_bec_type_acc, deallocate_bec_type_acc, &
+  USE becmod,               ONLY : allocate_bec_type_acc, deallocate_bec_type_acc, &
                                    bec_type, becp
   USE constants,            ONLY : tpi
   USE basis,                ONLY : natomwfc
@@ -436,7 +435,7 @@ SUBROUTINE init_wfc ( ik )
   IF ( xclib_dft_is('hybrid') .and. lscf  ) CALL stop_exx()
   CALL start_clock( 'wfcinit:wfcrot' ); !write(*,*) 'start wfcinit:wfcrot' ; FLUSH(6)
   IF(use_gpu) THEN
-    !$acc host_data use_device(wfcatom,etatom,evc)
+    !$acc host_data use_device(etatom,evc)
     CALL rotate_wfc_gpu ( npwx, ngk_ik, n_starting_wfc, gstart, nbnd, wfcatom, npol, okvan, evc, etatom )
     !$acc end host_data
     !$acc update self(evc)
