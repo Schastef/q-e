@@ -484,8 +484,6 @@ LOGICAL                  :: has_second_manifold
 CHARACTER(len=6)         :: manifold
 !
 !
-IF (nspin == 4) CALL errore( 'alpha_m_trace', 'Noncollinear orbital-resolved DFT+U is not yet implemented', 1 )
-!
 ALLOCATE( unpert_ats(0) )
 lambda_ns(:,:,:) = 0.d0
 ! orbital occupations (=eigenvalues of rho%ns)
@@ -656,7 +654,7 @@ COMPLEX(DP), INTENT(IN)     :: ns_nc(2*Hubbard_lmax+1,2*Hubbard_lmax+1,4,nat)
 COMPLEX(DP), ALLOCATABLE :: eigenvecs_current(:,:)
 !
 INTEGER, ALLOCATABLE     :: eigval_list(:), unpert_ats(:)
-INTEGER                  :: i, is, na, nt, m1, m2, ldim
+INTEGER                  :: i, is, na, nt, m, m1, m2, ldim
 INTEGER                  :: order(4*Hubbard_lmax+2), m_order
 !
 REAL(DP)                 :: tralpha, u
