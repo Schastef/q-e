@@ -213,6 +213,8 @@ SUBROUTINE phq_readin()
   ! skip_upperfan: If .true., skip the calculation of upper Fan self-energy.
   !
   ! dftd3_hess: file from where the dftd3 hessian is read
+  ! lrhoun : If .true. macroscopic density response to q-potential perturbation is written as output
+  ! lmacro : If .true. a calculation with null macroscopic electric field is performed
   !
   ! Note: meta_ionode is a single processor that reads the input
   !       (ionode is also a single processor but per image)
@@ -497,7 +499,7 @@ SUBROUTINE phq_readin()
   ENDIF
   !
   ! Set default value for fildrho and fildvscf if they are required
-  IF ( (lraman.OR.elop.OR.drho_star%open) .AND. fildrho == ' ') fildrho = 'drho'
+  IF ( (lraman.OR.elop.OR.drho_star%open.or.lrhoun) .AND. fildrho == ' ') fildrho = 'drho'
   IF ( (elph_mat.OR.dvscf_star%open) .AND. fildvscf == ' ') fildvscf = 'dvscf'
   !
   !  We can calculate  dielectric, raman or elop tensors and no Born effective
@@ -849,7 +851,14 @@ SUBROUTINE phq_readin()
 
   IF (tqr) CALL errore('phq_readin',&
      'The phonon code with Q in real space not available',1)
-
+  !
+  ! FM : incompatibility for lrhoun and lmacro
+  IF (lrhoun .and. (okvan .or. domag)) CALL errore('phq_readin',&
+     'lrhoun implemented only for norm-conserving potential, and without magnetization',1)
+  IF (lmacro .and. (okvan .or. domag)) CALL errore('phq_readin',&
+     'lrhmacron implemented only for norm-conserving potential, and without magnetization',1)
+  !
+  !
   IF (start_irr < 0 ) CALL errore('phq_readin', 'wrong start_irr',1)
   !
   IF (start_q <= 0 ) CALL errore('phq_readin', 'wrong start_q',1)

@@ -47,7 +47,8 @@ SUBROUTINE do_phonon(auxdyn)
   USE io_files,       ONLY : iunwfc
   USE buffers,        ONLY : close_buffer
   USE control_flags,  ONLY : use_gpu
-  USE environment,   ONLY : print_cuda_info
+  USE environment,    ONLY : print_cuda_info
+  USE control_lr,     ONLY : lrhoun
   
   IMPLICIT NONE
   !
@@ -117,7 +118,7 @@ SUBROUTINE do_phonon(auxdyn)
      IF ( trans ) THEN
         !
         CALL phqscf()
-        CALL dynmatrix_new(iq)
+        IF (.NOT. lrhoun) CALL dynmatrix_new(iq)
         !
      END IF
      !

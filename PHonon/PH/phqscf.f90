@@ -39,6 +39,7 @@ SUBROUTINE phqscf
   USE ldaU_ph,          ONLY : dnsscf_all_modes
   USE units_ph,         ONLY : iundnsscf
   USE control_flags,    ONLY : iverbosity
+  USE control_lr,       ONLY : lrhoun
   USE write_hub
 
   IMPLICIT NONE
@@ -48,7 +49,7 @@ SUBROUTINE phqscf
   ! counter on the representations
   ! counter on the modes
   ! npert(irr)
-
+  INTEGER :: nirr_un
   REAL(DP) :: tcpu, get_clock
   ! timing variables
 
@@ -69,7 +70,12 @@ SUBROUTINE phqscf
   ! For each irreducible representation we compute the change
   ! of the wavefunctions
   !
-  DO irr = 1, nirr
+  IF (lrhoun) THEN
+    nirr_un=1
+  ELSE
+    nirr_un=nirr
+  ENDIF
+  DO irr = 1, nirr_un
      IF ( (comp_irr (irr)) .AND. (.NOT.done_irr (irr)) ) THEN
         npe=npert(irr)
         CALL ph_set_upert_phonon(irr)
