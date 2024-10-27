@@ -79,6 +79,10 @@ MODULE control_lr
   REAL(DP) :: alpha_mix(100)  ! the mixing parameter
   INTEGER :: niter_ph         ! maximum number of iterations (read from input)
   INTEGER :: nbnd_occx        ! maximun value of nbnd_occ(:)
+  LOGICAL :: lrhoun=.FALSE.
+  !! if TRUE macroscopic density response to q-potential perturbation is written as output
+  LOGICAL :: lmacro=.FALSE.
+  !! if TRUE a calculation with null macroscopic electric field is performed
   !
 END MODULE control_lr
 !

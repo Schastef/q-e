@@ -64,7 +64,7 @@ SUBROUTINE phq_readin()
   USE dfile_star,    ONLY : drho_star, dvscf_star
 
   USE qpoint,        ONLY : nksq, xq
-  USE control_lr,    ONLY : lgamma, lrpa
+  USE control_lr,    ONLY : lgamma, lrpa, lrhoun, lmacro
   ! YAMBO >
   USE YAMBO,         ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <
@@ -128,7 +128,7 @@ SUBROUTINE phq_readin()
                        lshift_q, read_dns_bare, d2ns_type, diagonalization, &
                        ldvscf_interpolate, do_long_range, do_charge_neutral, &
                        wpot_dir, ahc_dir, ahc_nbnd, ahc_nbndskip, &
-                       skip_upperfan, dftd3_hess, kx, ky, kz
+                       skip_upperfan, dftd3_hess, kx, ky, kz, lrhoun, lmacro
 
   ! tr2_ph       : convergence threshold
   ! amass        : atomic masses
