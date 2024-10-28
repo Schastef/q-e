@@ -215,7 +215,36 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
     convt =.FALSE.
     where_rec='no_recover'
   endif
-
+  !
+  IF (lrhoun) THEN
+    !
+    IF (irr == 1) THEN
+      iter0 = 0
+      convt =.FALSE.
+      where_rec='no_recover'
+    ELSE
+      lmetq0 = (lgauss .OR. ltetra) .AND. lgamma
+      convt=.TRUE.
+      do ipert = 1, npe
+        if (fildrho.ne.' ') then
+          call davcio_drho (drhoscfh(1,1,ipert), lrdrho, iudrho, 1, -1)
+        endif
+      enddo
+      !
+      if (doublegrid) then
+         do is = 1, nspin_mag
+            do ipert = 1, npe
+               call fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
+            enddo
+         enddo
+      else
+         call zcopy (npe*nspin_mag*dfftp%nnr, drhoscfh, 1, drhoscf, 1)
+      endif
+      !
+    ENDIF
+    !
+  ENDIF
+  !
   IF (ionode .AND. fildrho /= ' ') THEN
      INQUIRE (UNIT = iudrho, OPENED = exst)
      IF (exst) CLOSE (UNIT = iudrho, STATUS='keep')

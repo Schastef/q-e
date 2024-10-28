@@ -49,7 +49,6 @@ SUBROUTINE phqscf
   ! counter on the representations
   ! counter on the modes
   ! npert(irr)
-  INTEGER :: nirr_un
   REAL(DP) :: tcpu, get_clock
   ! timing variables
 
@@ -70,12 +69,7 @@ SUBROUTINE phqscf
   ! For each irreducible representation we compute the change
   ! of the wavefunctions
   !
-  IF (lrhoun) THEN
-    nirr_un=1
-  ELSE
-    nirr_un=nirr
-  ENDIF
-  DO irr = 1, nirr_un
+  DO irr = 1, nirr
      IF ( (comp_irr (irr)) .AND. (.NOT.done_irr (irr)) ) THEN
         npe=npert(irr)
         CALL ph_set_upert_phonon(irr)
