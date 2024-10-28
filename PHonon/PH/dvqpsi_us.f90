@@ -106,6 +106,8 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   IF (.NOT. lrhoun) THEN
     CALL compute_dvloc (uact, addnlcc, dvlocin)
   ELSE
+    ! Bring potential in reciprocal space
+    CALL fwfft ('Rho', dvlocin, dffts)
     IF (gg(1) < 1d-8) THEN
       dvlocin(dffts%nl(1)) = extpot
     ENDIF

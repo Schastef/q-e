@@ -404,6 +404,8 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
         if (twochem.and.lmetq0) call zcopy (npe*nspin_mag*dfftp%nnr, drhoscf_cond, 1, drhoscfh_cond, 1)
      endif
      !
+     IF (lrhoun) call psymdvscf (drhoscf)
+     !
      !  In the noncolinear, spin-orbit case rotate dbecsum
      !
      IF (noncolin.and.okvan) THEN
@@ -470,6 +472,19 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
      !
      IF (.not.lgamma_gamma) THEN
         CALL psymdvscf(drhoscfh)
+        !
+        IF (lrhoun) THEN
+          if (doublegrid) then
+            do is = 1, nspin_mag
+              do ipert = 1, npe
+                call fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
+              enddo
+            enddo
+          else
+            call psymdvscf (drhoscf)
+          endif
+        ENDIF
+        !        
         IF ( noncolin.and.domag ) CALL psym_dmag( npe, irr, drhoscfh)
         IF (okpaw) THEN
            IF (minus_q) CALL PAW_dumqsymmetrize(dbecsum,npe,irr, npertx,irotmq,rtau,xq,tmq)
@@ -490,7 +505,9 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
         !
         ! Compute the response of the core charge density
         !
-        call addcore(u(1, imode0+ipert), drhoc)
+        IF (.NOT. lrhoun) THEN
+          call addcore(u(1, imode0+ipert), drhoc)
+        ENDIF
         !
         ! Compute the response HXC potential
         call dv_of_drho (dvscfout(1,1,ipert), drhoc = drhoc)
@@ -623,7 +640,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
            IF (okpaw.AND.ionode) CALL davcio( int3_paw(:,:,:,:,ipert), lint3paw, &
                                               iuint3paw, imode0+ipert, + 1 )
         end do
-        if (elph) call elphel (irr, npe, imode0, dvscfins)
+        if (elph .AND. .NOT. lrhoun) call elphel (irr, npe, imode0, dvscfins)
      end if
   endif
   if (convt.and.nlcc_any) call dynmat_nlcc (imode0, drhoscfh, npe)

@@ -338,7 +338,7 @@ MODULE control_ph
   CHARACTER(LEN=256) :: dftd3_hess 
   !! file from where the dftd3 hessian is read
   !
-  REAL(DP) :: extpot = 1d2
+  REAL(DP) :: extpot = 1
   !! External potential for the density and epsilon determination
 END MODULE control_ph
 !
