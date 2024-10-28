@@ -430,7 +430,7 @@ MODULE units_ph
   INTEGER :: iudumpeff
   !! Unit to print the effective charges at q
   INTEGER :: iurhoun
-  !! Unit to print the effective charges at q
+  !! Unit to print the epsilon at q
   !
   LOGICAL, ALLOCATABLE :: this_dvkb3_is_on_file(:), &
                           this_pcxpsi_is_on_file(:,:)

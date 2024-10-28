@@ -1,24 +1,23 @@
 !----------------------------------------------------------
 SUBROUTINE write_epsilon(convt,npe,drhoscfh)
   !----------------------------------------------
-  ! F. Macheda (2023)
+  ! F. Macheda (2024)
   ! ---------------------------------------------
   USE kinds,                ONLY : DP
-  USE io_global,            ONLY : stdout, ionode
+  USE io_global,            ONLY : ionode
   USE fft_base,             ONLY : dfftp 
   USE units_ph,             ONLY : iurhoun 
   USE gvect,                ONLY : gg
   USE lsda_mod,             ONLY : nspin
-  USE fft_interfaces,       ONLY : fft_interpolate, fwfft
+  USE fft_interfaces,       ONLY : fwfft
   USE dv_of_drho_lr,        ONLY : dv_of_drho
   USE constants,            ONLY : fpi,e2
-  USE cell_base,            ONLY : omega, tpiba
+  USE cell_base,            ONLY : tpiba
   USE qpoint,               ONLY : xq
   USE control_ph,           ONLY : extpot
-  use mp,                   ONLY : mp_sum, mp_bcast, mp_rank, mp_size
+  use mp,                   ONLY : mp_sum
   USE mp_bands,             ONLY : intra_bgrp_comm
   USE control_lr,           ONLY : lmacro
-  USE ions_base,            ONLY : nat
   !
   IMPLICIT NONE
   INTEGER, INTENT(in) :: npe
@@ -111,29 +110,23 @@ END SUBROUTINE write_epsilon
 !----------------------------------------------------------
 SUBROUTINE write_drhoun
   !----------------------------------------------
-  ! F. Macheda (2023)
+  ! F. Macheda (2024)
   ! ---------------------------------------------
   USE kinds,          ONLY : DP
   USE io_global,      ONLY : stdout, ionode
-  USE fft_base,       ONLY : dfftp, dffts
   USE units_ph,       ONLY : iudumpdrho, iudumpeff 
-  USE modes,          ONLY : u, nirr, npert
-  USE lsda_mod,       ONLY : nspin
+  USE modes,          ONLY : u
   USE ions_base,      ONLY : tau, nat, ityp
-  USE fft_interfaces, ONLY : fwfft
-  USE gvect,          ONLY : g, mill, ig_l2g, eigts1, eigts2, eigts3
+  USE gvect,          ONLY : mill, ig_l2g
   USE qpoint,         ONLY : xq
-  USE cell_base,      ONLY : at, bg, tpiba, omega
+  USE cell_base,      ONLY : tpiba, omega
   USE uspp_param,     ONLY : upf
-  USE constants,      ONLY : tpi, fpi, eps8, e2 
+  USE constants,      ONLY : tpi, e2 
   USE mp_bands,       ONLY : intra_bgrp_comm
   USE control_ph,     ONLY : current_iq, extpot
   USE eqv,            ONLY : vlocq
   USE gvecs,          ONLY : ngms, ngms_g
   USE dynmat,         ONLY : dyn
-  USE lr_symm_base,   ONLY : minus_q, irotmq, nsymq, rtau
-  USE cell_base,      ONLY : at, bg
-  USE symm_base,      ONLY : s, sr, irt, nsym, invs, t_rev
   use mp,             ONLY : mp_sum
   !
   IMPLICIT NONE
@@ -162,8 +155,6 @@ SUBROUTINE write_drhoun
   absq = SQRT(DOT_PRODUCT(xq,xq))
   !
   ALLOCATE(phase(nat))
-  !
-  WRITE(stdout,'(/,5x,"Zval are:",8f6.2/)')(upf(ityp(i))%zp,i=1,nat)
   !
   ALLOCATE(aux2_g(3,nat,ngms_g))
   ALLOCATE(itmp_mill(3,ngms_g))
@@ -259,16 +250,23 @@ SUBROUTINE write_drhoun
   DEALLOCATE(phase)
   DEALLOCATE(itmp_mill)
   !
+  WRITE(stdout, *) "------------------------------------------------------------------------"
+  WRITE(stdout, *) " The code is printing the induced charges"
+  WRITE(stdout, *) " Please refer to:"
+  WRITE(stdout, *) " Macheda F., Barone P. & Mauri, F. (2024), "
+  WRITE(stdout, *) " First-principles calculations of dynamical Born effective charges, quadrupoles,"
+  WRITE(stdout, *) " and higher order terms from the charge response in large semiconducting and metallic systems"
+  WRITE(stdout, *) " Physical Review B, 110, 094306. https://doi.org/10.1103/PhysRevB.110.094306"
+  WRITE(stdout, *) "------------------------------------------------------------------------"
   CONTAINS
    !--------------------------------------------------------------------------
    SUBROUTINE symvectorq( nat, vect )
      !-----------------------------------------------------------------------
      !! Symmetrize a function \(f(i,na)\) (e.g. the forces in cartesian axis),
      !! where \(i\) is the cartesian component, \(na\) the atom index.
-     USE kinds,      ONLY : DP
-     USE cell_base,  ONLY : at, bg
-     USE symm_base,  ONLY : s, sname, ft, nrot, nsym, t_rev, time_reversal, &
-                         irt, invs, invsym
+     USE kinds,          ONLY : DP
+     USE cell_base,      ONLY : at, bg
+     USE symm_base,      ONLY : s, nsym, t_rev, irt, invs 
      USE lr_symm_base,   ONLY : minus_q, irotmq, nsymq, rtau
      USE qpoint,         ONLY : xq
      !
@@ -402,22 +400,14 @@ END SUBROUTINE write_drhoun
 SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   !
   USE kinds,          ONLY : DP
-  USE io_global,      ONLY : stdout, ionode
-  USE fft_base,       ONLY : dfftp, dffts
-  USE units_ph,       ONLY : iudrho, lrdrho, iudumpdrho, iudumpeff 
-  USE modes,          ONLY : u, nirr, npert
-  USE lsda_mod,       ONLY : nspin
-  USE ions_base,      ONLY : tau, nat, ityp, ntyp => nsp
-  USE fft_interfaces, ONLY : fwfft
-  USE gvect,          ONLY : g, mill, ig_l2g, eigts1, eigts2, eigts3, ngm
+  USE fft_base,       ONLY : dffts
+  USE modes,          ONLY : u
+  USE ions_base,      ONLY : nat, ityp, ntyp => nsp
+  USE gvect,          ONLY : g, mill, eigts1, eigts2, eigts3, ngm
   USE qpoint,         ONLY : xq, eigqts
-  USE cell_base,      ONLY : bg, tpiba, tpiba2, omega
+  USE cell_base,      ONLY : tpiba, tpiba2, omega
   USE uspp_param,     ONLY : upf
-  USE constants,      ONLY : tpi, fpi, eps8, e2
-  USE mp_bands,       ONLY : intra_bgrp_comm
-  USE control_ph,     ONLY : current_iq 
-  USE gvecs,          ONLY : ngms, ngms_g
-  use mp,             ONLY : mp_sum
+  USE gvecs,          ONLY : ngms
   !
   IMPLICIT NONE
   COMPLEX(DP), INTENT(INOUT) :: pot
