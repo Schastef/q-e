@@ -336,8 +336,10 @@ MODULE control_ph
   !! new Monkhorst-Pack k-point grid
   !
   CHARACTER(LEN=256) :: dftd3_hess 
-  ! file from where the dftd3 hessian is read
+  !! file from where the dftd3 hessian is read
   !
+  REAL(DP) :: extpot = 1d2
+  !! External potential for the density and epsilon determination
 END MODULE control_ph
 !
 !
@@ -423,6 +425,12 @@ MODULE units_ph
   !! length of DV_SCF * psi
   INTEGER :: iugauge
   !! Unit for reading and writing gauge information in ahc.f90
+  INTEGER :: iudumpdrho
+  !! Unit to print the macroscopic density at q
+  INTEGER :: iudumpeff
+  !! Unit to print the effective charges at q
+  INTEGER :: iurhoun
+  !! Unit to print the effective charges at q
   !
   LOGICAL, ALLOCATABLE :: this_dvkb3_is_on_file(:), &
                           this_pcxpsi_is_on_file(:,:)

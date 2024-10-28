@@ -82,6 +82,7 @@ MODULE control_lr
   LOGICAL :: lrhoun=.FALSE.   ! if TRUE macroscopic density response to q-potential perturbation is written as output
   LOGICAL :: lmacro=.FALSE.   ! if TRUE a calculation with null macroscopic electric field is performed
   !
+  INTEGER :: current_mode     ! Keeps track of the current mode
 END MODULE control_lr
 !
 MODULE eqv

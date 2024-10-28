@@ -853,10 +853,12 @@ SUBROUTINE phq_readin()
      'The phonon code with Q in real space not available',1)
   !
   ! FM : incompatibility for lrhoun and lmacro
+  IF (lmacro .and. .NOT. lrhoun) CALL errore('phq_readin',&
+     'lmacro only works with lrhoun',1)
   IF (lrhoun .and. (okvan .or. domag)) CALL errore('phq_readin',&
      'lrhoun implemented only for norm-conserving potential, and without magnetization',1)
-  IF (lmacro .and. (okvan .or. domag)) CALL errore('phq_readin',&
-     'lrhmacron implemented only for norm-conserving potential, and without magnetization',1)
+  IF (lrhoun .and. (ltetra .OR. lgauss)) CALL errore('phq_readin',&
+          'lrhoun does not work with metal',1)
   !
   !
   IF (start_irr < 0 ) CALL errore('phq_readin', 'wrong start_irr',1)

@@ -34,6 +34,9 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   USE klist,            ONLY : ngk, igk_k
   USE qpoint,           ONLY : nksq
   USE becmod,           ONLY : bec_type
+  USE gvect,            ONLY : gg
+  USE control_lr,       ONLY : lrhoun
+  USE control_ph,       ONLY : extpot
   !
   IMPLICIT NONE
   !
@@ -100,8 +103,15 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   !
   ! Compute dV_loc/dtau in real space
   !
-  CALL compute_dvloc (uact, addnlcc, dvlocin)
-  !
+  IF (.NOT. lrhoun) THEN
+    CALL compute_dvloc (uact, addnlcc, dvlocin)
+  ELSE
+    IF (gg(1) < 1d-8) THEN
+      dvlocin(dffts%nl(1)) = extpot
+    ENDIF
+    ! Bring potential in real space
+    CALL invfft ('Rho', dvlocin, dffts)
+  ENDIF
   ! Now we compute dV_loc/dtau * psi in real space
   !
   !$acc update device(evc)

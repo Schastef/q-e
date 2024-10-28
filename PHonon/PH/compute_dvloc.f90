@@ -20,7 +20,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   USE cell_base,        ONLY : tpiba
   USE fft_base,         ONLY : dfftp, dffts
   USE fft_interfaces,   ONLY : fwfft, invfft
-  USE gvect,            ONLY : eigts1, eigts2, eigts3, mill, g
+  USE gvect,            ONLY : eigts1, eigts2, eigts3, mill, g, gg
   USE gvecs,            ONLY : ngms
   USE lsda_mod,         ONLY : nspin
   USE uspp,             ONLY : nlcc_any
@@ -28,6 +28,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   USE qpoint,           ONLY : xq, eigqts
   USE modes,            ONLY : nmodes
   USE dv_of_drho_lr,    ONLY : dv_of_drho_xc
+  USE control_lr,       ONLY : lmacro, current_mode
   !
   IMPLICIT NONE
   !
@@ -147,6 +148,10 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
      deallocate (aux)
      deallocate (auxs)
   endif
+  !
+  IF (lmacro .AND. gg(1) < 1d-8) THEN
+    CALL Vaeps_dvloc(dvlocin(dffts%nl(1)), current_mode, dffts%nl(1))
+  ENDIF
   !
   ! Now we compute dV_loc/dtau in real space
   !

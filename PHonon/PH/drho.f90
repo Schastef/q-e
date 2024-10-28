@@ -33,7 +33,7 @@ subroutine drho
   USE klist,      ONLY : lgauss
   USE two_chem,   ONLY : twochem
   USE qpoint,     ONLY : nksq
-  USE control_lr, ONLY : lgamma
+  USE control_lr, ONLY : lgamma, current_mode
 
   USE dynmat,     ONLY : dyn00
   USE modes,      ONLY : npertx, npert, nirr, u
@@ -159,6 +159,7 @@ subroutine drho
   wdyn (:,:) = (0.d0, 0.d0)
   nrstot = dffts%nr1 * dffts%nr2 * dffts%nr3
   do nu_i = 1, 3 * nat
+     current_mode=nu_i
      call compute_dvloc (u(1, nu_i), .FALSE., dvlocin)
      do nu_j = 1, 3 * nat
         do is = 1, nspin_lsda
