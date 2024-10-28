@@ -78,7 +78,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
   USE eqv,                  ONLY : dvpsi
   USE qpoint,               ONLY : xq, nksq, ikks, ikqs
   USE qpoint_aux,           ONLY : ikmks, becpt, alphapt
-  USE control_lr,           ONLY : lgamma
+  USE control_lr,           ONLY : lgamma, lrhoun
   USE dv_of_drho_lr,        ONLY : dv_of_drho
   USE fft_interfaces,       ONLY : fft_interpolate
   USE ldaU,                 ONLY : lda_plus_u
@@ -609,6 +609,9 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
   !    We compute it here.
   !
   if (convt) then
+     !
+     IF (lrhoun) CALL write_epsilon(convt,npe,drhoscfh)
+     !
      call drhodvus (irr, imode0, dvscfin, npe)
      if (fildvscf.ne.' ') then
         do ipert = 1, npe

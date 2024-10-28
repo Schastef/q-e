@@ -118,6 +118,7 @@ SUBROUTINE do_phonon(auxdyn)
      IF ( trans ) THEN
         !
         CALL phqscf()
+        IF (lrhoun) CALL write_drhoun()
         IF (.NOT. lrhoun) CALL dynmatrix_new(iq)
         !
      END IF
