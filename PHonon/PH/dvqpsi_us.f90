@@ -176,7 +176,7 @@ subroutine dvqpsi_us (ik, uact, addnlcc, becp1, alphap)
   !   First a term similar to the KB case.
   !   Then a term due to the change of the D coefficients.
   !
-  call dvqpsi_us_only (ik, uact, becp1, alphap)
+  IF (.NOT. lrhoun) call dvqpsi_us_only (ik, uact, becp1, alphap)
   !
   call stop_clock_gpu ('dvqpsi_us')
   !
