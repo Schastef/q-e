@@ -534,9 +534,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
         !
         ! Compute the response of the core charge density
         !
-        IF (.NOT. lrhoun) THEN
-          call addcore(u(1, imode0+ipert), drhoc)
-        ENDIF
+        call addcore(u(1, imode0+ipert), drhoc)
         !
         ! Compute the response HXC potential
         call dv_of_drho (dvscfout(1,1,ipert), drhoc = drhoc)
