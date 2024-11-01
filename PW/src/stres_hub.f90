@@ -173,9 +173,7 @@ SUBROUTINE stres_hub ( sigmah )
       CALL allocate_bec_type_acc ( nkb, nbnd, becp)
       !
       CALL calbec( offload_type, npw, vkb, evc, becp )
-      !$acc host_data use_device(evc, spsi)
       CALL s_psi_acc( npwx, npw, nbnd, evc, spsi )
-      !$acc end host_data
       !
       CALL deallocate_bec_type_acc (becp)
       !
@@ -605,7 +603,6 @@ SUBROUTINE dndepsilon_k_nc ( ipol,jpol,ldim,proj,spsi,ik,nb_s,nb_e,mykey,lpuk,dn
    USE klist,             ONLY : ngk
    USE lsda_mod,          ONLY : nspin, current_spin
    USE wvfct,             ONLY : nbnd, npwx, wg
-   USE becmod,            ONLY : bec_type, allocate_bec_type, deallocate_bec_type
    USE noncollin_module,  ONLY : npol, noncolin
    USE mp_pools,          ONLY : intra_pool_comm
    USE mp,                ONLY : mp_sum
@@ -1043,7 +1040,6 @@ SUBROUTINE dngdepsilon_k_nc ( ipol,jpol,ldim,proj,spsi,ik,nb_s,nb_e,mykey,dnsg )
    USE klist,             ONLY : ngk
    USE lsda_mod,          ONLY : nspin, current_spin
    USE wvfct,             ONLY : nbnd, npwx, wg
-   USE becmod,            ONLY : bec_type, allocate_bec_type, deallocate_bec_type
    USE mp_pools,          ONLY : intra_pool_comm
    USE mp,                ONLY : mp_sum
    USE ldaU,              ONLY : nwfcU, Hubbard_l, is_hubbard, Hubbard_l2, &

@@ -588,7 +588,7 @@ IF (has_second_manifold) THEN
          IF ( ANY(eigenvecs_ref(:,:,is,na) .NE. 0.0d0) ) THEN
             order(:,is) = 0
             CALL order_eigenvecs( order(:,is), eigenvecs_current(:,:,is), &
-                  eigenvecs_ref(:,:,is,na), ldim )
+                  eigenvecs_ref(1:ldim,1:ldim,is,na), ldim )
          ELSE
             CALL errore( 'alpha_m_trace', 'missing reference eigenvectors', 1 )
          ENDIF

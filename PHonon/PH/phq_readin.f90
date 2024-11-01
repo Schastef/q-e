@@ -80,6 +80,7 @@ SUBROUTINE phq_readin()
   USE read_namelists_module, ONLY : check_namelist_read
   USE open_close_input_file, ONLY : open_input_file, close_input_file
   USE el_phon,       ONLY : kx, ky, kz, elph_print
+  USE two_chem,      ONLY : twochem
   !
   IMPLICIT NONE
   !
@@ -772,10 +773,8 @@ SUBROUTINE phq_readin()
   ! checks
   IF (elph_ahc .AND. domag) CALL errore ('phq_readin', &
     'elph_ahc and magnetism not implemented', 1)
-  IF (elph_ahc .AND. okpaw) CALL errore ('phq_readin', &
-    'elph_ahc and PAW not tested.', 1)
   IF (elph_ahc .AND. okvan) CALL errore ('phq_readin', &
-    'elph_ahc and PAW not tested.', 1)
+    'elph_ahc and USPP or PAW not tested', 1)
   IF (elph_ahc .AND. lda_plus_u) CALL errore ('phq_readin', &
     'elph_ahc and lda_plus_u not tested.', 1)
 
@@ -825,9 +824,6 @@ SUBROUTINE phq_readin()
       call errore('phq_readin',&
       'el-ph with wannier : specify bands range with elph_nbnd_min,elph_nbnd_max',1)
   END IF
-
-  IF (elph .AND. okpaw) CALL errore('phq_readin',&
-     'Electron-phonon calculations with PAW not tested',1)
 
   IF(elph.and.nimage>1) call errore('phq_readin',&
        'el-ph with images not implemented',1)
@@ -934,7 +930,8 @@ SUBROUTINE phq_readin()
   ! end of reading, close unit qestdin, remove temporary input file if existing
   ! FIXME: closing input file here breaks alpha2F.x that reads what follows
   !   IF (meta_ionode) ios = close_input_file ()
-
+  !
+  IF (twochem.AND.elph) CALL errore ('phq_readin', 'electron-phonon with twochem approach not yet implemented',1)
   IF (epsil.AND.(lgauss .OR. ltetra)) &
         CALL errore ('phq_readin', 'no elec. field with metals', 1)
   IF (modenum > 0) THEN

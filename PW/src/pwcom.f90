@@ -321,8 +321,6 @@ MODULE ener
   REAL(DP) :: etxc
   !! the exchange and correlation energy
   REAL(DP) :: vtxc
-  !! another exchange-correlation energy
-  REAL(DP) :: etxcc
   !! the nlcc exchange and correlation
   REAL(DP) :: ewld
   !! the ewald energy
@@ -354,6 +352,8 @@ MODULE ener
   !! another solvation energy, from 3D-RISM
   REAL(DP) :: ef_cond
   !! the conduction band chemical potential for a two chemical potential simulation
+  REAL(DP) :: etxcc = 0.0
+  !! obsolete exchange-correlation energy term for core correction - unused
   !
 END MODULE ener
 !
