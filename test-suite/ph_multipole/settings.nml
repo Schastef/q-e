@@ -1,0 +1,10 @@
+&input
+    qe = .true.             ! use QE interface
+    mp_order = 3            ! the order of multipole expansion, 4 for octupole
+    epsil_order = 4         ! the order of dielectric screening function expansion
+    nqpts = 7              ! the number of q-points randomly distributed around the zone center
+    vmacro = .true.         ! set this to .true. if lmacro is set to .true. ph.x calculations
+    q_mesh = 2 2 2
+    q_step = 0.01
+!    q_file = .true.       ! if true the code will read q-point list from a *.txt file, only used for restart
+/
