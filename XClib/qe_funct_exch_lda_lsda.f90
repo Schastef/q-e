@@ -22,7 +22,7 @@ SUBROUTINE slater( rs, ex, vx )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #else
   !$acc routine seq
 #endif
@@ -57,7 +57,7 @@ SUBROUTINE slater1( rs, ex, vx )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #else
   !$acc routine seq
 #endif
@@ -92,7 +92,7 @@ SUBROUTINE slater_rxc( rs, ex, vx )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #else
   !$acc routine seq
 #endif
@@ -151,7 +151,7 @@ SUBROUTINE slaterKZK( rs, ex, vx, vol )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #else
   !$acc routine seq
 #endif
@@ -210,7 +210,7 @@ SUBROUTINE slater_spin( rho, zeta, ex, vx_up, vx_dw )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #else
   !$acc routine seq
 #endif
@@ -258,7 +258,7 @@ SUBROUTINE slater_rxc_spin( rho, z, ex, vx_up, vx_dw )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #else
   !$acc routine seq
 #endif
@@ -329,7 +329,7 @@ SUBROUTINE slater1_spin( rho, zeta, ex, vx_up, vx_dw )
   IMPLICIT NONE
   !
 #if defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #else
   !$acc routine seq
 #endif

@@ -51,7 +51,7 @@ MODULE qexsd_init
             qexsd_init_outputPBC, qexsd_init_gate_info, qexsd_init_hybrid, &
             qexsd_init_dftU, qexsd_init_vdw, qexsd_init_berryPhaseOutput, &
             qexsd_init_rism3d, qexsd_init_rismlaue, qexsd_init_esm
-  !
+ !
 CONTAINS
   !
     !
@@ -248,7 +248,7 @@ CONTAINS
     !
     !------------------------------------------------------------------------
     SUBROUTINE qexsd_init_symmetries(obj, space_group, nsym, nrot, s, ft, &
-         sname, t_rev, nat, irt, class_names, verbosity, noncolin)
+         sname, t_rev, nat, irt, class_names, verbosity, noncolin, colin_mag_)
       !------------------------------------------------------------------------
       IMPLICIT NONE
       !
@@ -261,7 +261,9 @@ CONTAINS
       CHARACTER(LEN=*), INTENT(IN) :: sname(:), verbosity
       CHARACTER(LEN=15),INTENT(IN) :: class_names(:)
       LOGICAL,INTENT(IN)           :: noncolin
+      INTEGER, OPTIONAL, INTENT(IN) :: colin_mag_
       !
+      INTEGER                      :: colin_mag
       TYPE(symmetry_type), ALLOCATABLE  :: symm(:)
       TYPE(equivalent_atoms_type)  :: equiv_atm
       TYPE(info_type)              :: info
@@ -274,11 +276,20 @@ CONTAINS
       LOGICAL                      :: true_=.TRUE., false_ = .FALSE. 
       LOGICAL,POINTER              :: trev                       
       TARGET                       :: class_names, true_, false_  
+      INTEGER                      :: colin_mag_local
       ALLOCATE(symm(nrot))
       NULLIFY( classname, trev) 
       !
       IF ( TRIM(verbosity) .EQ. 'high' .OR. TRIM(verbosity) .EQ. 'medium')  class_ispresent= .TRUE.
-      IF ( noncolin  ) time_reversal_ispresent = .TRUE.
+
+      IF ( PRESENT(colin_mag_) ) THEN
+         colin_mag = colin_mag_
+      ELSE
+         colin_mag = -1
+      END IF
+      
+      IF ( noncolin .OR. (colin_mag == 2) ) time_reversal_ispresent = .TRUE.
+
       DO i = 1, nrot
           !
           IF  (class_ispresent ) classname => class_names(i)
@@ -319,7 +330,8 @@ CONTAINS
           !
       ENDDO
       !
-      CALL qes_init (obj,"symmetries",NSYM = nsym, NROT=nrot, SPACE_GROUP = space_group, SYMMETRY=symm )
+      CALL qes_init (obj,"symmetries",NSYM = nsym, NROT=nrot, SPACE_GROUP = space_group, & 
+        SYMMETRY=symm, COLIN_MAG=colin_mag_local )
       !
       DO i = 1, nsym
          CALL qes_reset (symm(i))

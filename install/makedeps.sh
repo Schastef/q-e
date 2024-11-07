@@ -93,8 +93,10 @@ for dir in $dirs; do
 	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules" ;;
 	KCW/PP )
 	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL1/src" ;;
-	EPW/src | QEHeat/src )
-	     DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
+    EPW/src )
+         DEPENDS="$DEPEND2 io utilities $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
+    QEHeat/src )
+         DEPENDS="$DEPEND2 $LEVEL2/PW/src $LEVEL2/LR_Modules $LEVEL2/PHonon/PH $LEVEL2/Modules" ;;
 	EPW/ZG/src )
 	     DEPENDS="$LEVEL3/PW/src $LEVEL3/LR_Modules $LEVEL3/PHonon/PH $LEVEL3/Modules $LEVEL3/upflib $LEVEL3/UtilXlib" ;;
 	GWW/head )

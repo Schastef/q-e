@@ -180,9 +180,7 @@ SUBROUTINE stres_hub ( sigmah )
       CALL s_psi( npwx, npw, nbnd, evc, spsi )
 #else
       CALL calbec( offload_type, npw, vkb, evc, becp )
-      !$acc host_data use_device(evc, spsi)
       CALL s_psi_acc( npwx, npw, nbnd, evc, spsi )
-      !$acc end host_data
 #endif
       !
       CALL deallocate_bec_type_acc (becp)

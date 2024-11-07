@@ -52,13 +52,15 @@ set(c_src_fftx
     fftw_sp.c
     fftw_dp.c)
 
+qe_add_library(qe_fftx_c ${c_src_fftx})
+
 qe_add_library(qe_fftx 
     ${f_src_fftx} 
-    ${c_src_fftx} 
     ${qe_ext_fft_wrappers})
 
 target_link_libraries(qe_fftx
     PRIVATE
+        qe_fftx_c
         qe_ext_fft
         qe_openmp_fortran
         qe_mpi_fortran)
@@ -72,4 +74,4 @@ elseif(QE_ENABLE_ROCM)
     target_link_libraries(qe_fftx PRIVATE qe_fftx_hipkernels)
 endif()
         
-qe_install_targets(qe_fftx)
+qe_install_targets(qe_fftx qe_fftx_c)

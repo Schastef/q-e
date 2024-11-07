@@ -28,9 +28,9 @@ qe_add_library(qe_xclib ${sources_xclib})
 target_link_libraries(qe_xclib
     PUBLIC
         qe_openacc_fortran
+        qe_mpi_fortran
     PRIVATE
         qe_openmp_fortran
-        qe_mpi_fortran
         qe_external_libxc
         qe_libbeef)
 
@@ -42,8 +42,7 @@ target_link_libraries(qe_xclib
 set(sources_libbeef
     pbecor.c
     beefun.c)
-qe_add_library(qe_libbeef ${sources_libbeef})
-set_target_properties(qe_libbeef PROPERTIES Fortran_MODULE_DIRECTORY "")
+add_library(qe_libbeef ${sources_libbeef})
 target_link_libraries(qe_libbeef 
     PUBLIC
         qe_openacc_c

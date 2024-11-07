@@ -113,9 +113,7 @@ SUBROUTINE orthoUwfc(save_wfcatom)
      !$omp end target data
      CALL s_psi_omp(npwx, npw, natomwfc, wfcatom, swfcatom)
 #else
-     !$acc host_data use_device(wfcatom, swfcatom)
      CALL s_psi_acc (npwx, npw, natomwfc, wfcatom, swfcatom)
-     !$acc end host_data
 #endif
      !
      IF (orthogonalize_wfc) CALL ortho_swfc ( npw, normalize_only, natomwfc, wfcatom, swfcatom, .FALSE. )
@@ -348,9 +346,7 @@ SUBROUTINE orthoatwfc (orthogonalize_wfc)
      !$omp end target data
      CALL s_psi_omp (npwx, npw, natomwfc, wfcatom, swfcatom)
 #else
-     !$acc host_data use_device(wfcatom, swfcatom)
      CALL s_psi_acc( npwx, npw, natomwfc, wfcatom, swfcatom )
-     !$acc end host_data
 #endif     
      !
      IF (orthogonalize_wfc) CALL ortho_swfc ( npw, normalize_only, natomwfc, wfcatom, swfcatom, .FALSE. )

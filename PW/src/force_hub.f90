@@ -163,9 +163,7 @@ SUBROUTINE force_hub( forceh )
       CALL s_psi_omp( npwx, npw, nbnd, evc, spsi )
       !$omp end target data
 #else
-      !$acc host_data use_device(spsi, evc)
       CALL s_psi_acc( npwx, npw, nbnd, evc, spsi )
-      !$acc end host_data
 #endif
       CALL deallocate_bec_type_acc( becp )
       !

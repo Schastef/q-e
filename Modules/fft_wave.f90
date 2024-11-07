@@ -13,13 +13,13 @@ MODULE fft_wave
   !! This module contains wrappers to FFT and inverse FFTs of the wave function,
   !! which it enclose the calls to g-vect/FFT-grid transposition routines too.
   !
-  USE kinds,                  ONLY: DP
-  USE fft_interfaces,         ONLY: fwfft, invfft
+  USE kinds,           ONLY: DP
+  USE fft_interfaces,  ONLY: fwfft, invfft
+  USE fft_types,       ONLY: fft_type_descriptor
 #if defined(__OPENMP_GPU)
   USE fft_interfaces,         ONLY: fwfft_y_omp, invfft_y_omp
   USE fft_helper_subroutines, ONLY: fftx_psi2c_k_omp, fftx_c2psi_k_omp
 #endif
-  USE fft_types,              ONLY: fft_type_descriptor
   USE control_flags,          ONLY: gamma_only, many_fft
   !
   IMPLICIT NONE

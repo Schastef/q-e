@@ -87,7 +87,6 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! eigenvectors of the Hamiltonian
     ! eigenvalues of the reduced hamiltonian
   COMPLEX(DP), ALLOCATABLE :: psi(:,:), hpsi(:,:), spsi(:,:)
-  !$acc declare device_resident(psi, hpsi, spsi)
     ! work space, contains psi
     ! the product of H and psi
     ! the product of S and psi
@@ -135,6 +134,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ALLOCATE( hpsi( npwx, nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( 'regterg ',' cannot allocate hpsi ', ABS(ierr) )
+  !$acc enter data create(psi, hpsi)
   !
 #if defined(__OPENMP_GPU)
   !$omp target data map(alloc:psi,hpsi)
@@ -144,6 +144,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      ALLOCATE( spsi( npwx, nvecx ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' regterg ',' cannot allocate spsi ', ABS(ierr) )
+     !$acc enter data create(spsi)
 #if defined(__OPENMP_GPU)
      !$omp target enter data map(alloc:spsi)
 #endif
@@ -225,13 +226,11 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... hpsi contains h times the basis vectors
   !
-  !$acc host_data use_device(psi, hpsi, spsi)
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi )  ; nhpsi = nvec
   !
   ! ... spsi contains s times the basis vectors
   !
   IF ( uspp ) CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
-  !$acc end host_data
   !
   ! ... hr contains the projection of the hamiltonian onto the reduced
   ! ... space vr contains the eigenvectors of hr
@@ -505,11 +504,9 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !$acc host_data use_device(psi, hpsi, spsi)
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !
      IF ( uspp ) CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
-     !$acc end host_data
      !
      ! ... update the reduced hamiltonian
      !
@@ -831,12 +828,15 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
 #if defined(__OPENMP_GPU)
      !$omp target exit data map(delete:spsi)
 #endif
+     !$acc exit data delete(spsi)
      DEALLOCATE( spsi )
   ENDIF
   !
 #if defined(__OPENMP_GPU)
   !$omp end target data
 #endif
+  !
+  !$acc exit data delete(psi, hpsi)
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )
   !

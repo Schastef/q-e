@@ -92,7 +92,6 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !$acc declare device_resident(ew)
     ! eigenvalues of the reduced hamiltonian
   COMPLEX(DP), ALLOCATABLE :: psi(:,:), hpsi(:,:), spsi(:,:)
-  !$acc declare device_resident(psi, hpsi, spsi)
     ! work space, contains psi
     ! the product of H and psi
     ! the product of S and psi
@@ -157,6 +156,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ALLOCATE( hpsi( npwx*npol, nvecx ), STAT=ierr )
   IF( ierr /= 0 ) &
      CALL errore( ' cegterg ',' cannot allocate hpsi ', ABS(ierr) )
+  !$acc enter data create(psi, hpsi)
   !
 #if defined(__OPENMP_GPU)
   !$omp target data map(alloc:psi,hpsi)
@@ -166,6 +166,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      ALLOCATE( spsi( npwx*npol, nvecx ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( ' cegterg ',' cannot allocate spsi ', ABS(ierr) )
+     !$acc enter data create(spsi)
 #if defined(__OPENMP_GPU)
      !$omp target enter data map(alloc:spsi)
 #endif
@@ -203,9 +204,10 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      enddo
   enddo
 #else
-  !$acc host_data use_device(evc, psi, hpsi, spsi, hc, sc)
+  !$acc host_data use_device(evc, psi)
   CALL dev_memcpy(psi, evc, (/ 1 , npwx*npol /), 1, &
                             (/ 1 , nvec /), 1)
+  !$acc end host_data
 #endif
   !
   ! ... hpsi contains h times the basis vectors
@@ -221,6 +223,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   CALL start_clock( 'cegterg:init' )
   !
+  !$acc host_data use_device(evc, psi, hpsi, spsi, hc, sc)
   CALL divide_all(inter_bgrp_comm,nbase,n_start,n_end,recv_counts,displs)
   CALL mp_type_create_column_section(sc(1,1), 0, nbase, nvecx, column_section_type)
   my_n = n_end - n_start + 1; !write (*,*) nbase,n_start,n_end
@@ -572,7 +575,6 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !$acc host_data use_device(psi, hpsi, spsi, hc, sc)
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !
      IF ( uspp ) CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
@@ -581,6 +583,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      CALL start_clock( 'cegterg:overlap' )
      !
+     !$acc host_data use_device(psi, hpsi, spsi, hc, sc)
      CALL divide_all(inter_bgrp_comm,nbase+notcnv,n_start,n_end,recv_counts,displs)
      CALL mp_type_create_column_section(sc(1,1), nbase, notcnv, nvecx, column_section_type)
      my_n = n_end - n_start + 1; !write (*,*) nbase+notcnv,n_start,n_end
@@ -864,12 +867,15 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
 #if defined(__OPENMP_GPU)
      !$omp target exit data map(delete:spsi)
 #endif
+     !$acc exit data delete(spsi)
      DEALLOCATE( spsi )
   ENDIF
   !
 #if defined(__OPENMP_GPU)
   !$omp end target data
 #endif
+  !
+  !$acc exit data delete(psi, hpsi)
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )
   !

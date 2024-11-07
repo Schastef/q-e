@@ -93,7 +93,7 @@ SUBROUTINE gcxc( length, rho_in, grho_in, sx_out, sc_out, v1x_out, &
 #endif
 !$acc parallel loop
 #elif defined(__OPENMP_GPU)
-!$omp target teams distribute parallel do
+!!!$omp target teams distribute parallel do
 #elif defined(_OPENMP)
 !$omp parallel if(ntids==1) default(none) &
 !$omp private( rho, grho, sx, sx_, sxsr, v1x, v1x_, v1xsr, &
@@ -527,7 +527,7 @@ SUBROUTINE gcx_spin( length, rho_in, grho2_in, sx_tot, v1x_out, v2x_out, err_out
 #endif
 !$acc parallel loop
 #elif defined(__OPENMP_GPU)
-!$omp target teams distribute parallel do
+!!!$omp target teams distribute parallel do
 #elif defined(_OPENMP)
 !$omp parallel if(ntids==1) default(none) &
 !$omp private( rho_up, rho_dw, grho2_up, grho2_dw, rnull_up, rnull_dw, &
@@ -1076,7 +1076,7 @@ SUBROUTINE gcc_spin( length, rho_in, zeta_io, grho_in, sc_out, v1c_out, v2c_out 
 !$acc data present( rho_in, zeta_io, grho_in, sc_out, v1c_out, v2c_out )
 !$acc parallel loop
 #elif defined(__OPENMP_GPU)
-!$omp target teams distribute parallel do
+!!!$omp target teams distribute parallel do
 #elif defined(_OPENMP)
 !$omp parallel if(ntids==1) default(none) &
 !$omp private( rho, zeta, grho, sc, v1c_up, v1c_dw, v2c ) &
@@ -1203,7 +1203,7 @@ SUBROUTINE gcc_spin_more( length, rho_in, grho_in, grho_ud_in, &
 !$acc data present( rho_in, grho_in, grho_ud_in, sc, v1c, v2c, v2c_ud )
 !$acc parallel loop
 #elif defined(__OPENMP_GPU)
-!$omp target teams distribute parallel do
+!!!$omp target teams distribute parallel do
 #elif defined(_OPENMP)
 !$omp parallel if(ntids==1) default(none) &
 !$omp private( rho_up, rho_dw, grho_up, grho_dw, grho_ud ) &

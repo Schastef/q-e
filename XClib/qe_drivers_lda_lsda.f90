@@ -92,7 +92,7 @@ SUBROUTINE xc_lda( length, rho_in, ex_out, ec_out, vx_out, vc_out )
 !$acc data present( rho_in, ex_out, vx_out, ec_out, vc_out )
 !$acc parallel loop
 #elif defined(__OPENMP_GPU)
-!$omp target teams distribute parallel do
+!!!$omp target teams distribute parallel do
 #elif defined(_OPENMP)
 !$omp parallel if(ntids==1) default(none) &
 !$omp private( rho, rs, ex, ec, ec_, vx, vc, vc_ ) &
@@ -319,7 +319,7 @@ SUBROUTINE xc_lsda( length, rho_in, zeta_in, ex_out, ec_out, vx_out, vc_out )
 !$acc data present( rho_in, zeta_in, ex_out, vx_out, ec_out, vc_out )
 !$acc parallel loop
 #elif defined(__OPENMP_GPU)
-!$omp target teams distribute parallel do
+!!!$omp target teams distribute parallel do
 #elif defined(_OPENMP)
 !$omp parallel if(ntids==1) default(none) &
 !$omp private( rho, rs, zeta, ex, ec, ec_, vx_up, vx_dw, vc_up, &

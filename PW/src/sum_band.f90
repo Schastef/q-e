@@ -232,15 +232,9 @@ SUBROUTINE sum_band()
         !$acc update host(ebecsum)
      endif
      !
-     ! ... If the <beta|psi> are distributed, sum over bands
-     !
-     IF ( becp%comm /= mp_get_comm_null() .AND. nhm > 0 ) THEN
-        CALL mp_sum( becsum, becp%comm )
-        IF ( tqr ) CALL mp_sum( ebecsum, becp%comm )
-     ENDIF
      CALL deallocate_bec_type_acc ( becp )
      !
-     ! ... becsums must be also be summed over bands (with bgrp parallelization)
+     ! ... becsums must be summed over bands (with bgrp parallelization)
      ! ... and over k-points (unsymmetrized). Then the CPU and GPU copies are aligned.
      !
      CALL mp_sum(becsum, inter_bgrp_comm )
@@ -346,14 +340,16 @@ SUBROUTINE sum_band()
        INTEGER ::  ierr, ebnd, i, brange, ns, dffts_nnr
        REAL(DP) :: kplusgi
        COMPLEX(DP), ALLOCATABLE :: grad_psic(:,:)
-       !$acc declare device_resident(grad_psic)
        !
        ! ... here we sum for each k point the contribution
        ! ... of the wavefunctions to the charge
        !
        incr = 2
        !$acc enter data create(psic)
-       IF (xclib_dft_is('meta') .OR. lxdm) ALLOCATE( grad_psic(npwx,2) )
+       IF (xclib_dft_is('meta') .OR. lxdm) THEN
+          ALLOCATE( grad_psic(npwx,2) )
+          !$acc enter data create(grad_psic)
+       ENDIF
        !
        ns = SIZE(rho%of_r,2)
        dffts_nnr = dffts%nnr
@@ -467,6 +463,7 @@ SUBROUTINE sum_band()
        ENDDO k_loop
        !
        IF (xclib_dft_is('meta') .OR. lxdm) THEN
+          !$acc exit data delete(grad_psic)
           DEALLOCATE( grad_psic )
           !$acc update host(rho%kin_r)
        END IF
@@ -508,7 +505,7 @@ SUBROUTINE sum_band()
        ! polaron calculation
        REAL(DP), ALLOCATABLE :: rho_p(:)
        COMPLEX(DP), ALLOCATABLE :: psic_p(:)
-       !$acc declare device_resident(psicd, rho_p, psic_p, grad_psic)
+       !$acc declare device_resident(rho_p, psic_p)
        INTEGER :: ierr
        INTEGER :: i, j, group_size, hm_vec(3)
        REAL(DP) :: kplusgi
@@ -534,10 +531,14 @@ SUBROUTINE sum_band()
        ELSE IF (xclib_dft_is('meta') .OR. lxdm) THEN
           incr = 1
           ALLOCATE( grad_psic(npwx,incr) )
+          !$acc enter data create(grad_psic)
        ELSE
           incr = many_fft
        ENDIF
+       !
        ALLOCATE( psicd(dffts%nnr*incr) )
+       !$acc data create(psicd)
+       !
 #if defined(__OPENMP_GPU)
        !$omp target enter data map(alloc:psicd)
 #endif
@@ -597,7 +598,7 @@ SUBROUTINE sum_band()
           IF ( sic .AND. current_spin==isp ) THEN
              CALL wave_g2r( evc(1:npw,ibnd_p:ibnd_p), psic_p, dffts, igk=igk_k(:,ik) )
              !
-             CALL get_rho_gpu(rho_p, dffts%nnr, wg(1,ik)/omega, psic_p)
+             CALL get_rho_k(rho_p, dffts%nnr, wg(1,ik)/omega, psic_p)
              !$acc update host(rho_p)
              rho%pol_r(:,1) = rho_p(:)
              wg_p = wg_p + wg(ibnd_p,ik)
@@ -636,7 +637,7 @@ SUBROUTINE sum_band()
                 ! ... Increment the charge density
                 !
                 DO ipol = 1, npol
-                   CALL get_rho_gpu( rho%of_r(:,1), dffts%nnr, w1, psic_nc(:,ipol), omp_mod=0 )
+                   CALL get_rho_k( rho%of_r(:,1), dffts%nnr, w1, psic_nc(:,ipol) )
                 ENDDO
                 !
                 ! ... In this case, calculate also the three
@@ -657,7 +658,7 @@ SUBROUTINE sum_band()
                 !
                 DO i = 0, group_size-1
                    w1 = wg(ibnd+i,ik) / omega
-                   CALL get_rho_gpu( rho%of_r(:,current_spin), dffts%nnr, w1, psicd(i*dffts%nnr+1:), omp_mod=0 )
+                   CALL get_rho_k( rho%of_r(:,current_spin), dffts%nnr, w1, psicd(i*dffts%nnr+1:) )
                 ENDDO
                 !
              ELSE
@@ -666,7 +667,7 @@ SUBROUTINE sum_band()
                 !
                 ! ... increment the charge density ...
                 !
-                CALL get_rho_gpu( rho%of_r(:,current_spin), dffts%nnr, w1, psicd, omp_mod=0 )
+                CALL get_rho_k( rho%of_r(:,current_spin), dffts%nnr, w1, psicd )
                 !
                 IF (xclib_dft_is('meta') .OR. lxdm) THEN
                    !$acc data present(g,igk_k,evc,rho%kin_r) copyin(xk)
@@ -681,7 +682,7 @@ SUBROUTINE sum_band()
                       !
                       ! ... increment the kinetic energy density ...
                       !
-                      CALL get_rho_gpu( rho%kin_r(:,current_spin), dffts%nnr, w1, psicd )
+                      CALL get_rho_k( rho%kin_r(:,current_spin), dffts%nnr, w1, psicd )
                    ENDDO
                    !$acc end data
                 ENDIF
@@ -701,7 +702,7 @@ SUBROUTINE sum_band()
           !
        END DO k_loop
        !
-       !*rho%of_r
+       !$acc end data
 #if defined(__OPENMP_GPU)
        !$omp target update from(rho%of_r)
        !$omp end target data
@@ -719,6 +720,7 @@ SUBROUTINE sum_band()
        DEALLOCATE( psicd )
        !
        IF (xclib_dft_is('meta') .OR. lxdm) THEN
+          !$acc exit data delete(grad_psic)
           DEALLOCATE( grad_psic )
           !$acc update host(rho%kin_r)
        END IF
@@ -730,7 +732,7 @@ SUBROUTINE sum_band()
      END SUBROUTINE sum_band_k
      !
      !---------------
-     SUBROUTINE get_rho_gpu(rho_loc, nrxxs_loc, w1_loc, psic_loc, omp_mod)
+     SUBROUTINE get_rho_k(rho_loc, nrxxs_loc, w1_loc, psic_loc)
         !------------
         !
         IMPLICIT NONE
@@ -771,7 +773,7 @@ SUBROUTINE sum_band()
           !$acc end data
         END IF
         !
-     END SUBROUTINE get_rho_gpu
+     END SUBROUTINE get_rho_k
      !
      !-----------------
      SUBROUTINE get_rho_gamma( rho_loc, nrxxs_loc, w1_loc, w2_loc, psic_loc, omp_mod )
@@ -1114,7 +1116,7 @@ SUBROUTINE sum_band()
                 ! OPTIMIZE HERE : this is a sum of all densities in first spin channel
                 !
                 DO ipol = 1, npol
-                   CALL get_rho_gpu( tg_rho_nc(:,1), dffts%nr1x*dffts%nr2x* &
+                   CALL get_rho_k( tg_rho_nc(:,1), dffts%nr1x*dffts%nr2x* &
                         right_nr3, w1, tg_psi_nc(:,ipol) )
                 ENDDO
                 !
@@ -1148,7 +1150,7 @@ SUBROUTINE sum_band()
                 !
                 CALL tg_get_group_nr3( dffts, right_nr3 )
                 !
-                CALL get_rho_gpu( tg_rho, dffts%nr1x*dffts%nr2x*right_nr3, w1, tg_psi )
+                CALL get_rho_k( tg_rho, dffts%nr1x*dffts%nr2x*right_nr3, w1, tg_psi )
              END IF
              !
           ENDDO

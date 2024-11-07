@@ -25,7 +25,7 @@ SUBROUTINE becke88( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -74,7 +74,7 @@ SUBROUTINE ggax( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -136,7 +136,7 @@ SUBROUTINE pbex( rho, grho, iflag, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   INTEGER, INTENT(IN) :: iflag
@@ -363,7 +363,7 @@ SUBROUTINE hcth( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -486,7 +486,7 @@ END SUBROUTINE hcth
 #if defined(_OPENACC)
       !$acc routine seq
 #elif defined(__OPENMP_GPU)
-      !$omp declare target
+!!      !$omp declare target
 #endif
       !
       REAL(DP), INTENT(IN)  :: r, c(6)
@@ -529,7 +529,7 @@ SUBROUTINE optx( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -575,7 +575,7 @@ SUBROUTINE wcx( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -651,7 +651,7 @@ SUBROUTINE pbexsr( rho, grho, sxsr, v1xsr, v2xsr, omega, in_err )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: omega
@@ -717,7 +717,7 @@ END SUBROUTINE pbexsr
 #if defined(_OPENACC)
       !$acc routine seq
 #elif defined(__OPENMP_GPU)
-      !$omp declare target
+!!      !$omp declare target
 #endif
       !
       INTEGER :: IXC, IN_ERR
@@ -797,7 +797,7 @@ END SUBROUTINE pbexsr
 #if defined(_OPENACC)
       !$acc routine seq
 #elif defined(__OPENMP_GPU)
-      !$omp declare target
+!!      !$omp declare target
 #endif
       
       REAL(DP), PARAMETER :: pi=3.14159265358979323846d0
@@ -1017,7 +1017,7 @@ SUBROUTINE rPW86( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -1072,7 +1072,7 @@ SUBROUTINE c09x( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -1144,7 +1144,7 @@ SUBROUTINE sogga( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -1209,7 +1209,7 @@ SUBROUTINE pbexgau( rho, grho, sxsr, v1xsr, v2xsr, alpha_gau )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: alpha_gau
@@ -1262,7 +1262,7 @@ SUBROUTINE pbe_gauscheme( rho, s, alpha_gau, Fx, dFxdr, dFxds )
 #if defined(_OPENACC)
        !$acc routine seq
 #elif defined(__OPENMP_GPU)
-       !$omp declare target
+!!       !$omp declare target
 #endif
        !
        REAL(dp) :: rho,s,alpha_gau,Fx,dFxdr,dFxds
@@ -1356,7 +1356,7 @@ FUNCTION TayExp(X)
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   REAL(DP), INTENT(IN) :: X
   REAL(DP) :: TAYEXP
@@ -1392,7 +1392,7 @@ SUBROUTINE PW86( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -1443,7 +1443,7 @@ SUBROUTINE becke86b( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -1494,7 +1494,7 @@ SUBROUTINE b86b( rho, grho, iflag, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   INTEGER, INTENT(IN) :: iflag
@@ -1566,7 +1566,7 @@ SUBROUTINE cx13( rho, grho, sx, v1x, v2x )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -1627,7 +1627,7 @@ SUBROUTINE becke88_spin( rho_up, rho_dw, grho_up, grho_dw, sx_up, sx_dw, v1x_up,
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho_up, rho_dw
@@ -1693,7 +1693,7 @@ SUBROUTINE wpbe_analy_erfc_approx_grad( rho, s, omega, Fx_wpbe, d1rfx, d1sfx, in
 #if defined(_OPENACC)
       !$acc routine seq
 #elif defined(__OPENMP_GPU)
-      !$omp declare target
+!!      !$omp declare target
 #endif
       !
       REAL(DP) rho,s,omega,Fx_wpbe,d1sfx,d1rfx
@@ -2296,7 +2296,7 @@ SUBROUTINE EXPINT(n, x, exin, in_err)
 #if defined(_OPENACC)
       !$acc routine seq
 #elif defined(__OPENMP_GPU)
-      !$omp declare target
+!!      !$omp declare target
 #endif
       INTEGER, INTENT(IN) :: n
       REAL(DP), INTENT(IN) :: x

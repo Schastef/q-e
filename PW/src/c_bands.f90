@@ -383,7 +383,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 IF (.not. use_gpu) THEN
                    CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
-                   !$acc host_data use_device(evc, et)
+                   !$acc host_data use_device(et)
                    CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                    !$acc end host_data
                 END IF
@@ -401,11 +401,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                          ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
              ELSE
                 CALL using_h_diag_d(0) ! precondition has intent(in)
-                !$acc host_data use_device(evc, et)
                 CALL rcgdiagg_gpu( hs_1psi_gpu, s_1psi_gpu, h_diag_d, &
                          npwx, npw, nbnd, evc, et(1,ik), btype(1,ik), &
                          ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
-                !$acc end host_data
                 !
              END IF
              !
@@ -468,20 +466,13 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        ! ... RMM-DIIS diagonalization
        !
-       IF ( .not. use_gpu) THEN
-          ALLOCATE( hevc  ( npwx*npol, nbnd ) )
-          IF ( okvan ) THEN
-             ALLOCATE( sevc( npwx*npol, nbnd ) )
-          ELSE
-             sevc => evc
-          END IF
+       ALLOCATE( hevc  ( npwx*npol, nbnd ) )
+       !$acc enter data create(hevc)
+       IF ( okvan ) THEN
+          ALLOCATE( sevc( npwx*npol, nbnd ) )
+          !$acc enter data create(sevc)
        ELSE
-          ALLOCATE( hevc_d( npwx*npol, nbnd ) )
-          IF ( okvan ) THEN
-             ALLOCATE( sevc_d( npwx*npol, nbnd ) )
-          ELSE
-             sevc_d => evc 
-          END IF
+          sevc => evc
        END IF
        !
        ntry = 0
@@ -530,9 +521,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                                evc, hevc, sevc, et(:,ik), USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = .TRUE. )
 #if defined(__CUDA)
              ELSE
-                !$acc host_data use_device(evc, et)
+                !$acc host_data use_device(et)
                 CALL rotate_xpsi( h_psi, s_psi, h_psi_gpu, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                               evc, hevc_d, sevc_d, et(:,ik), USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = .TRUE.)
+                               evc, hevc, sevc, et(:,ik), USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = .TRUE.)
                 !$acc end host_data
                 !$acc update self(et)
 #endif
@@ -550,8 +541,8 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                          okvan, lrot, exx_is_active(), notconv, rmm_iter )
           ELSE
              !$acc data present(g2kin)
-             !$acc host_data use_device(g2kin,evc)
-             CALL rrmmdiagg_gpu( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, evc, hevc_d, sevc_d, &
+             !$acc host_data use_device(g2kin)
+             CALL rrmmdiagg_gpu( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, evc, hevc, sevc, &
                           et(1,ik), g2kin, btype(1,ik), ethr, rmm_ndim, &
                           okvan, lrot, exx_is_active(), notconv, rmm_iter )
              !$acc end host_data 
@@ -577,8 +568,8 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
         CALL gram_schmidt_gamma( npwx, npw, nbnd, evc, hevc, sevc, et(1,ik), &
                         okvan, .TRUE., .TRUE., gs_nblock )
        ELSE
-          !$acc host_data use_device(evc)
-          CALL gram_schmidt_gamma_gpu( npwx, npw, nbnd, evc, hevc_d, sevc_d, et(1,ik), &
+          !$acc host_data use_device(evc, hevc, sevc)
+          CALL gram_schmidt_gamma_gpu( npwx, npw, nbnd, evc, hevc, sevc, et(1,ik), &
                           okvan, .TRUE., .TRUE., gs_nblock )
           !$acc end host_data
           !$acc update device(et)
@@ -586,20 +577,13 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        avg_iter = avg_iter + 0.5D0
        !
-       IF ( .not. use_gpu) THEN 
-          DEALLOCATE( hevc )
-          IF ( okvan ) THEN
-             DEALLOCATE( sevc )
-          ELSE
-             NULLIFY( sevc )
-          END IF
-        ELSE
-          DEALLOCATE( hevc_d )
-          IF ( okvan ) THEN
-             DEALLOCATE( sevc_d )
-          ELSE
-             NULLIFY( sevc_d )
-          END IF
+       !$acc exit data delete(hevc)
+       DEALLOCATE( hevc )
+       IF ( okvan ) THEN
+          !$acc exit data delete(sevc)
+          DEALLOCATE( sevc )
+       ELSE
+          NULLIFY( sevc )
        END IF
        !
     ELSE
@@ -784,7 +768,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 IF ( .not. use_gpu ) THEN
                    CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
-                   !$acc host_data use_device(evc, et)
+                   !$acc host_data use_device(et)
                    CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                    !$acc end host_data
                 END IF
@@ -801,11 +785,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                          ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
              ELSE
                 CALL using_h_diag_d(0)
-                !$acc host_data use_device(evc, et)
                 CALL ccgdiagg_gpu( hs_1psi_gpu, s_1psi_gpu, h_diag_d, &
                          npwx, npw, nbnd, npol, evc, et(1,ik), btype(1,ik), &
                          ethr, max_cg_iter, .NOT. lscf, notconv, cg_iter )
-                !$acc end host_data
              END IF
              !
              avg_iter = avg_iter + cg_iter
@@ -866,21 +848,14 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        ! ... RMM-DIIS diagonalization
        !
-       IF ( .not. use_gpu) THEN 
-         ALLOCATE( hevc( npwx*npol, nbnd ) )
-         IF ( okvan ) THEN
-            ALLOCATE( sevc( npwx*npol, nbnd ) )
-         ELSE
-            sevc => evc
-         END IF
+       ALLOCATE( hevc( npwx*npol, nbnd ) )
+       !$acc enter data create(hevc)
+       IF ( okvan ) THEN
+          ALLOCATE( sevc( npwx*npol, nbnd ) )
+          !$acc enter data create(sevc)
        ELSE
-         ALLOCATE( hevc_d( npwx*npol, nbnd ) )
-         IF ( okvan ) THEN
-            ALLOCATE( sevc_d( npwx*npol, nbnd ) )
-         ELSE
-            sevc_d => evc 
-         END IF
-       END IF  
+          sevc => evc
+       END IF
        !
        ntry = 0
        !
@@ -927,9 +902,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                                   USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = gamma_only )
 #if defined(__CUDA)
              ELSE
-                !$acc host_data use_device(evc, et)
+                !$acc host_data use_device(et)
                 CALL rotate_xpsi( h_psi, s_psi, h_psi_gpu, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                                  evc, hevc_d, sevc_d, et(:,ik), &
+                                  evc, hevc, sevc, et(:,ik), &
                                   USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = gamma_only )
                 !$acc end host_data
                 !$acc update self(et)
@@ -947,8 +922,8 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                              okvan, lrot, exx_is_active(), notconv, rmm_iter )
           ELSE
              !$acc data present(g2kin)
-             !$acc host_data use_device(g2kin,evc)
-             CALL crmmdiagg_gpu( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, npol, evc, hevc_d, sevc_d, &
+             !$acc host_data use_device(g2kin)
+             CALL crmmdiagg_gpu( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, npol, evc, hevc, sevc, &
                              et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                              okvan, lrot, exx_is_active(), notconv, rmm_iter )
              !$acc end host_data
@@ -973,8 +948,8 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           CALL gram_schmidt_k( npwx, npw, nbnd, npol, evc, hevc, sevc, et(1,ik), &
                              okvan, .TRUE., .TRUE., gs_nblock )
        ELSE
-          !$acc host_data use_device(evc)
-          CALL gram_schmidt_k_gpu( npwx, npw, nbnd, npol, evc, hevc_d, sevc_d, et(1,ik), &
+          !$acc host_data use_device(evc, hevc, sevc)
+          CALL gram_schmidt_k_gpu( npwx, npw, nbnd, npol, evc, hevc, sevc, et(1,ik), &
                              okvan, .TRUE., .TRUE., gs_nblock )
           !$acc end host_data
           !$acc update device(et)
@@ -982,21 +957,14 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        avg_iter = avg_iter + 0.5D0
        !
-       IF ( .not. use_gpu) THEN 
-         DEALLOCATE( hevc )
-         IF ( okvan ) THEN
-            DEALLOCATE( sevc )
-         ELSE
-            NULLIFY( sevc )
-         END IF
+       !$acc exit data delete(hevc)
+       DEALLOCATE( hevc )
+       IF ( okvan ) THEN
+          !$acc exit data delete(sevc)
+          DEALLOCATE( sevc )
        ELSE
-         DEALLOCATE( hevc_d )
-         IF ( okvan ) THEN
-            DEALLOCATE( sevc_d )
-         ELSE
-            NULLIFY( sevc_d )
-         END IF
-       END IF 
+          NULLIFY( sevc )
+       END IF
        !
        !
     ELSE

@@ -85,26 +85,7 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
        !
        IF ( nkb == 0 ) RETURN
        !
-       IF ( becp%comm == mp_get_comm_null() ) THEN
-          nproc   = 1
-          mype    = 0
-          m_loc   = m
-          m_begin = 1
-          m_max   = m
-       ELSE
-          !
-          ! becp(l,i) = <beta_l|psi_i>, with vkb(n,l)=|beta_l>
-          ! in this case becp(l,i) are distributed (index i is)
-          !
-          nproc   = becp%nproc
-          mype    = becp%mype
-          m_loc   = becp%nbnd_loc
-          m_begin = becp%ibnd_begin
-          m_max   = SIZE( becp%r, 2 )
-          IF( ( m_begin + m_loc - 1 ) > m ) m_loc = m - m_begin + 1
-       ENDIF
-       !
-       ALLOCATE( ps (nkb,m_max), STAT=ierr )
+       ALLOCATE( ps (nkb,m), STAT=ierr )
        IF ( ierr /= 0 ) &
           CALL errore( ' add_vuspsi_gamma ', ' cannot allocate ps ', ABS(ierr) )
        !

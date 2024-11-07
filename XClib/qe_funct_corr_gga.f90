@@ -27,7 +27,7 @@ SUBROUTINE perdew86( rho, grho, sc, v1c, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -84,7 +84,7 @@ SUBROUTINE ggac( rho, grho, sc, v1c, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -168,7 +168,7 @@ SUBROUTINE glyp( rho, grho, sc, v1c, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho, grho
@@ -219,7 +219,7 @@ SUBROUTINE pbec( rho, grho, iflag, sc, v1c, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   INTEGER,  INTENT(IN) :: iflag
@@ -290,7 +290,7 @@ SUBROUTINE perdew86_spin( rho, zeta, grho, sc, v1c_up, v1c_dw, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho
@@ -367,7 +367,7 @@ SUBROUTINE ggac_spin( rho, zeta, grho, sc, v1c_up, v1c_dw, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho
@@ -481,7 +481,7 @@ SUBROUTINE pbec_spin( rho, zeta, grho, iflag, sc, v1c_up, v1c_dw, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   INTEGER, INTENT(IN) :: iflag
@@ -582,7 +582,7 @@ SUBROUTINE lsd_glyp( rho_in_up, rho_in_dw, grho_up, grho_dw, grho_ud, sc, &
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN) :: rho_in_up, rho_in_dw
@@ -665,7 +665,7 @@ SUBROUTINE cpbe2d( rho, grho, sc, v1c, v2c )
 #if defined(_OPENACC)
   !$acc routine seq
 #elif defined(__OPENMP_GPU)
-  !$omp declare target
+!!  !$omp declare target
 #endif
   !
   REAL(DP), INTENT(IN)  :: rho, grho
