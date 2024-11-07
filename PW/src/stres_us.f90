@@ -19,13 +19,13 @@ SUBROUTINE stres_us( ik, gk, sigmanlc )
   USE klist,                ONLY : nks, xk, ngk, igk_k
   USE lsda_mod,             ONLY : current_spin, lsda, isk
   USE wvfct,                ONLY : npwx, nbnd, wg, et
-  USE control_flags,        ONLY : gamma_only, offload_type
+  USE control_flags,        ONLY : gamma_only, offload_type, offload_cpu
   USE uspp_param,           ONLY : upf, lmaxkb, nh, nhm
   USE uspp,                 ONLY : nkb, vkb, deeq, qq_at, ofsbeta, deeq_nc, qq_so
   USE lsda_mod,             ONLY : nspin
   USE noncollin_module,     ONLY : noncolin, npol, lspinorb
   USE mp_pools,             ONLY : me_pool, root_pool
-  USE mp_bands,             ONLY : intra_bgrp_comm, me_bgrp, nproc_bgrp, root_bgrp
+  USE mp_bands,             ONLY : me_bgrp, nproc_bgrp, root_bgrp
   USE becmod,               ONLY : allocate_bec_type_acc, deallocate_bec_type_acc, &
                                    bec_type, becp, calbec
   USE mp,                   ONLY : mp_sum
@@ -56,9 +56,13 @@ SUBROUTINE stres_us( ik, gk, sigmanlc )
   IF ( nks > 1 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb, .TRUE. )
   !
   CALL allocate_bec_type_acc( nkb, nbnd, becp )
+#if defined(__OPENMP_GPU)
+  CALL calbec( offload_cpu, npw, vkb, evc, becp )
+#else
   !$acc data present( vkb, evc, becp )
   CALL calbec( offload_type, npw, vkb, evc, becp )
   !$acc end data
+#endif
   !
   ALLOCATE( qm1(npwx) )
   !$acc data create(qm1) present(gk)

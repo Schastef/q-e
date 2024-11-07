@@ -373,6 +373,7 @@ CONTAINS
     END IF
     IF( ALLOCATED( vkb ) ) THEN
         !$acc exit data delete(vkb ) 
+        !$omp target exit data map(delete:vkb)
         DEALLOCATE( vkb )
     END IF 
     !$acc exit data delete( becsum )

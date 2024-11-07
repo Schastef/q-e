@@ -42,13 +42,23 @@ SUBROUTINE xc( length, srd, svd, rho_in, ex_out, ec_out, vx_out, vc_out, gpu_arg
     !
     !$acc data present( rho_in, ex_out, ec_out, vx_out, vc_out )
     CALL xc_( length, srd, svd, rho_in, ex_out, ec_out, vx_out, vc_out )
+    !$omp target update to(ex_out, ec_out, vx_out, vc_out)
     !$acc end data
     !
   ELSE
     !
+#if defined(_OPENACC)
     !$acc data copyin( rho_in ), copyout( ex_out, ec_out, vx_out, vc_out )
+#elif defined(__OPENMP_GPU)
+    !$omp target data map(to:rho_in) map(from:ex_out,ec_out,vx_out,vc_out)
+#endif
     CALL xc_( length, srd, svd, rho_in, ex_out, ec_out, vx_out, vc_out )
+    !$omp target update to(ex_out, ec_out, vx_out, vc_out)
+#if defined(_OPENACC)
     !$acc end data
+#elif defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
   ENDIF
   !

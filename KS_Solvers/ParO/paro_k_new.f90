@@ -117,7 +117,15 @@ SUBROUTINE paro_k_new( h_psi_ptr, s_psi_ptr, hs_psi_ptr, g_1psi_ptr, overlap, &
   psi(:,1:nbnd) = evc(:,1:nbnd) ! copy input evc into work vector
   !$acc end kernels
 
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:psi,hpsi)
+  !$omp target update to(psi,hpsi)     
+#endif
   call h_psi_ptr (npwx,npw,nbnd,psi,hpsi) ! computes H*psi
+#if defined(__OPENMP_GPU)
+  !$omp target update from(hpsi)    
+  !$omp end target data
+#endif
   call s_psi_ptr (npwx,npw,nbnd,psi,spsi) ! computes S*psi
 
   nhpsi = 0 ; IF (my_bgrp_id==0) nhpsi = nbnd

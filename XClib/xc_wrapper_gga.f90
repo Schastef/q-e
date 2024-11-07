@@ -56,11 +56,13 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud, &
     IF (PRESENT(v2c_ud)) THEN
       !$acc data present( v2c_ud )
       CALL xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
+      !$omp target update to(ex, ec, v1x, v2x, v1c, v2c, v2c_ud) 
       !$acc end data
     ELSE
       ALLOCATE( v2c_dummy(length) )
       !$acc data create( v2c_dummy )
       CALL xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_dummy )
+      !$omp target update to(ex, ec, v1x, v2x, v1c, v2c, v2c_dummy) 
       !$acc end data
       DEALLOCATE( v2c_dummy )
     ENDIF
@@ -68,19 +70,45 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud, &
     !
   ELSE
     !
+#if defined(_OPENACC)
     !$acc data copyin( rho, grho ), copyout( ex, ec, v1x, v2x, v1c, v2c )
+#elif defined(__OPENMP_GPU)
+    !$omp target data map(to:rho,grho) map(from:ex,ec,v1x,v2x,v1c,v2c)
+#endif
     IF (PRESENT(v2c_ud)) THEN
+#if defined(_OPENACC)
       !$acc data copyout( v2c_ud )
+#elif defined(__OPENMP_GPU)
+      !$omp target data map(from:v2c_ud)
+#endif
       CALL xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
+      !$omp target update to(ex, ec, v1x, v2x, v1c, v2c, v2c_ud) 
+#if defined(_OPENACC)
       !$acc end data
+#elif defined(__OPENMP_GPU)
+      !$omp end target data
+#endif
     ELSE
       ALLOCATE( v2c_dummy(length) )
+#if defined(_OPENACC)
       !$acc data create( v2c_dummy )
+#elif defined(__OPENMP_GPU)
+      !$omp target data map(alloc:v2c_dummy)
+#endif
       CALL xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_dummy )
+      !$omp target update to(ex, ec, v1x, v2x, v1c, v2c, v2c_dummy) 
+#if defined(_OPENACC)
       !$acc end data
+#elif defined(__OPENMP_GPU)
+      !$omp end target data
+#endif
       DEALLOCATE( v2c_dummy )
     ENDIF
+#if defined(_OPENACC)
     !$acc end data
+#elif defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
   ENDIF  
   !
@@ -454,6 +482,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
   !$acc end data
   !
   IF (ierr/=0 .AND. .NOT.nowarning) CALL xclib_error( 'xc_gcx_', error_msg(ierr), 1 )
+#if defined(__OPENMP_GPU)
+  IF (igcx==43 .OR. igcc==14) CALL xclib_error( 'xc_gcx_', 'No BEEF with OPENMP_GPU (for the moment)', 1 )
+#endif
   !
   RETURN
   !

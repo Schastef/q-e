@@ -59,6 +59,9 @@ CONTAINS
        !$acc update self(vkb_)
     ENDIF
     !$acc end data
+#if defined(__OPENMP_GPU)
+     !$omp target update to(vkb_)
+#endif
     !
     CALL stop_clock( 'init_us_2' )
     !

@@ -121,6 +121,7 @@ qe_add_library(qe_kssolver_dense ${src_dense})
 target_link_libraries(qe_kssolver_dense
     PRIVATE
         qe_openacc_fortran
+	qe_openmp_fortran
         qe_lax
         qe_utilx
         qe_mpi_fortran
@@ -140,6 +141,7 @@ target_link_libraries(qe_kssolver_paro
     PRIVATE 
         qe_device_lapack
         qe_openacc_fortran
+	qe_openmp_fortran
         qe_kssolver_dense
         qe_lax
         qe_utilx
@@ -150,6 +152,7 @@ target_link_libraries(qe_kssolver_rmmdiis
     PRIVATE
 	qe_lax
         qe_openacc_fortran
+	qe_openmp_fortran
         qe_utilx
 	qe_devxlib
         qe_mpi_fortran )  

@@ -73,6 +73,10 @@ SUBROUTINE stress( sigma )
   !$acc update device( g, gg )
   !FIXME: I don't think the above line is needed
   !
+#if defined(__OPENMP_GPU)
+  !$omp target update to(g)
+#endif
+  !
   ! ... contribution from local potential
   !
   CALL stres_loc( sigmaloc )

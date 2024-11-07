@@ -12,7 +12,7 @@ SUBROUTINE force_us( forcenl )
   !! The nonlocal potential contribution to forces.
   !
   USE kinds,                ONLY : DP
-  USE control_flags,        ONLY : gamma_only, offload_type
+  USE control_flags,        ONLY : gamma_only, offload_type, offload_cpu
   USE cell_base,            ONLY : tpiba
   USE ions_base,            ONLY : nat, ntyp => nsp, ityp
   USE klist,                ONLY : nks, xk, ngk, igk_k
@@ -68,9 +68,13 @@ SUBROUTINE force_us( forcenl )
      ENDIF
      !
      IF ( nkb > 0 ) CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb, .TRUE. )
+#if defined(__OPENMP_GPU)
+     CALL calbec( offload_cpu, npw, vkb, evc, becp )
+#else
      !$acc data present (evc, vkb, becp)
      CALL calbec( offload_type, npw, vkb, evc, becp )
      !$acc end data
+#endif
      !
      DO ipol = 1, 3
         !
