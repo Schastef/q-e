@@ -39,7 +39,7 @@ SUBROUTINE phqscf
   USE ldaU_ph,          ONLY : dnsscf_all_modes
   USE units_ph,         ONLY : iundnsscf
   USE control_flags,    ONLY : iverbosity
-  USE control_lr,       ONLY : convt, rec_code, lrhoun
+  USE control_lr,       ONLY : convt, rec_code
   USE write_hub
 
   IMPLICIT NONE
@@ -49,6 +49,7 @@ SUBROUTINE phqscf
   ! counter on the representations
   ! counter on the modes
   ! npert(irr)
+
   REAL(DP) :: tcpu, get_clock
   ! timing variables
 

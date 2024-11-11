@@ -113,6 +113,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
   integer  :: npw, npwq
   integer  :: iq_dummy
   character(len=256) :: filename
+
   integer :: nnr
   !
   IF (rec_code_read > 20 ) RETURN

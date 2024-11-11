@@ -852,7 +852,7 @@ SUBROUTINE phq_readin()
 
   IF (tqr) CALL errore('phq_readin',&
      'The phonon code with Q in real space not available',1)
-  !
+
   ! FM : incompatibility for lrhoun and lmacro
   IF (lmacro .and. .NOT. lrhoun) CALL errore('phq_readin',&
      'lmacro only works with lrhoun',1)
