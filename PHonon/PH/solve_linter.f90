@@ -172,7 +172,15 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
       convt=.TRUE.
       do ipert = 1, npe
         if (fildrho.ne.' ') then
+          IF (ionode) THEN
+            INQUIRE(UNIT = iudrho, OPENED = exst)
+            IF (exst) CLOSE (UNIT = iudrho, STATUS='keep')
+            filename = dfile_name(xq, at, fildrho, TRIM(tmp_dir_save)//prefix, generate=.true., index_q=iq_dummy)
+            CALL diropn (iudrho, filename, lrdrho, exst)
+          ENDIF ! ionode
+          !     
           call davcio_drho (drhoscfh(1,1,ipert), lrdrho, iudrho, 1, -1)
+          !
         endif
       enddo
       !
