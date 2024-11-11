@@ -314,7 +314,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
          CALL zcopy(npert * nspin_mag * dfftp%nnr, drhos, 1, drhop, 1)
       ENDIF
       !
-      IF (lrhoun) call psymdvscf (drhop)
+      IF (lrhoun) call psymdvscf (drhos)
       !
       !  In the noncolinear, spin-orbit case rotate dbecsum
       !
@@ -383,11 +383,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
           if (doublegrid) then
             do is = 1, nspin_mag
               do ipert = 1, npert
-                call fft_interpolate (dfftp, drhos(:,is,ipert), dffts, drhop(:,is,ipert))
+                call fft_interpolate (dfftp, drhop(:,is,ipert), dffts, drhos(:,is,ipert))
               enddo
             enddo
           else
-            call psymdvscf (drhop)
+            call psymdvscf (drhos)
           endif
          ENDIF
          !
