@@ -39,7 +39,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
   USE cell_base,            ONLY : at
   USE ions_base,            ONLY : nat
   USE uspp_param,           ONLY : nhm
-  USE klist,                ONLY : xk, ngk, igk_k, ltetra, lgauss
+  USE klist,                ONLY : xk, ngk, igk_k
   USE gvecs,                ONLY : doublegrid
   USE fft_base,             ONLY : dfftp, dffts
   USE lsda_mod,             ONLY : lsda, current_spin, isk
@@ -65,11 +65,10 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
   USE eqv,                  ONLY : dvpsi
   USE qpoint,               ONLY : xq, nksq, ikks, ikqs
   USE qpoint_aux,           ONLY : ikmks, becpt, alphapt
-  USE control_lr,           ONLY : convt, rec_code, rec_code_read, where_rec, lrhoun, lgamma
+  USE control_lr,           ONLY : convt, rec_code, rec_code_read, where_rec, lrhoun
   USE uspp_init,            ONLY : init_us_2
   USE lr_nc_mag,            ONLY : int1_nc_save, deeq_nc_save
   USE dfpt_kernels,         ONLY : dfpt_kernel
-  USE fft_interfaces,       ONLY : fft_interpolate
   !
   IMPLICIT NONE
   !
@@ -111,10 +110,9 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
              nsolv,      & ! number of linear systems
              ikmk          ! index of mk
 
-  integer  :: npw, npwq, is
+  integer  :: npw, npwq
   integer  :: iq_dummy
   character(len=256) :: filename
-  logical :: lmetq0
   integer :: nnr
   !
   IF (rec_code_read > 20 ) RETURN
@@ -168,32 +166,8 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
       convt =.FALSE.
       where_rec='no_recover'
     ELSE
-      lmetq0 = (lgauss .OR. ltetra) .AND. lgamma
       convt=.TRUE.
-      do ipert = 1, npe
-        if (fildrho.ne.' ') then
-          IF (ionode) THEN
-            INQUIRE(UNIT = iudrho, OPENED = exst)
-            IF (exst) CLOSE (UNIT = iudrho, STATUS='keep')
-            filename = dfile_name(xq, at, fildrho, TRIM(tmp_dir_save)//prefix, generate=.true., index_q=iq_dummy)
-            CALL diropn (iudrho, filename, lrdrho, exst)
-          ENDIF ! ionode
-          !     
-          call davcio_drho (drhoscfh(1,1,ipert), lrdrho, iudrho, 1, -1)
-          !
-        endif
-      enddo
-      !
-      if (doublegrid) then
-         do is = 1, nspin_mag
-            do ipert = 1, npe
-               call fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
-            enddo
-         enddo
-      else
-         call zcopy (npe*nspin_mag*dfftp%nnr, drhoscfh, 1, drhoscf, 1)
-      endif
-      !
+      CALL init_rho(npe,drhoscf,drhoscfh,iq_dummy)
     ENDIF
     !
   ENDIF
@@ -290,7 +264,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhoscf)
   !
   IF (convt) THEN
      !
-     IF (lrhoun) CALL write_epsilon(convt,npe,drhoscfh)
+     IF (lrhoun) CALL write_epsilon(npe,drhoscfh)
      !
      CALL drhodvus (irr, imode0, dvscfin, npe)
      IF (nlcc_any) CALL dynmat_nlcc (imode0, drhoscfh, npe)

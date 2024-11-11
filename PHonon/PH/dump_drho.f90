@@ -1,5 +1,5 @@
 !----------------------------------------------------------
-SUBROUTINE write_epsilon(convt,npe,drhoscfh)
+SUBROUTINE write_epsilon(npe,drhoscfh)
   !----------------------------------------------
   ! F. Macheda (2024)
   ! ---------------------------------------------
@@ -8,7 +8,7 @@ SUBROUTINE write_epsilon(convt,npe,drhoscfh)
   USE fft_base,             ONLY : dfftp 
   USE units_ph,             ONLY : iurhoun 
   USE gvect,                ONLY : gg
-  USE lsda_mod,             ONLY : nspin
+  USE noncollin_module,     ONLY : nspin_mag
   USE fft_interfaces,       ONLY : fwfft
   USE dv_of_drho_lr,        ONLY : dv_of_drho
   USE constants,            ONLY : fpi,e2
@@ -21,21 +21,20 @@ SUBROUTINE write_epsilon(convt,npe,drhoscfh)
   !
   IMPLICIT NONE
   INTEGER, INTENT(in) :: npe
-  complex(DP), intent(in) :: drhoscfh (dfftp%nnr,nspin,npe)
+  complex(DP), intent(in) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
   complex(DP), allocatable :: dvscf_toprint(:,:,:), drho_toprint(:,:,:)
   INTEGER, EXTERNAL :: find_free_unit
   INTEGER :: is, ii
-  LOGICAL, INTENT(IN) :: convt
   COMPLEX(DP) :: epsm1, eps, chi, chi0, chiRPA, barchi
   REAL(DP) :: vq
   COMPLEX(DP) :: drhoaux, dvaux
   INTEGER :: my_rnk
   !
-  allocate (dvscf_toprint ( dfftp%nnr, nspin , npe))
-  allocate (drho_toprint ( dfftp%nnr, nspin , npe))
+  allocate (dvscf_toprint ( dfftp%nnr, nspin_mag , npe))
+  allocate (drho_toprint ( dfftp%nnr, nspin_mag , npe))
   !
-  call zcopy (dfftp%nnr*nspin,drhoscfh,1,dvscf_toprint,1)
-  call zcopy (dfftp%nnr*nspin,drhoscfh,1,drho_toprint,1)
+  call zcopy (dfftp%nnr*nspin_mag,drhoscfh,1,dvscf_toprint,1)
+  call zcopy (dfftp%nnr*nspin_mag,drhoscfh,1,drho_toprint,1)
   !
   call dv_of_drho (dvscf_toprint(1,1,1)) !nlcc cannot be applied since they depend on the perturbation, that we are taking as a scalar here
   !
@@ -486,4 +485,59 @@ subroutine setlocq_coul (xq, zp, tpiba2, ngm, g, omega, vloc)
 
 end subroutine setlocq_coul
 !----------------------------------------------------------------------
+!----------------------------------------------------------
+SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
+  !----------------------------------------------
+  ! F. Macheda (2024)
+  ! ---------------------------------------------
+  USE kinds,                ONLY : DP
+  USE io_global,            ONLY : ionode
+  USE fft_base,             ONLY : dfftp, dffts 
+  USE noncollin_module,     ONLY : nspin_mag
+  USE fft_interfaces,       ONLY : fft_interpolate
+  USE save_ph,              ONLY : tmp_dir_save
+  USE output,               ONLY : fildrho
+  USE units_ph,             ONLY : iudrho, lrdrho
+  USE io_files,             ONLY : prefix, diropn
+  USE qpoint,               ONLY : xq
+  USE cell_base,            ONLY : at
+  USE gvecs,                ONLY : doublegrid
+  USE dfile_autoname,       ONLY : dfile_name
+  !
+  IMPLICIT NONE
+  INTEGER, INTENT(in) :: npe
+  complex(DP), intent(inout) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
+  complex(DP), intent(inout) :: drhoscf (dffts%nnr,nspin_mag,npe)
+  INTEGER, INTENT(in) :: iq_dummy
+  !
+  INTEGER :: ipert, is
+  character(len=256) :: filename
+  logical :: exst
+  !
+  do ipert = 1, npe
+    if (fildrho.ne.' ') then
+      IF (ionode) THEN
+        INQUIRE(UNIT = iudrho, OPENED = exst)
+        IF (exst) CLOSE (UNIT = iudrho, STATUS='keep')
+        filename = dfile_name(xq, at, fildrho, TRIM(tmp_dir_save)//prefix, generate=.true., index_q=iq_dummy)
+        CALL diropn (iudrho, filename, lrdrho, exst)
+      ENDIF ! ionode
+      !     
+      call davcio_drho (drhoscfh(1,1,ipert), lrdrho, iudrho, 1, -1)
+      !
+    endif
+  enddo
+  !
+  if (doublegrid) then
+     do is = 1, nspin_mag
+        do ipert = 1, npe
+           call fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
+        enddo
+     enddo
+  else
+     call zcopy (npe*nspin_mag*dfftp%nnr, drhoscfh, 1, drhoscf, 1)
+  endif
+  !
+END SUBROUTINE init_rho
+!----------------------------------------------------------
 
