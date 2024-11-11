@@ -22,6 +22,7 @@ subroutine drhodvloc (nu_i0, npe, drhoscf, wdyn)
 
   USE mp_bands,  ONLY: intra_bgrp_comm
   USE mp,        ONLY: mp_sum
+  USE control_lr,ONLY: current_mode
 
   implicit none
 
@@ -52,6 +53,7 @@ subroutine drhodvloc (nu_i0, npe, drhoscf, wdyn)
   ! We need a sum over all perturbations
   !
   do nu_j = 1, 3 * nat
+     current_mode = nu_j
      call compute_dvloc (u(1, nu_j), .FALSE., dvloc)
      do ipert = 1, npe
         nu_i = nu_i0 + ipert

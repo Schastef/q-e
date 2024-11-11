@@ -506,8 +506,8 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
   !
   IMPLICIT NONE
   INTEGER, INTENT(in) :: npe
-  complex(DP), intent(inout) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
   complex(DP), intent(inout) :: drhoscf (dffts%nnr,nspin_mag,npe)
+  complex(DP), intent(inout) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
   INTEGER, INTENT(in) :: iq_dummy
   !
   INTEGER :: ipert, is
@@ -527,6 +527,7 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
       !
     endif
   enddo
+  CLOSE (UNIT = iudrho, STATUS='keep')
   !
   if (doublegrid) then
      do is = 1, nspin_mag
