@@ -27,19 +27,16 @@ subroutine drho
   USE uspp,       ONLY : okvan, nkb
   USE wvfct,      ONLY : nbnd
   USE paw_variables,    ONLY : okpaw
-  USE control_ph, ONLY : all_done, rec_code_read
-
+  USE control_ph, ONLY : all_done
   USE lrus,       ONLY : becp1
   USE klist,      ONLY : lgauss
   USE two_chem,   ONLY : twochem
   USE qpoint,     ONLY : nksq
-  USE control_lr, ONLY : lgamma, current_mode
-
+  USE control_lr, ONLY : lgamma, rec_code_read, current_mode
   USE dynmat,     ONLY : dyn00
   USE modes,      ONLY : npertx, npert, nirr, u
   USE phus,       ONLY : becsumort, alphap
   USE units_ph,   ONLY : lrdrhous, iudrhous
-
   USE mp_pools,   ONLY : inter_pool_comm
   USE mp_bands,   ONLY : intra_bgrp_comm
   USE mp,         ONLY : mp_sum
