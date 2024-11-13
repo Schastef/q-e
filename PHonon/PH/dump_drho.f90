@@ -58,7 +58,11 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
     iurhoun=find_free_unit()
     OPEN(unit=iurhoun, file="drhodv.dat")
     !
-    WRITE(iurhoun, '(a)') "#  Re(drhoind),Im(drhoind),Re(dVscf),Im(dVscf)"
+    IF (.NOT. lmacro) THEN
+      WRITE(iurhoun, '(a)') "#  Re(\rho^{el}_q),Im(\rho^{el}_q),Re(V^{tot}_q),Im(V^{tot}_q)"
+    ELSE
+      WRITE(iurhoun, '(a)') "#  Re(\bar \rho^{el}_q),Im(\bar \rho^{el}_q),Re(\bar V^{tot}_q),Im(\bar V^{tot}_q)"
+    ENDIF
     !
     WRITE(iurhoun,'(4f18.12)') real(drhoaux), aimag(drhoaux),&
                                real(dvaux)  , aimag(dvaux)
@@ -67,34 +71,34 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
     !
     IF (.NOT. lmacro) THEN
       !
-      WRITE(iurhoun, '(a)') "#  epsm1"
+      WRITE(iurhoun, '(a)') "#  $\epsilon^{-1}_q$ Eq. (93) PRB 110, 094306 (2024)"
       !
       epsm1 = 1d0+dvaux
       WRITE(iurhoun,'(2f18.12)') REAL(epsm1), AIMAG(epsm1)
       !
-      WRITE(iurhoun, '(a)') "#  1/epsm1"
+      WRITE(iurhoun, '(a)') "#  $1/\epsilon^{-1}_q$"
       WRITE(iurhoun,'(2f18.12)') REAL(1d0/epsm1), AIMAG(1d0/epsm1)
       !
-      WRITE(iurhoun, '(a)') "#  chi"
+      WRITE(iurhoun, '(a)') "#  $\chi_{q}$ Eq. (31) PRB 110, 094306 (2024)"
       !
       chi = drhoaux
       WRITE(iurhoun,'(2f18.12)') REAL(chi), AIMAG(chi)
       !
-      WRITE(iurhoun, '(a)') "#  (1+vq*chi)"
+      WRITE(iurhoun, '(a)') "#  $\epsilon^{-1}_{L}(q)$   Eq. (44) PRB 110, 094306 (2024)"
       WRITE(iurhoun,'(2f18.12)') REAL(1d0+vq*chi), AIMAG(1d0+vq*chi)
       !
     ELSE
       !
       chi0 = drhoaux/(1d0+dvaux)
-      WRITE(iurhoun, '(a)') "#  bar chi0"
+      WRITE(iurhoun, '(a)') "#  $\bar \chi^0_q$"
       WRITE(iurhoun,'(2f18.12)') REAL(chi0), AIMAG(chi0)
       !
-      WRITE(iurhoun, '(a)') "#  bar chi"
+      WRITE(iurhoun, '(a)') "#  $\bar \chi_q$   Eq. (32) PRB 110, 094306 (2024)"
       !
       barchi = drhoaux
       WRITE(iurhoun,'(2f18.12)') REAL(barchi), AIMAG(barchi)
       !
-      WRITE(iurhoun, '(a)') "# 1/epsm1"
+      WRITE(iurhoun, '(a)') "# $1/\epsilon^{-1}_{L}(q)$   Eqs. (43) and (45) PRB 110, 094306 (2024)"
       WRITE(iurhoun,'(2f18.12)') REAL(1d0-vq*drhoaux), AIMAG(1d0-vq*drhoaux)
       !
     ENDIF
@@ -127,6 +131,7 @@ SUBROUTINE write_drhoun
   USE gvecs,          ONLY : ngms, ngms_g
   USE dynmat,         ONLY : dyn
   use mp,             ONLY : mp_sum
+  USE control_lr,     ONLY : lmacro
   !
   IMPLICIT NONE
   !
@@ -202,10 +207,22 @@ SUBROUTINE write_drhoun
     !
     iudumpdrho = find_free_unit()
     OPEN(unit=iudumpdrho,file='drho'//TRIM(int_to_char(current_iq))//'.dat')
-    WRITE(iudumpdrho,*) '# Re(drhox),Im(drhox),Re(drhoy),Im(drhoy),Re(drhoz),Im(drhoz) '
+    IF (.NOT. lmacro) THEN
+      WRITE(iudumpdrho,*) '#     Re(\rho^{tot}_{qsx}),Im(\rho^{tot}_{qsx}),Re(\rho^{tot}_{qsy}),&
+                                 & Im(\rho^{tot}_{qsy}),Re(\rho^{tot}_{qsz}),Im(\rho^{tot}_{qsz}) '
+    ELSE
+      WRITE(iudumpdrho,*) '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
+                                 & Im(\bar \rho^{tot}_{qsy}),Re(\bar \rho^{tot}_{qsz}),Im(\bar \rho^{tot}_{qsz}) '
+    ENDIF
     iudumpeff = find_free_unit()
     OPEN(unit=iudumpeff,file='effcharge'//TRIM(int_to_char(current_iq))//'.dat')
-    WRITE(iudumpeff,*) '# Re(Zx),Im(Zx),Re(Zy), Im(Zy),Re(Zz),Im(Zz) '
+    IF (.NOT. lmacro) THEN
+      WRITE(iudumpeff,*) '# Re(Z_{qsx}),Im(Z_{qsx}),Re(Z_{qsy}), &
+                            & Im(Z_{qsy}),Re(Z_{qsz}),Im(Z_{qsz}) '
+    ELSE
+      WRITE(iudumpeff,*) '# Re(\bar Z_{qsx}),Im(\bar Z_{qsx}),Re(\bar Z_{qsy}), &
+                            & Im(\bar Z_{qsy}),Re(\bar Z_{qsz}),Im(\bar Z_{qsz}) '
+    ENDIF
     !
     DO ig=1,ngms_g 
       !
