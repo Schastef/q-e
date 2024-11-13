@@ -24,11 +24,9 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   complex(DP), intent(in) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
   complex(DP), allocatable :: dvscf_toprint(:,:,:), drho_toprint(:,:,:)
   INTEGER, EXTERNAL :: find_free_unit
-  INTEGER :: is, ii
-  COMPLEX(DP) :: epsm1, eps, chi, chi0, chiRPA, barchi
+  COMPLEX(DP) :: epsm1, chi, chi0, barchi
   REAL(DP) :: vq
   COMPLEX(DP) :: drhoaux, dvaux
-  INTEGER :: my_rnk
   !
   allocate (dvscf_toprint ( dfftp%nnr, nspin_mag , npe))
   allocate (drho_toprint ( dfftp%nnr, nspin_mag , npe))
@@ -135,32 +133,22 @@ SUBROUTINE write_drhoun
   !
   IMPLICIT NONE
   !
-  INTEGER  :: irr, ipert, imode0, is
   INTEGER  :: ig, i, j
-  INTEGER  :: ipol, jpol, na, nb, mode, nt
+  INTEGER  :: ipol, jpol, na, nb 
   INTEGER, ALLOCATABLE :: itmp_mill(:,:)
-  INTEGER  :: mill_igg(3)
-  COMPLEX(DP), ALLOCATABLE :: drho0(:,:)
-  COMPLEX(DP), ALLOCATABLE :: aux2_g(:,:,:)
   COMPLEX(DP) :: Im_i=(0._dp,1._dp)
   COMPLEX(DP), ALLOCATABLE :: phase(:)
   REAL(DP)  :: zval
   REAL(DP)  :: arg 
   CHARACTER(LEN=6), EXTERNAL :: int_to_char
-  complex(DP), ALLOCATABLE :: aux1 (:,:,:)  
-  COMPLEX(DP) :: gtau
   INTEGER, EXTERNAL :: find_free_unit
-  complex(DP) :: phi (3, nat), dynsym(3*nat,3*nat), tmpphi(3,nat) 
+  complex(DP) :: phi (3, nat) 
   REAL(DP) :: absq
-  REAL(KIND = DP) :: sa(3, 3)
-  REAL(KIND = DP) :: sb(3, 3)
-  REAL(KIND = DP) :: srr(3, 3)
   !
   absq = SQRT(DOT_PRODUCT(xq,xq))
   !
   ALLOCATE(phase(nat))
   !
-  ALLOCATE(aux2_g(3,nat,ngms_g))
   ALLOCATE(itmp_mill(3,ngms_g))
   !
   itmp_mill =0
@@ -246,12 +234,12 @@ SUBROUTINE write_drhoun
           !
           zval=upf(ityp(na))%zp
           !
-          write(iudumpdrho,'(6f18.12)'),&
-              (-sqrt(e2)/omega*(phi(ipol,na)*phase(na)+&
-              Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
+          write(iudumpdrho,'(6f18.12)')&
+                         &(-sqrt(e2)/omega*(phi(ipol,na)*phase(na)+&
+                         &Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
           write(iudumpeff,'(6f18.12)')&
-              (1d0/Im_i/(absq*tpiba)*(phi(ipol,na)*phase(na)+&
-              Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
+                         &(1d0/Im_i/(absq*tpiba)*(phi(ipol,na)*phase(na)+&
+                         &Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
           !
         ENDDO 
         !
@@ -295,7 +283,7 @@ SUBROUTINE write_drhoun
      !
      ! ... local variables
      !
-     INTEGER :: na, isym, nar
+     INTEGER :: na 
      COMPLEX(DP), ALLOCATABLE :: phi(:,:), work(:), phip(:,:)
      REAL(DP) :: arg, fase
      COMPLEX(DP) :: faseq(48)
@@ -431,7 +419,7 @@ SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   INTEGER, INTENT(IN) :: ind_ig
   !! Index to be passed
   REAL (DP), ALLOCATABLE :: vlocq(:,:)  ! ngm, ntyp)
-  INTEGER :: na, mu, ig, itmp, nt
+  INTEGER :: na, mu, ig, nt
   INTEGER, ALLOCATABLE :: nl_d(:)
   complex(DP) :: gtau, gu, fact, u1, u2, u3, gu0
   complex(DP) , allocatable :: aux1 (:)
