@@ -22,8 +22,8 @@ PROGRAM scan_ibrav
   INTEGER,PARAMETER :: nibrav = 20
   INTEGER,PARAMETER :: ibrav_list(nibrav) =  (/1,2,3,-3,4,5,-5,6,7,8,9,-9,91,10,11,12,-12,13,-13,14/)
   INTEGER :: ibrav, ios, ii, i, info, jperm, itry
-  INTEGER,PARAMETER :: nperm = 6, ntry = 10
-  INTEGER,PARAMETER :: perm(3,nperm) = (/ (/1,2,3/), (/2,1,3/), (/3,2,1/),  (/1,3,2/), (/2,3,1/), (/3,1,2/) /)
+  INTEGER,PARAMETER :: nperm = 6, ntry = 100
+  INTEGER:: perm(3,nperm) ! constant, defined below to workaround some compiler pickyness
   REAL(DP) :: celldm(6), angle(3), alat, chisq, chisq_aux, chisq_min
   !
   REAL(DP) :: at0(3,3), at(3,3), at_new(3,3), omega, R(3,3), par(npar), par_aux(npar), celldiff(nfnc), dummy
@@ -34,7 +34,15 @@ PROGRAM scan_ibrav
   !
   LOGICAL,EXTERNAL :: matches
 
-  WRITE(*,*) "Enter the unit of measur (angstrom, bohr) or alat in bohr units, or alat in Angstrom units, followed by ' A'"
+  perm(:,1) = (/1,2,3/)
+  perm(:,2) = (/2,1,3/)
+  perm(:,3) = (/3,2,1/)
+  perm(:,4) = (/1,3,2/)
+  perm(:,5) = (/2,3,1/)
+  perm(:,6) = (/3,1,2/) 
+
+  WRITE(*,*) "Enter the unit of measure (angstrom, bohr)"&
+             //" or alat in bohr units, or alat in Angstrom units, followed by ' A'"
   READ(*,"(a1024)") line
   IF(matches("angstrom",line)) THEN
     alat=ANGSTROM_AU
@@ -83,6 +91,7 @@ PROGRAM scan_ibrav
         IF(itry>0)THEN
           DO i = 1,npar
             par(i) = par(i) + (5*itry*randy())/DBLE(ntry)
+            IF(i>=7) par(i) = par(i)*90
           ENDDO
           CALL check_bounds(par, dummy)    
         ENDIF
@@ -115,7 +124,7 @@ PROGRAM scan_ibrav
             ENDIF
           ENDDO
           IF(jperm>1) THEN
-            WRITE(*,'(a,3i2)') "WARNING! order of axis has been permutated:", perm(:,jperm)
+            WRITE(*,'(a,3i2)') "WARNING! Order of axis has been permutated:", perm(:,jperm)
             WRITE(*, '("at1", 6f14.6)') at(:,1)
             WRITE(*, '("at2", 6f14.6)') at(:,2)
             WRITE(*, '("at3", 6f14.6)') at(:,3)
@@ -185,7 +194,7 @@ PROGRAM scan_ibrav
  SUBROUTINE check_bounds(pars_, penalty)
    IMPLICIT NONE
    REAL(DP),INTENT(inout) :: pars_(npar), penalty
-   REAL(DP),PARAMETER :: infty = 1.d+100, eps=1.d-8
+   REAL(DP),PARAMETER :: infty = 1.d+100, eps=1.d-12
    REAL(DP),PARAMETER :: par_min(npar) = (/ eps, eps, eps, -.5_dp+eps, -.5_dp+eps, -1._dp, -180._dp, -180._dp, -180._dp /)
    REAL(DP),PARAMETER :: par_max(npar) = (/ infty, infty, infty,  1._dp-eps,  1._dp-eps,  1._dp-eps,  180._dp,  180._dp,  180._dp /)
    INTEGER :: i
