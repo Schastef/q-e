@@ -22,7 +22,7 @@ PROGRAM scan_ibrav
   INTEGER,PARAMETER :: nibrav = 20
   INTEGER,PARAMETER :: ibrav_list(nibrav) =  (/1,2,3,-3,4,5,-5,6,7,8,9,-9,91,10,11,12,-12,13,-13,14/)
   INTEGER :: ibrav, ios, ii, i, info, jperm, itry
-  INTEGER,PARAMETER :: nperm = 6, ntry = 100
+  INTEGER,PARAMETER :: nperm = 6, ntry = 10
   INTEGER,PARAMETER :: perm(3,nperm) = (/ (/1,2,3/), (/2,1,3/), (/3,2,1/),  (/1,3,2/), (/2,3,1/), (/3,1,2/) /)
   REAL(DP) :: celldm(6), angle(3), alat, chisq, chisq_aux, chisq_min
   !
@@ -91,9 +91,11 @@ PROGRAM scan_ibrav
         IF(info>0 .and. info<5) THEN
           !PRINT*, "Minimization succeeded"
         ELSEIF(info>=5) THEN
-          WRITE(*,'(a)')  "Minimization stopped before convergence"
+          !WRITE(*,'(a)')  "Minimization stopped before convergence"
+          WRITE(*,'(a)',advance='no')  "."
         ELSEIF(info<=0) THEN 
-          WRITE(*,'(a,i6)') "Minimization error", info
+          !WRITE(*,'(a,i6)') "Minimization error", info
+          WRITE(*,'(a,i6)',advance='no') ":"
           !STOP
         ENDIF
         chisq = SUM(celldiff**2)
