@@ -168,7 +168,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
       where_rec='no_recover'
     ELSE
       convt=.TRUE.
-      CALL init_rho(npe,drhoscf,drhoscfh,iq_dummy)
+      CALL init_rho(npe,drhos,drhop,iq_dummy)
     ENDIF
     !
   ENDIF
