@@ -158,10 +158,12 @@ clean:
 	@rm -rf ph_*/*.wfc* ph_*/*.hub*
 	@rm -rf ph_1d/dynmat.axsf ph_1d/dynmat.mold
 	@rm -rf ph_2d/bn.frc ph_2d/bn.frq ph_2d/bn.frq.gp
+	@rm -rf ph_twochem/dynq1
 # Special case for PH dvscf_q2r
 	@rm -rf ph_interpol*/w_pot/ ph_interpol*/*.dyn*.elph.* ph_interpol*/*.dyn.freq
 # Special case for PH ahc
-	@rm -rf ph_ahc*/wpot*/ ph_ahc*/selfen_*.dat ph_ahc*/diam.modes? ph_ahc*/*.ifc ph_ahc*/ahc_dir*
+	@rm -rf ph_ahc*/wpot*/ ph_ahc*/selfen_*.dat ph_ahc_diam/diam.modes? ph_ahc_bas/BAs.modes? ph_ahc*/*.ifc \
+		ph_ahc*/*.fc ph_ahc*/ahc_dir*
 # Cleaning HP final files
 	@rm -rf hp_*/HP hp_*/*hub* hp_*/*.xml hp_*/*.wfc* hp_*/*.save hp_*/*Hubbard_parameters* \
 		hp_*/*HubbardV* hp_*/*mix* hp_*/*parameters.out
