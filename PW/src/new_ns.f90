@@ -491,7 +491,7 @@ loopisym:     DO isym = 1, nsym
                           !
                           IF (t_rev(isym) == 1) THEN
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                                     d_spin_ldau(is3,is1,isym) )*d3(m3,m1,isym)* &
+                                     d_spin_ldau(is3,is1,isym)  *d3(m3,m1,isym)* &
                                      nr(m4,m3,is4,is3,nb)/nsym  *                &
                               CONJG( d_spin_ldau(is4,is2,isym) )*d3(m4,m2,isym)
                               ! CONJG( d_spin_ldau(is1,is3,isym) )*d3(m1,m3,isym)* &
