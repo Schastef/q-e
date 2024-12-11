@@ -405,15 +405,6 @@ SUBROUTINE new_ns_nc( ns )
   !
   !--  symmetrize: nr  -->  nr1
   !
-  ! debug output
-  DO na = 1, nat  
-     nt = ityp(na)
-     WRITE (stdout,*) 'na, is_hubbard(nt) = ', na, " ", is_hubbard(nt)
-     IF ( is_hubbard(nt) ) THEN
-        WRITE (stdout,*) 'Hubbard_l(nt) = ', Hubbard_l(nt)
-     ENDIF
-  ENDDO
-
   DO na = 1, nat  
     nt = ityp(na)
     IF ( is_hubbard(nt) ) THEN
