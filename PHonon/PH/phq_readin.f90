@@ -499,7 +499,7 @@ SUBROUTINE phq_readin()
   !
   ! Set default value for fildrho and fildvscf if they are required
   IF ( (lraman.OR.elop.OR.drho_star%open.or.lrhoun) .AND. fildrho == ' ') fildrho = 'drho'
-  IF ( (elph_mat.OR.dvscf_star%open) .AND. fildvscf == ' ') fildvscf = 'dvscf'
+  IF ( (elph_mat.OR.dvscf_star%open.or.lrhoun) .AND. fildvscf == ' ') fildvscf = 'dvscf'
   !
   !  We can calculate  dielectric, raman or elop tensors and no Born effective
   !  charges dF/dE, but we cannot calculate Born effective charges dF/dE

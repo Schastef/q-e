@@ -405,8 +405,6 @@ MODULE units_ph
   !! Unit for reading and writing gauge information in ahc.f90
   INTEGER :: iudumpdrho
   !! Unit to print the macroscopic density at q
-  INTEGER :: iudumpeff
-  !! Unit to print the effective charges at q
   INTEGER :: iurhoun
   !! Unit to print the epsilon at q
   !

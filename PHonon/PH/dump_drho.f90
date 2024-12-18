@@ -18,6 +18,7 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   use mp,                   ONLY : mp_sum
   USE mp_bands,             ONLY : intra_bgrp_comm
   USE control_lr,           ONLY : lmacro
+  USE output,               ONLY : fildvscf
   !
   IMPLICIT NONE
   INTEGER, INTENT(in) :: npe
@@ -54,7 +55,7 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   IF (ionode) THEN
     !      
     iurhoun=find_free_unit()
-    OPEN(unit=iurhoun, file="drhodv.dat")
+    OPEN(unit=iurhoun, file=fildvscf)
     !
     IF (.NOT. lmacro) THEN
       WRITE(iurhoun, '(a)') "#  Re(\rho^{el}_q),Im(\rho^{el}_q),Re(V^{tot}_q),Im(V^{tot}_q)"
@@ -115,7 +116,7 @@ SUBROUTINE write_drhoun
   ! ---------------------------------------------
   USE kinds,          ONLY : DP
   USE io_global,      ONLY : stdout, ionode
-  USE units_ph,       ONLY : iudumpdrho, iudumpeff 
+  USE units_ph,       ONLY : iudumpdrho 
   USE modes,          ONLY : u
   USE ions_base,      ONLY : tau, nat, ityp
   USE gvect,          ONLY : mill, ig_l2g
@@ -124,12 +125,13 @@ SUBROUTINE write_drhoun
   USE uspp_param,     ONLY : upf
   USE constants,      ONLY : tpi, e2 
   USE mp_bands,       ONLY : intra_bgrp_comm
-  USE control_ph,     ONLY : current_iq, extpot
+  USE control_ph,     ONLY : extpot
   USE eqv,            ONLY : vlocq
   USE gvecs,          ONLY : ngms, ngms_g
   USE dynmat,         ONLY : dyn
   use mp,             ONLY : mp_sum
   USE control_lr,     ONLY : lmacro
+  USE output,         ONLY : fildrho
   !
   IMPLICIT NONE
   !
@@ -191,25 +193,14 @@ SUBROUTINE write_drhoun
   IF ( ionode ) then
     !
     iudumpdrho = find_free_unit()
-    iudumpeff = find_free_unit()
     !
-    iudumpdrho = find_free_unit()
-    OPEN(unit=iudumpdrho,file='drho'//TRIM(int_to_char(current_iq))//'.dat')
+    OPEN(unit=iudumpdrho,file=fildrho)
     IF (.NOT. lmacro) THEN
       WRITE(iudumpdrho,*) '#     Re(\rho^{tot}_{qsx}),Im(\rho^{tot}_{qsx}),Re(\rho^{tot}_{qsy}),&
                                  & Im(\rho^{tot}_{qsy}),Re(\rho^{tot}_{qsz}),Im(\rho^{tot}_{qsz}) '
     ELSE
       WRITE(iudumpdrho,*) '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
                                  & Im(\bar \rho^{tot}_{qsy}),Re(\bar \rho^{tot}_{qsz}),Im(\bar \rho^{tot}_{qsz}) '
-    ENDIF
-    iudumpeff = find_free_unit()
-    OPEN(unit=iudumpeff,file='effcharge'//TRIM(int_to_char(current_iq))//'.dat')
-    IF (.NOT. lmacro) THEN
-      WRITE(iudumpeff,*) '# Re(Z_{qsx}),Im(Z_{qsx}),Re(Z_{qsy}), &
-                            & Im(Z_{qsy}),Re(Z_{qsz}),Im(Z_{qsz}) '
-    ELSE
-      WRITE(iudumpeff,*) '# Re(\bar Z_{qsx}),Im(\bar Z_{qsx}),Re(\bar Z_{qsy}), &
-                            & Im(\bar Z_{qsy}),Re(\bar Z_{qsz}),Im(\bar Z_{qsz}) '
     ENDIF
     !
     DO ig=1,ngms_g 
@@ -236,9 +227,6 @@ SUBROUTINE write_drhoun
           !
           write(iudumpdrho,'(6f18.12)')&
                          &(-sqrt(e2)/omega*(phi(ipol,na)*phase(na)+&
-                         &Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
-          write(iudumpeff,'(6f18.12)')&
-                         &(1d0/Im_i/(absq*tpiba)*(phi(ipol,na)*phase(na)+&
                          &Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
           !
         ENDDO 
