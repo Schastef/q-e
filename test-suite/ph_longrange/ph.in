@@ -1,0 +1,11 @@
+SiC
+ &inputph
+  outdir='./',
+  prefix='sic',
+  tr2_ph=1.0d-18,
+  lrhoun = .true.
+  !lrhonu = .true.
+  lmacro = .true.
+  fildrho = 'drho.dat.{}'
+  fildvscf = 'drhodv.dat.{}'
+ /

@@ -107,5 +107,35 @@ elif [[ "$1" == "9" ]]
 then 
    echo "Running DYNMAT ... " 
    ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/dynmat.x < $2 > $3 2> $4  
+elif [[ "$1" == "12" ]]
+then
+  echo "Running PW ..."
+# echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/pw.x ${PARA_SUFFIX} < $2 > $3 2> $4"
+  ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/pw.x ${PARA_SUFFIX} < $2 > $3 2> $4
+  if [[ -e CRASH ]]
+  then
+    cat $3
+  fi
+  echo "Running Python preprocessing..."
+  python3 multipole.py -e --order 3 --epsil_order 4 -p -n 8 --mesh 2 2 2 --mesh_step 0.01 > preprocessing.out
+elif [[ "$1" == "13" ]]
+then
+  echo "Running PH ..."
+# echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4"
+  ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4
+  echo "Running Python postprocessing.."
+  python3 multipole.py -f --order 3 --epsil_order 4 -n 8 --vmacro > postprocessing.out
+  echo "postprocessing.out" >> $3
+  cat postprocessing.out >> $3
+  echo "epsilon.fmt" >> $3
+  cat epsilon.fmt >> $3
+  echo "born_charge.fmt" >> $3
+  cat born_charge.fmt >> $3
+  echo "quadrupole.fmt" >> $3
+  cat quadrupole.fmt >> $3
+  if [[ -e CRASH ]]
+  then
+    cat $3
+  fi
 fi
 
