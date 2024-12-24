@@ -6,6 +6,229 @@
 ! in the root directory of the present distribution,
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
+#if   !defined(__OPENMP_GPU) &&  defined(__USE_DISPATCH)
+#error __USE_DISPATCH can be only used with OpenMP offload (__OPENMP_GPU)
+#endif
+
+#if defined(__OPENMP_GPU)
+!!=---------------------------------------------------------------------------=!
+SUBROUTINE invfft_y_omp( fft_kind, f, dfft, howmany )
+  !! Compute G-space to R-space for a specific grid type
+  !!
+  !! **fft_kind = 'Rho'** :
+  !!   inverse (backward) fourier transform of potentials and charge density f
+  !!   On output, f is overwritten
+  !!
+  !! **fft_kind = 'Wave'** :
+  !!   inverse (backward) fourier transform of  wave functions f
+  !!   On output, f is overwritten
+  !!
+  !! **fft_kind = 'tgWave'** :
+  !!   inverse (backward) fourier transform of  wave functions f with task group
+  !!   On output, f is overwritten
+  !!
+  !! **dfft = FFT grid descriptor**, IMPORTANT NOTICE: grid is specified only by dfft.
+  !!   No check is performed on the correspondence between dfft and fft_kind.
+  !!   from all other cases
+
+#if defined(__ONEMKL)
+  USE fft_scalar_dfti_omp, ONLY : cfft3d_omp, cfft3ds_omp
+#elif defined(__HIP)
+  USE fft_scalar_hipfft,   ONLY : cfft3d_omp, cfft3ds_omp
+#endif
+  USE fft_parallel,    ONLY : tg_cft3s_omp, many_cft3s_omp
+  USE fft_parallel_2d, ONLY : tg_cft3s_2d_omp   => tg_cft3s_omp,  &
+                              many_cft3s_2d_omp => many_cft3s_omp
+  USE fft_types,       ONLY : fft_type_descriptor
+  USE fft_param,       ONLY : DP
+
+  IMPLICIT NONE
+
+  TYPE(fft_type_descriptor), INTENT(IN) :: dfft
+  CHARACTER(LEN=*), INTENT(IN) :: fft_kind
+  COMPLEX(DP) :: f(:)
+  INTEGER, OPTIONAL, INTENT(IN) :: howmany
+  INTEGER :: howmany_ = 1
+  CHARACTER(LEN=12) :: clock_label
+
+  IF(PRESENT(howmany) ) THEN
+     howmany_ = howmany
+  ELSE
+     howmany_ = 1
+  END IF
+  !
+  IF( fft_kind == 'Rho' ) THEN
+     clock_label = dfft%rho_clock_label
+  ELSE IF( fft_kind == 'Wave' .OR. fft_kind == 'tgWave' ) THEN
+     clock_label = dfft%wave_clock_label
+  ELSE
+     CALL fftx_error__( ' invfft ', ' unknown fft kind : '//fft_kind , 1 )
+  END IF
+  IF (clock_label == ' ') CALL fftx_error__( ' invfft ', ' uninitialized fft kind : '//fft_kind , 1 )
+
+  CALL start_clock(clock_label)
+
+  IF( dfft%lpara .and. dfft%use_pencil_decomposition ) THEN
+
+     IF( fft_kind == 'Rho' ) THEN
+        IF( howmany_ == 1 ) THEN
+           CALL tg_cft3s_omp( f, dfft, 1 )
+        ELSE
+            CALL many_cft3s_omp( f, dfft, 1, howmany_ )
+        END IF
+     ELSE IF( fft_kind == 'Wave' ) THEN
+        IF( howmany_ == 1 ) THEN
+            CALL tg_cft3s_omp( f, dfft, 2 )
+        ELSE
+            CALL many_cft3s_omp( f, dfft, 2, howmany_ )
+        END IF
+     ELSE IF( fft_kind == 'tgWave' ) THEN
+        CALL tg_cft3s_omp( f, dfft, 3 )
+     END IF
+
+  ELSE IF( dfft%lpara ) THEN
+
+     IF( howmany_ /= 1 ) THEN
+        IF( fft_kind == 'Rho' ) THEN
+           CALL many_cft3s_2d_omp( f, dfft, 1,  howmany_)
+        ELSE IF( fft_kind == 'Wave' ) THEN
+           CALL many_cft3s_2d_omp( f, dfft, 2, howmany_ )
+        END IF
+     ELSE
+        IF( fft_kind == 'Rho' ) THEN
+           CALL tg_cft3s_2d_omp( f, dfft, 1 )
+        ELSE IF( fft_kind == 'Wave' ) THEN
+           CALL tg_cft3s_2d_omp( f, dfft, 2 )
+        END IF
+     END IF
+
+  ELSE
+
+     IF( fft_kind == 'Rho' ) THEN
+        CALL cfft3d_omp( f, dfft%nr1, dfft%nr2, dfft%nr3, &
+                            dfft%nr1x, dfft%nr2x, dfft%nr3x, howmany_ , 1)
+     ELSE
+        CALL cfft3ds_omp( f, dfft%nr1, dfft%nr2, dfft%nr3, &
+                             dfft%nr1x,dfft%nr2x,dfft%nr3x, howmany_ , 1, &
+                             dfft%isind, dfft%iplw )
+     END IF
+
+  END IF
+
+  CALL stop_clock( clock_label )
+
+  RETURN
+
+END SUBROUTINE invfft_y_omp
+!
+!=---------------------------------------------------------------------------=!
+SUBROUTINE fwfft_y_omp( fft_kind, f, dfft, howmany )
+  !! Compute R-space to G-space for a specific grid type
+  !!
+  !! **fft_kind = 'Rho'**
+  !!   forward fourier transform of potentials and charge density f
+  !!   On output, f is overwritten
+  !!
+  !! **fft_kind = 'Wave'**
+  !!   forward fourier transform of  wave functions f
+  !!   On output, f is overwritten
+  !!
+  !! **fft_kind = 'tgWave'**
+  !!   forward fourier transform of wave functions f with task group
+  !!   On output, f is overwritten
+  !!
+
+#if defined(__ONEMKL)
+  USE fft_scalar_dfti_omp, ONLY : cfft3d_omp, cfft3ds_omp
+#elif defined(__HIP)
+  USE fft_scalar_hipfft,   ONLY : cfft3d_omp, cfft3ds_omp
+#endif
+  USE fft_parallel,    ONLY : tg_cft3s_omp, many_cft3s_omp
+  USE fft_parallel_2d, ONLY : tg_cft3s_2d_omp   => tg_cft3s_omp,  &
+                              many_cft3s_2d_omp => many_cft3s_omp
+  USE fft_types,       ONLY : fft_type_descriptor
+  USE fft_param,       ONLY : DP
+
+  IMPLICIT NONE
+
+  TYPE(fft_type_descriptor), INTENT(IN) :: dfft
+  CHARACTER(LEN=*), INTENT(IN) :: fft_kind
+  COMPLEX(DP) :: f(:)
+  INTEGER, OPTIONAL, INTENT(IN) :: howmany
+  INTEGER :: howmany_ = 1
+  CHARACTER(LEN=12) :: clock_label
+
+  IF(PRESENT(howmany) ) THEN
+     howmany_ = howmany
+  ELSE
+     howmany_ = 1
+  END IF
+
+  IF( fft_kind == 'Rho' ) THEN
+     clock_label = dfft%rho_clock_label
+  ELSE IF( fft_kind == 'Wave' .OR. fft_kind == 'tgWave' ) THEN
+     clock_label = dfft%wave_clock_label
+  ELSE
+     CALL fftx_error__( ' fwfft ', ' unknown fft kind: '//fft_kind , 1 )
+  END IF
+  IF (clock_label == ' ') CALL fftx_error__( ' fwfft ', ' uninitialized fft kind : '//fft_kind , 1 )
+
+  CALL start_clock(clock_label)
+
+  IF( dfft%lpara .and. dfft%use_pencil_decomposition ) THEN
+
+     IF( fft_kind == 'Rho' ) THEN
+        IF( howmany_ == 1 ) THEN
+           CALL tg_cft3s_omp(f,dfft,-1)
+        ELSE
+           CALL many_cft3s_omp(f,dfft,-1, howmany_)
+        END IF
+     ELSE IF( fft_kind == 'Wave' ) THEN
+        IF( howmany_ == 1 ) THEN
+           CALL tg_cft3s_omp(f,dfft,-2)
+        ELSE
+           CALL many_cft3s_omp(f,dfft,-2, howmany_)
+        ENDIF
+     ELSE IF( fft_kind == 'tgWave' ) THEN
+        CALL tg_cft3s_omp( f, dfft, -3 )
+     ENDIF
+
+  ELSE IF( dfft%lpara ) THEN
+
+     IF( howmany_ /= 1 ) THEN
+        IF( fft_kind == 'Rho' ) THEN
+           CALL many_cft3s_2d_omp( f, dfft, -1, howmany_)
+        ELSE IF( fft_kind == 'Wave' ) THEN
+           CALL many_cft3s_2d_omp( f, dfft, -2, howmany_ )
+        END IF
+     ELSE
+        IF( fft_kind == 'Rho' ) THEN
+           CALL tg_cft3s_2d_omp( f, dfft, -1 )
+        ELSE IF( fft_kind == 'Wave' ) THEN
+           CALL tg_cft3s_2d_omp( f, dfft, -2 )
+        END IF
+     END IF
+
+  ELSE
+
+     IF( fft_kind == 'Rho' ) THEN
+        CALL cfft3d_omp( f, dfft%nr1, dfft%nr2, dfft%nr3, &
+                        dfft%nr1x,dfft%nr2x,dfft%nr3x, howmany_ , -1)
+     ELSE
+        CALL cfft3ds_omp( f, dfft%nr1, dfft%nr2, dfft%nr3, &
+                         dfft%nr1x,dfft%nr2x,dfft%nr3x, howmany_ , -1, &
+                         dfft%isind, dfft%iplw )
+     ENDIF
+
+  END IF
+
+  CALL stop_clock( clock_label )
+
+  RETURN
+  !
+END SUBROUTINE fwfft_y_omp
+#endif
+!
 !=---------------------------------------------------------------------------=!
 SUBROUTINE invfft_y( fft_kind, f, dfft, howmany )
   !! Compute G-space to R-space for a specific grid type
