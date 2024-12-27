@@ -203,6 +203,7 @@ CONTAINS
   !
 END SUBROUTINE tg_cft3s
 !
+!
 #if defined(__OPENMP_GPU)
 SUBROUTINE tg_cft3s_omp( f, dfft, isgn )
   !----------------------------------------------------------------------------
@@ -371,7 +372,6 @@ CONTAINS
   !
 END SUBROUTINE tg_cft3s_omp
 
-
 SUBROUTINE many_cft3s_omp( f, dfft, isgn, batchsize )
   !----------------------------------------------------------------------------
   !
@@ -408,8 +408,9 @@ SUBROUTINE many_cft3s_omp( f, dfft, isgn, batchsize )
                                    fft_scatter_many_columns_to_planes_store_omp, &
                                    fft_scatter_many_planes_to_columns_send_omp, &
                                    fft_scatter_many_planes_to_columns_store_omp
-  USE fft_types,          ONLY : fft_type_descriptor
+  USE fft_types,          ONLY : fft_type_descriptor, dfft_a2a_comp, dfft_bevents, dfft_bstreams
   USE fft_buffers,        ONLY : check_buffers_size, aux, aux2
+  USE hipfft
   !
   IMPLICIT NONE
   !
@@ -426,7 +427,187 @@ SUBROUTINE many_cft3s_omp( f, dfft, isgn, batchsize )
   INTEGER                    :: sticks( dfft%nproc  )
   INTEGER                    :: ii, jj, kk, dfft_nnr, dfft_nr3p
 
-  ! ...
+  !------------------PROVISIONAL--------------------
+  INTEGER :: dfft_nproc
+  INTEGER, ALLOCATABLE :: dfft_iss(:), dfft_nsw(:), dfft_nsp(:), dfft_ismap(:)
+  REAL (DP)  :: tscale
+  INTEGER :: k, nsl, ldz
+  !-------------------------------------------------------
+  !
+  !
+  n1  = dfft%nr1
+  n2  = dfft%nr2
+  n3  = dfft%nr3
+  nx1 = dfft%nr1x
+  nx2 = dfft%nr2x
+  nx3 = dfft%nr3x
+  !
+  dfft_nnr = dfft%nnr
+  !
+  CALL check_buffers_size(dfft, batchsize)
+  !
+  me_p = dfft%mype + 1
+  !
+  ncpx = 0
+  nppx = 0
+  DO proc = 1, dfft%nproc
+     IF ( abs(isgn) == 2 ) ncpx = max( ncpx, dfft%nsw ( proc ) )
+     IF ( abs(isgn) == 1 ) ncpx = max( ncpx, dfft%nsp ( proc ) )
+     nppx = max( nppx, dfft%nr3p ( proc ) )
+  ENDDO
+  IF ( abs(isgn) == 2 ) sticks = dfft%nsw
+  IF ( abs(isgn) == 1 ) sticks = dfft%nsp
+  !
+  IF ( (abs(isgn) /= 2) .and. (abs(isgn) /= 1) ) &
+     CALL fftx_error__( ' many_cft3s_omp ', ' abs(isgn) /= 1 or 2 not implemented ', isgn )
+  !
+  IF (dfft%nproc <= 1) CALL fftx_error__( ' many_cft3s_omp ', ' this subroutine should never be called with nproc= ', dfft%nproc )
+  !
+!-------------HIGHLY PROVISIONAL-------------------
+  dfft_nproc=dfft%nproc
+  ALLOCATE( dfft_iss(dfft_nproc), dfft_nsw(dfft_nproc), dfft_nsp(dfft_nproc) )
+  ALLOCATE( dfft_ismap(nx1*nx2) )
+  !$omp target enter data map(alloc:dfft_iss,dfft_nsw,dfft_nsp,dfft_ismap)
+!  !$omp target
+  DO i = 1, dfft_nproc
+    dfft_iss(i) = dfft%iss(i)
+    dfft_nsw(i) = dfft%nsw(i)
+    dfft_nsp(i) = dfft%nsp(i)
+  ENDDO
+!  !$omp end target
+  !$omp target update to(dfft_iss,dfft_nsw,dfft_nsp)
+!  !$omp target teams distribute parallel do
+  DO i = 1, nx1*nx2
+    dfft_ismap(i) = dfft%ismap(i)
+  ENDDO
+  !$omp target update to(dfft_ismap)
+!-------------------------------------------------
+  !
+  IF ( isgn > 0 ) THEN
+     DO j = 0, batchsize-1, dfft%subbatchsize
+       currsize = min(dfft%subbatchsize, batchsize - j)
+       !
+       IF ( isgn /= 2 ) THEN
+          !
+          planes = dfft%iplp
+          !
+       ELSE
+          !
+          planes = dfft%iplw
+          !
+       ENDIF
+       !
+       DO i = 0, currsize - 1
+         CALL cft_1z_omp( f((j+i)*dfft_nnr + 1:), sticks(me_p), n3, nx3, isgn, aux(j*dfft_nnr + i*ncpx*nx3 +1:),stream=dfft_a2a_comp)
+       ENDDO
+       !
+       i = hipEventRecord(dfft_bevents(j/dfft%subbatchsize+1), dfft_a2a_comp)
+       i = hipStreamWaitEvent( dfft_bevents(j/dfft%subbatchsize+1), dfft_bstreams(j/dfft%subbatchsize+1), 0)
+       !
+       IF (j > 0) i = hipStreamWaitEvent( dfft_bevents(j/dfft%subbatchsize), dfft_bstreams(j/dfft%subbatchsize+1), 0)
+       !
+       CALL fft_scatter_many_columns_to_planes_store_omp( dfft, aux(j*dfft_nnr+1:), nx3, dfft_nnr, f(j*dfft_nnr+1:), &
+                                                          sticks, dfft%nr3p, isgn, currsize, j/dfft%subbatchsize+1 )
+       !
+     ENDDO
+     !
+     CALL hipCheck(hipDeviceSynchronize())
+     !
+     !------------------------------------
+     !
+
+     DO j = 0, batchsize-1, dfft%subbatchsize
+       currsize = min(dfft%subbatchsize, batchsize - j)
+
+       !!$omp single
+       !!$omp task depend (out: f(j*dfft_nnr+1:(j+1)*dfft_nnr))
+       CALL fft_scatter_many_columns_to_planes_send_omp( dfft, aux(j*dfft%nnr + 1:), nx3, dfft_nnr, f(j*dfft_nnr + 1:), &
+         aux2(j*dfft_nnr + 1:), sticks, dfft%nr3p, isgn, currsize, j/dfft%subbatchsize + 1, dfft_iss, dfft_nsw, dfft_nsp, dfft_ismap )
+       !!$omp end task
+
+       CALL hipCheck(hipDeviceSynchronize())
+
+       IF (currsize == dfft%subbatchsize) THEN
+         !!$omp task depend (in: f(j*dfft_nnr+1:(j+1)*dfft_nnr))
+         CALL cft_2xy_omp( f(j*dfft_nnr + 1:), currsize * nppx, n1, n2, nx1, nx2, isgn, planes, stream=dfft_a2a_comp )
+         !!$omp end task
+       ELSE
+         !!$omp task depend (in: f(j*dfft_nnr+1:(j+1)*dfft_nnr))
+         DO i = 0, currsize - 1
+           CALL cft_2xy_omp( f((j+i)*dfft_nnr + 1:), dfft%nr3p( me_p ), n1, n2, nx1, nx2, isgn, planes, stream=dfft_a2a_comp )
+         ENDDO
+         !!$omp end task
+       ENDIF
+       !!$omp end single
+
+     ENDDO
+     !
+     CALL hipCheck(hipDeviceSynchronize())
+     !
+  ELSE
+     !
+     DO j = 0, batchsize-1, dfft%subbatchsize
+       currsize = min(dfft%subbatchsize, batchsize - j)
+       !
+       IF ( isgn /= -2 ) THEN
+          !
+          planes = dfft%iplp
+          !
+       ELSE
+          !
+          planes = dfft%iplw
+          !
+       ENDIF
+
+       IF (currsize == dfft%subbatchsize) THEN
+         CALL cft_2xy_omp( f(j*dfft_nnr + 1:), currsize * nppx, n1, n2, nx1, nx2, isgn, planes, stream=dfft_a2a_comp )
+       ELSE
+         DO i = 0, currsize - 1
+           CALL cft_2xy_omp( f((j+i)*dfft_nnr + 1:), dfft%nr3p( me_p ), n1, n2, nx1, nx2, isgn, planes, stream=dfft_a2a_comp )
+         ENDDO
+       ENDIF
+
+       CALL hipCheck(hipDeviceSynchronize())
+       !IF (j > 0) i = hipStreamWaitEvent(dfft%bstreams(j/dfft%subbatchsize + 1), dfft%bevents(j/dfft%subbatchsize), 0) 
+
+       CALL fft_scatter_many_planes_to_columns_store_omp( dfft, nx3, dfft_nnr, f(j*dfft_nnr + 1:), &
+                            aux2(j*dfft_nnr + 1:), sticks, dfft%nr3p, isgn, currsize, j/dfft%subbatchsize + 1, &
+                            dfft_iss, dfft_nsw, dfft_nsp, dfft_ismap)
+
+     ENDDO
+
+     DO j = 0, batchsize-1, dfft%subbatchsize
+       currsize = min(dfft%subbatchsize, batchsize - j)
+
+       !!$omp single
+       !!$omp task depend (out: aux(j*dfft_nnr+1:(j+1)*dfft_nnr))
+       CALL fft_scatter_many_planes_to_columns_send_omp( dfft, aux(j*dfft_nnr + 1:), nx3, dfft_nnr, f(j*dfft_nnr + 1:), &
+         aux2(j*dfft_nnr + 1:), sticks, dfft%nr3p, isgn, currsize, j/dfft%subbatchsize + 1 )
+       !!$omp end task
+
+       !i = hipEventRecord(dfft%bevents(j/dfft%subbatchsize + 0), dfft%bstreams(j/dfft%subbatchsize + 1))
+       !i = hipStreamWaitEvent(dfft%a2a_comp, dfft%bevents(j/dfft%subbatchsize + 1), 0)
+       CALL hipCheck(hipDeviceSynchronize())
+
+       !!$omp task depend (in: aux(j*dfft_nnr+1:(j+1)*dfft_nnr))
+       DO i = 0, currsize - 1
+         CALL cft_1z_omp( aux(j*dfft_nnr + i*ncpx*nx3 + 1:), sticks( me_p ), n3, nx3, isgn, f((j+i)*dfft_nnr + 1:), stream=dfft_a2a_comp )
+       ENDDO
+       !!$omp end task
+       !!$omp end single
+       !
+     ENDDO
+       !
+       CALL hipCheck(hipDeviceSynchronize())
+       !
+  ENDIF
+  !
+
+!-------------HIGHLY PROVISIONAL-------------------
+ !$omp target exit data map(delete:dfft_iss,dfft_nsw,dfft_nsp,dfft_ismap)
+  DEALLOCATE( dfft_iss, dfft_nsw, dfft_nsp )
+  DEALLOCATE( dfft_ismap )
+!---------------------------------------------------
 
   RETURN
   !
@@ -803,7 +984,7 @@ SUBROUTINE many_cft3s_gpu( f_d, dfft, isgn, batchsize )
          f_h(j*dfft%nnr + 1:), aux2_d(j*dfft%nnr + 1:), aux2_h(j*dfft%nnr + 1:), sticks, dfft%nr3p, isgn, currsize, j/dfft%subbatchsize + 1 )
 
 
-       i = cudaEventRecord(dfft%bevents(j/dfft%subbatchsize + 1), dfft%bstreams(j/dfft%subbatchsize + 1))
+       i = cudaEventRecord(dfft%bevents(j/dfft%subbatchsize + 0), dfft%bstreams(j/dfft%subbatchsize + 1))
        i = cudaStreamWaitEvent(dfft%a2a_comp, dfft%bevents(j/dfft%subbatchsize + 1), 0)
 
        DO i = 0, currsize - 1

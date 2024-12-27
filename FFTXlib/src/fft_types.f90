@@ -22,10 +22,8 @@ MODULE fft_types
 #endif
   USE fft_support, ONLY : good_fft_order, good_fft_dimension
   USE fft_param
-#if defined(_OPENMP)
   USE omp_lib
-#endif
-#if defined(__HIP)
+#if defined(__OPENMP_GPU)
   USE iso_c_binding
   USE hipfft
 #endif
@@ -168,11 +166,11 @@ MODULE fft_types
     INTEGER, ALLOCATABLE :: srh(:,:) ! These are non blocking send/recv handles that are used to
                                      ! overlap computation and communication of FFTs subbatches.
 #endif
-#if defined(__OPENMP_GPU)
-    TYPE(C_PTR) :: a2a_comp
-    TYPE(C_PTR), dimension(200) :: bstreams
-    TYPE(C_PTR), dimension(200) :: bevents
-#endif
+!#if defined(__OPENMP_GPU)
+!    TYPE(C_PTR) :: a2a_comp
+!    TYPE(C_PTR), allocatable :: bstreams(:)
+!    TYPE(C_PTR), allocatable :: bevents(:)
+!#endif
 #if defined(__CUDA)
     ! These CUDA streams are used in the 1D+1D+1D GPU implementation
     INTEGER(kind=cuda_stream_kind), allocatable, dimension(:) :: stream_scatter_yz
@@ -199,6 +197,16 @@ MODULE fft_types
   REAL(DP) :: fft_dual = 4.0d0
   INTEGER  :: incremental_grid_identifier = 0
   !
+  !
+!----------------------HIGHLY PROVISIONAL--------------------
+#if defined(__OPENMP_GPU)
+  TYPE(C_PTR) :: dfft_a2a_comp
+  TYPE(C_PTR), ALLOCATABLE :: dfft_bstreams(:)
+  TYPE(C_PTR), ALLOCATABLE :: dfft_bevents(:)
+  !
+  PUBLIC :: dfft_a2a_comp, dfft_bstreams, dfft_bevents
+#endif
+!------------------------------------------------------------
   !
   !
   PUBLIC :: fft_type_descriptor, fft_type_init
@@ -345,7 +353,7 @@ CONTAINS
 
     nsubbatches = ceiling(real(desc%batchsize)/desc%subbatchsize)
     ALLOCATE( desc%srh(2*nproc, nsubbatches))
-    !!$omp target enter data map(always,alloc:desc%srh)
+    !$omp target enter data map(always,alloc:desc%srh)
 #endif
 
 #if defined(__CUDA)
@@ -387,17 +395,18 @@ CONTAINS
 
 #endif
 
-#if defined(__HIP) && defined(__OMP_MANY_FFT)
-
-    CALL myStreamCreate( desc%a2a_comp )
-    !
-    nsubbatches = ceiling(real(desc%batchsize)/desc%subbatchsize)
-    DO i = 1, nsubbatches
-      CALL myStreamCreate( desc%bstreams(i) )
-      CALL myEventCreate( desc%bevents(i) )
-    ENDDO
-
-#endif
+!#if defined(__OPENMP_GPU)
+!
+!    CALL myStreamCreate( desc%a2a_comp )
+!
+!    !ALLOCATE( desc%bstreams( nsubbatches ) )
+!    !ALLOCATE( desc%bevents( nsubbatches ) )
+!    !DO i = 1, nsubbatches
+!    !  CALL myStreamCreate( desc%bstreams(i) )
+!    !  CALL myEventCreate( desc%bevents(i) )
+!    !ENDDO
+!
+!#endif
 
     incremental_grid_identifier = incremental_grid_identifier + 1
     desc%grid_id = incremental_grid_identifier
@@ -441,7 +450,7 @@ CONTAINS
         !$omp target exit data map(delete:desc%indw_tg)
     ENDIF
     IF (OMP_TARGET_IS_PRESENT(c_loc(desc%srh), OMP_GET_DEFAULT_DEVICE()) == 1) THEN
-        !!$omp target exit data map(delete:desc%srh)
+        !$omp target exit data map(delete:desc%srh)
     ENDIF
     IF (OMP_TARGET_IS_PRESENT(c_loc(desc%aux), OMP_GET_DEFAULT_DEVICE()) == 1) THEN
         !$omp target exit data map(delete:desc%aux)
@@ -543,25 +552,34 @@ CONTAINS
 
 #endif
 
-#if defined(__HIP) && defined(__OMP_MANY_FFT)
+#if defined(__OPENMP_GPU) 
     ! SLAB decomposition
-    IF (desc%a2a_comp /= 0) THEN
-          CALL myStreamSynchronize( desc%a2a_comp )
-          CALL myStreamDestroy( desc%a2a_comp )
-          desc%a2a_comp = 0
-    END IF
-    !
-    nsubbatches = ceiling(real(desc%batchsize)/desc%subbatchsize)
-    DO i = 1, nsubbatches
-          CALL myStreamSynchronize( desc%bstreams(i) )
-          CALL myStreamDestroy( desc%bstreams(i) )
-    ENDDO
-    !
-    DO i = 1, nsubbatches
-          CALL myEventSynchronize( desc%bevents(i) )
-          CALL myEventDestroy( desc%bevents(i) )
-    ENDDO
-    !
+ !   IF (dfft_a2a_comp /= 0) THEN
+ !     CALL myStreamSynchronize( dfft_a2a_comp )
+ !     CALL myStreamDestroy( dfft_a2a_comp )
+ !     dfft_a2a_comp = 0
+ !   END IF
+
+ !   IF ( ALLOCATED(dfft_bstreams) ) THEN
+ !       nsubbatches = ceiling(real(desc%batchsize)/desc%subbatchsize)
+ !       DO i = 1, nsubbatches
+ !         CALL myStreamSynchronize( dfft_bstreams(i) ) 
+ !         CALL myStreamDestroy( dfft_bstreams(i) ) 
+ !       ENDDO
+        !
+ !       DEALLOCATE( dfft_bstreams )
+ !   END IF
+
+ !   IF ( ALLOCATED(dfft_bevents) ) THEN
+ !       nsubbatches = ceiling(real(desc%batchsize)/desc%subbatchsize)
+ !       DO i = 1, nsubbatches
+ !         CALL myEventSynchronize( dfft_bevents(i) )
+ !         CALL myEventDestroy( dfft_bevents(i) )
+ !       ENDDO
+ !       !
+ !       DEALLOCATE( dfft_bevents )
+ !   END IF
+
 #endif
 
 #if defined(__CUDA) || defined(__OPENMP_GPU)
@@ -1134,6 +1152,20 @@ CONTAINS
            CALL fftx_error__(' fft_type_init ', ' FFT already allocated with a different communicator ', 1 )
         END IF
      END IF
+
+#if defined(__OPENMP_GPU)
+     IF (pers=='wave') THEN
+        nsubbatches = ceiling(real(dfft%batchsize)/dfft%subbatchsize)
+        CALL myStreamCreate( dfft_a2a_comp )
+        ALLOCATE( dfft_bstreams( nsubbatches ) )
+        ALLOCATE( dfft_bevents( nsubbatches ) )
+        DO i = 1, nsubbatches
+          CALL myStreamCreate( dfft_bstreams(i) )
+          CALL myEventCreate( dfft_bevents(i) )
+        ENDDO
+     ENDIF
+#endif
+
 
      IF ( PRESENT (use_pd) ) dfft%use_pencil_decomposition = use_pd
      IF ( ( .not. dfft%use_pencil_decomposition ) .and. ( nyfft > 1 ) ) &
