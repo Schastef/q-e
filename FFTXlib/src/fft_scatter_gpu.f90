@@ -2195,4 +2195,3 @@ END MODULE fft_scatter_omp
 ! defined (__OPENMP_GPU)
 #endif
 
-

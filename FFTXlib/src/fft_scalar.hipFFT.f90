@@ -13,11 +13,11 @@ MODULE enums
   USE iso_c_binding
   IMPLICIT NONE
 
-  ENUM, BIND(C) 
+  ENUM, BIND(C)
       ENUMERATOR :: HIP_SUCCESS = 0
   END ENUM
 
-  ENUM, BIND(C) 
+  ENUM, BIND(C)
       ENUMERATOR :: HIPFFT_SUCCESS = 0
   END ENUM
 
@@ -40,101 +40,6 @@ MODULE enums
 
 END MODULE
 
-MODULE hip_kernels
-  use omp_lib
-  USE, INTRINSIC :: iso_c_binding
-
-  IMPLICIT NONE
-  PRIVATE
-  PUBLIC :: scalar_init, scalar_multiply, scalar_multiply_3D, loop2d_scatter_hip
-
-  INTERFACE
-    SUBROUTINE scalar_init_(s, dev_ptr,val, stream) &
-        & BIND(C, name="c_scalar_init_")
-      USE iso_c_binding
-      INTEGER(C_INT), INTENT(IN), VALUE   :: s
-      TYPE(C_PTR), VALUE                  :: dev_ptr
-      REAL(C_DOUBLE), VALUE               :: val
-      TYPE(C_PTR),    VALUE               :: stream
-    END SUBROUTINE scalar_init_
-  END INTERFACE
-
-  INTERFACE
-    SUBROUTINE scalar_multiply_(s, dev_ptr,val, stream) &
-        & BIND(C, name="c_scalar_multiply_")
-      USE iso_c_binding
-      INTEGER(C_INT), INTENT(IN), VALUE   :: s
-      TYPE(C_PTR), VALUE                  :: dev_ptr
-      REAL(C_DOUBLE), VALUE               :: val
-      TYPE(C_PTR),    VALUE               :: stream
-    END SUBROUTINE scalar_multiply_
-  END INTERFACE
-
-  INTERFACE
-    SUBROUTINE loop2d_scatter_hip_( drz, f_in, f_out, dft_ismap, nppx, nnp, of1, of2, npp, nswip, stream ) &
-        & BIND(C, name="loop2d_scatter_hip_")
-      USE iso_c_binding
-      TYPE(C_PTR), VALUE  :: f_in, dft_ismap
-      TYPE(C_PTR), VALUE :: f_out
-      INTEGER(C_INT), INTENT(in), VALUE :: drz, nppx, nnp, npp, nswip, of1, of2
-      TYPE(C_PTR), VALUE :: stream
-    END SUBROUTINE loop2d_scatter_hip_
-  END INTERFACE
-
-  CONTAINS
-
-  SUBROUTINE scalar_init(a,val,s,stream)
-    COMPLEX(8), INTENT(inout)  :: a(:)
-    REAL(8), INTENT(in)        :: val
-    INTEGER(C_INT), INTENT(in) :: s
-    TYPE(C_PTR)                :: stream
-
-    !$omp target data use_device_addr(a)
-    CALL scalar_init_(s,c_loc(a),val,stream)
-    !$omp end target data
-
-  END SUBROUTINE scalar_init
-
-  SUBROUTINE scalar_multiply(a,val,s,stream)
-    COMPLEX(8), INTENT(inout)  :: a(:)
-    REAL(8), INTENT(in)        :: val
-    INTEGER(C_INT), INTENT(in) :: s
-    TYPE(C_PTR)                :: stream
-
-    !$omp target data use_device_addr(a)
-    CALL scalar_multiply_(s,c_loc(a),val,stream)
-    !$omp end target data
-
-  END SUBROUTINE scalar_multiply
-
-  SUBROUTINE scalar_multiply_3D(a,val,s,stream)
-    COMPLEX(8), INTENT(inout)  :: a(:,:,:)
-    REAL(8), INTENT(in)        :: val
-    INTEGER(C_INT), INTENT(in) :: s
-    TYPE(C_PTR)                :: stream
-
-    !$omp target data use_device_addr(a)
-    CALL scalar_multiply_(s,c_loc(a),val,stream)
-    !$omp end target data
-
-  END SUBROUTINE scalar_multiply_3D
-
-  SUBROUTINE loop2d_scatter_hip( drz, f_in, f_out, dft_ismap, nppx, nnp, of1, of2, npp, nswip, stream )
-    COMPLEX(8), INTENT(in)  :: f_in(:)
-    COMPLEX(8), INTENT(inout) :: f_out(:)
-    INTEGER, INTENT(in) :: dft_ismap(:)
-    INTEGER(C_INT), INTENT(in) :: drz, nppx, nnp, npp, nswip, of1, of2
-    TYPE(C_PTR) :: stream
-    !
-    !$omp target data use_device_addr(f_in, f_out, dft_ismap)
-    CALL loop2d_scatter_hip_( drz, c_loc(f_in), c_loc(f_out), c_loc(dft_ismap), nppx, nnp, of1, of2, &
-                              npp, nswip, stream )
-    !$omp end target data
-    !
-  END SUBROUTINE loop2d_scatter_hip
-
-END MODULE hip_kernels
-
 MODULE hipfft
   USE iso_c_binding
   USE enums
@@ -142,7 +47,7 @@ MODULE hipfft
 
   INTEGER(C_INT), PARAMETER, PUBLIC :: HIPFFT_FORWARD = -1, HIPFFT_BACKWARD = 1
 
-  INTERFACE  
+  INTERFACE
      FUNCTION HipDeviceSynchronize() &
          BIND(C,name="hipDeviceSynchronize")
         use iso_c_binding
@@ -267,7 +172,6 @@ MODULE hipfft
        INTEGER(kind(HIPFFT_SUCCESS)) :: hipfftDestroy
        TYPE(C_PTR),VALUE :: plan
      END FUNCTION
-
 
      FUNCTION hipfftSetStream(plan,stream) BIND(C, name="hipfftSetStream")
        USE iso_c_binding
@@ -544,7 +448,7 @@ END MODULE
      INTEGER, SAVE :: zdims( 3, ndims ) = -1
      INTEGER, SAVE :: icurrent = 1
      LOGICAL :: found
-     
+
      TYPE(C_PTR)   :: stream_
      LOGICAL, SAVE :: is_inplace
 
@@ -607,7 +511,7 @@ END MODULE
         ENDIF
         IF(hipfft_status /= 0) CALL fftx_error__(' cft_1z GPU ',' stopped in hipfftExecZ2Z(Forward) ')
         CALL hipfftCheck(hipfft_status)
-        
+
         tscale = 1.0_DP / nz
         IF (stream_==0) THEN
           IF (is_inplace) THEN
@@ -640,7 +544,6 @@ END MODULE
         ENDIF
      ELSE IF (isign > 0) THEN
 
-     
         IF (is_inplace) THEN
             !$omp target data use_device_ptr(c)
               hipfft_status = hipfftExecZ2Z(hipfft_planz(ip), c_loc(c), c_loc(c), HIPFFT_BACKWARD)
@@ -687,7 +590,6 @@ END MODULE
              DIST = ldz
              BATCH = nsl
 
-
        IF( hipfft_planz( icurrent) /= c_null_ptr ) THEN
            hipfft_status = hipfftDestroy( hipfft_planz( icurrent) )
            CALL fftx_error__(" fft_scalar_hipFFT: cft_1z_omp ", " hipfftDestroy failed ", hipfft_status)
@@ -706,7 +608,6 @@ END MODULE
        ip = icurrent
        icurrent = MOD( icurrent, ndims ) + 1
      END SUBROUTINE init_plan
-
 
    END SUBROUTINE cft_1z_omp
 
@@ -807,8 +708,7 @@ END MODULE
         hipfft_status = hipfftExecZ2Z( hipfft_plan_2d(ip), c_loc(r_d), c_loc(r_d), HIPFFT_FORWARD )
         !$omp end target data
         IF(hipfft_status /= 0) CALL fftx_error__(" fft_scalar_hipFFT: cft_2xy_omp ", " hipfftExecZ2Z failed ")
-        
-        !!!$omp target teams distribute parallel do simd
+
         tscale = 1.0_DP / ( nx * ny )
         IF (stream_==0) THEN
           !$omp target teams distribute parallel do collapse(3)
@@ -820,7 +720,7 @@ END MODULE
             END DO
           END DO
         ELSE
-#if defined(__NO_HIPKERNS)
+#if defined(__NO_HIPKERN)
           itscale=CMPLX(tscale-1.0_DP,KIND=DP)
           incy=1
           CALL a2azaxpy(nzl*ldx*ldy,itscale,r_d,1,r_d,incy)
@@ -829,7 +729,6 @@ END MODULE
 #endif
         ENDIF
 
-
      ELSE IF( isign > 0 ) THEN
         !$omp target data use_device_ptr(r_d)
         hipfft_status = hipfftExecZ2Z( hipfft_plan_2d(ip), c_loc(r_d), c_loc(r_d), HIPFFT_BACKWARD )
@@ -837,7 +736,6 @@ END MODULE
 
         IF(hipfft_status /= 0) CALL fftx_error__(" fft_scalar_hipFFT: cft_2xy_omp ", " hipfftExecZ2Z failed ", istat)
      END IF
-
 
 #if defined(__FFT_CLOCKS)
      CALL stop_clock( 'GPU_cft_2xy' )
@@ -887,7 +785,6 @@ END MODULE
                               HIPFFT_Z2Z, BATCH )
        CALL fftx_error__(" fft_scalar_hipFFT: cft_2xy_omp ", " hipfftPlanMany failed ", istat)
 
-
 #ifdef TRACK_FLOPS
        xyflops( icurrent ) = REAL( ny*nzl )                    * 5.0d0 * REAL( nx ) * log( REAL( nx )  )/log( 2.d0 ) &
                            + REAL( nzl*BATCH_1 + nzl*BATCH_2 ) * 5.0d0 * REAL( ny ) * log( REAL( ny )  )/log( 2.d0 )
@@ -900,7 +797,7 @@ END MODULE
      END SUBROUTINE init_plan
 
    END SUBROUTINE cft_2xy_omp
-   
+
    SUBROUTINE cfft3d_omp( f_d, nx, ny, nz, ldx, ldy, ldz, howmany, isign)
 
   !     driver routine for 3d complex fft of lengths nx, ny, nz
@@ -926,7 +823,6 @@ END MODULE
      INTEGER, SAVE :: dims(4,ndims) = -1
 
      type(c_ptr), SAVE :: hipfft_plan_3d( ndims ) = c_null_ptr
-
 
      IF ( nx < 1 ) &
          call fftx_error__('cfft3d',' nx is less than 1 ', 1)

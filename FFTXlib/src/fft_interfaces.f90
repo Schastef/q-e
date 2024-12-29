@@ -39,7 +39,7 @@ MODULE fft_interfaces
      END SUBROUTINE fwfft_y_omp
   END INTERFACE
 #endif
-  
+
   INTERFACE invfft
      !! invfft is the interface to both the standard fft **invfft_x**,
      !! and to the "box-grid" version **invfft_b**, used only in CP 

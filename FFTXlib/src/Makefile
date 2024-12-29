@@ -38,11 +38,19 @@ tg_gather.o \
 fft_helper_subroutines.o \
 fft_param.o \
 fft_buffers.o \
+fft_hipkernelsf.o
+
+ifeq ($(OMP_MANY_FFT),yes)
+HIPKER = \
 fft_hipkernels.o 
+else
+HIPKER =
+endif 
+
 
 all : libqefft.a
 
-libqefft.a: 	$(FFTX)
+libqefft.a:     $(HIPKER) $(FFTX)
 	$(AR) $(ARFLAGS) $@ $?
 	$(RANLIB) $@
 
@@ -57,10 +65,11 @@ fftw_sp.o : fftw_sp.c fftw_sp.h fftw.h konst.h
 
 fftw_dp.o : fftw_dp.c fftw_dp.h fftw.h konst.h
 
-fft_hipkernels.hip.o : fft_hipkernels.o
-	hipcc --offload-arch=gfx90a -c fft_hipkernels.hip -o fft_hipkernels.o -Wno-unicode-whitespace
-
 clean :
 	- /bin/rm -f *.o *.a *.d *.i *~ *_tmp.f90 *.mod *.L
 
+info : 
+	$(info $(HIPKER))
+
 include make.depend
+
