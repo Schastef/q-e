@@ -9,6 +9,9 @@ MODULE fft_buffers
   !
   INTEGER :: current_size = 0
 #if defined(__OPENMP_GPU)
+  INTEGER, PARAMETER :: ntraits = 1
+  INTEGER(omp_allocator_handle_kind) :: pinned_alloc
+  TYPE(omp_alloctrait) :: traits(ntraits) = [omp_alloctrait(omp_atk_pinned,1)]
   COMPLEX(DP), ALLOCATABLE :: aux(:), aux2(:)
 #else
   COMPLEX(DP), ALLOCATABLE :: dev_space_fftparallel(:)
@@ -62,9 +65,12 @@ CONTAINS
 #endif
       !
 #if defined(__OPENMP_GPU)
+      pinned_alloc = omp_init_allocator(omp_default_mem_alloc, ntraits, traits)
+      !$omp allocate(aux) allocator(pinned_alloc)
       ALLOCATE(aux(current_size), STAT=info)
       IF ( info /= 0 ) CALL fftx_error__( ' fft_buffers ', ' Allocation failed ', 4 )
       !$omp target enter data map(alloc:aux)
+      !$omp allocate(aux2) allocator(pinned_alloc)
       ALLOCATE(aux2(current_size), STAT=info)
       IF ( info /= 0 ) CALL fftx_error__( ' fft_buffers ', ' Allocation failed ', 5 )
       !$omp target enter data map(alloc:aux2)
@@ -110,5 +116,7 @@ CONTAINS
     IF( ALLOCATED( pin_space_scatter_dblbuffer ) ) DEALLOCATE( pin_space_scatter_dblbuffer )
 #endif
   END SUBROUTINE deallocate_buffers
-  !
+
 END MODULE fft_buffers
+
+
