@@ -1994,9 +1994,9 @@ SUBROUTINE fft_scatter_omp_batch ( dfft, f_in, nr3x, nxx_, f_aux, ncp_, npp_, is
 
 END SUBROUTINE fft_scatter_omp_batch
 
-SUBROUTINE fft_scatter_many_columns_to_planes_store_omp ( dfft, f_in, nr3x, nxx_, f_aux, ncp_, npp_, isgn, batchsize, batch_id )
+SUBROUTINE fft_scatter_many_columns_to_planes_store_omp( dfft, f_in, nr3x, nxx_, f_aux, ncp_, npp_, isgn, batchsize, batch_id )
    !
-   USE hipfft, ONLY: hipEventRecord, hipMemcpy2DAsync, hipcheck, hipdevicesynchronize
+   USE hipfft, ONLY: hipEventRecord, hipMemcpy2DAsync, hipmemcpy2D, hipcheck, hipdevicesynchronize
    !
    IMPLICIT NONE
    !
@@ -2014,10 +2014,6 @@ SUBROUTINE fft_scatter_many_columns_to_planes_store_omp ( dfft, f_in, nr3x, nxx_
    INTEGER :: iter, dest, sorc
    INTEGER :: istatus(MPI_STATUS_SIZE)
    COMPLEX(DP) :: dummy
-   !
-#ifdef __GPU_MPI
-   call fftx_error__('fft_scatter_many_', 'OMP batched FFT not enabled with gpu_mpi', abs(ierr))
-#endif
    !
    me     = dfft%mype + 1
    !
@@ -2052,7 +2048,6 @@ SUBROUTINE fft_scatter_many_columns_to_planes_store_omp ( dfft, f_in, nr3x, nxx_
       offset = offset + npp_(proc)
    ENDDO
    !
-   !$omp target data use_device_ptr(f_in)
    DO iter = 2, nprocp
       IF(IAND(nprocp, nprocp-1) == 0) THEN
         dest = IEOR( me-1, iter-1 )
@@ -2061,67 +2056,74 @@ SUBROUTINE fft_scatter_many_columns_to_planes_store_omp ( dfft, f_in, nr3x, nxx_
       ENDIF
       proc = dest + 1
       !
-      kdest = ( proc - 1 ) * sendsiz
-      kfrom = offset_proc( proc )
-      !
       npp_proc = npp_(proc)
-      !
-#ifdef __GPU_MPI
-!$omp target data use_device_ptr(f_in, f_aux)
-      DO k = 1, batchsize * ncpx
-         DO i = 1, npp_proc
-           f_aux( kdest + i + (k-1)*nppx ) = f_in( kfrom + i + (k-1)*nr3x )
-         END DO
-      END DO
-!$omp end target data
-#else
-#ifdef __IPC
-      IF(dfft%IPC_PEER( dest + 1 ) .eq. 1) THEN
-!$omp taskgroup
-!$omp target teams distribute parallel do collapse(2) nowait
-         DO k = 1, batchsize * ncpx
-            DO i = 1, npp_proc
-              f_aux( kdest + i + (k-1)*nppx ) = f_in( kfrom + i + (k-1)*nr3x )
-            END DO
-         END DO
-!$omp end target teams distribute parallel do
-!$omp end taskgroup
-      ELSE
-!$omp taskgroup
-!$omp target teams distribute parallel do collapse(2) nowait
-         DO k = 1, batchsize * ncpx
-            DO i = 1, npp_proc
-              f_aux( kdest + i + (k-1)*nppx ) = f_in( kfrom + i + (k-1)*nr3x )
-            END DO
-         END DO
-!$omp end target teams distribute parallel do
-!$omp end taskgroup
-      ENDIF
-#else
-      !
       ncp_me = batchsize*ncpx
       kdest = ncpx*(proc-1)*batchsize * nppx
       kfrom = offset_proc(proc)
       !
-      istat = hipMemcpy2DAsync( int(sizeof(dummy)),      &
+#if defined(__GPU_MPI_OMP)
+      !
+!!$omp target data use_device_ptr(f_in, f_aux)
+!      DO k = 1, batchsize * ncpx
+!         DO i = 1, npp_proc
+!           f_aux( kdest + i + (k-1)*nppx ) = f_in( kfrom + i + (k-1)*nr3x )
+!         END DO
+!      END DO
+!!$omp end target data
+      
+      !
+      !$omp target data use_device_ptr(f_in,f_aux)
+      istat = hipMemcpy2DAsync( int(sizeof(dummy)),    &
                                 c_loc(f_aux(kdest+1)), &
                                 c_loc(f_in(kfrom+1)),  &
                                 nppx,                  &
                                 nr3x,                  &
                                 npp_proc,              &
                                 ncp_me,                &
-#if defined(__GPU_MPI) || defined(__GPU_MPI_OMP)
                                 int(3,c_int),          &
-#else
-                                int(2,c_int),          &
-#endif
                                 dfft%bstreams(batch_id) )
+      !$omp end target data
+      !
+#else
+      !
+#ifdef __IPC
+      kdest = ( proc - 1 ) * sendsiz
+      kfrom = offset_proc( proc )
+      IF(dfft%IPC_PEER( dest + 1 ) .eq. 1) THEN
+!$omp target teams distribute parallel do collapse(2)
+         DO k = 1, batchsize * ncpx
+            DO i = 1, npp_proc
+              f_aux( kdest + i + (k-1)*nppx ) = f_in( kfrom + i + (k-1)*nr3x )
+            END DO
+         END DO
+      ELSE
+!$omp target teams distribute parallel do collapse(2)
+         DO k = 1, batchsize * ncpx
+            DO i = 1, npp_proc
+              f_aux( kdest + i + (k-1)*nppx ) = f_in( kfrom + i + (k-1)*nr3x )
+            END DO
+         END DO
+      ENDIF
+      !
+#else
+      !
+      !$omp target data use_device_ptr(f_in)
+      istat = hipMemcpy2DAsync( int(sizeof(dummy)),    &
+                                c_loc(f_aux(kdest+1)), &
+                                c_loc(f_in(kfrom+1)),  &
+                                nppx,                  &
+                                nr3x,                  &
+                                npp_proc,              &
+                                ncp_me,                &
+                                int(2,c_int),          &
+                                dfft%bstreams(batch_id) )
+      !$omp end target data
 #endif
 #endif
    ENDDO
-   !$omp end target data
    !
    istat = hipEventRecord( dfft%bevents(batch_id), dfft%bstreams(batch_id) )
+   !
    DEALLOCATE( offset_proc )
    !
 10 CONTINUE
@@ -2136,7 +2138,8 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
                                                          isgn, batchsize, batch_id, dfft_iss, dfft_nsw, dfft_nsp, dfft_ismap )
    !
    USE hipfft, ONLY: hipEventRecord, hipMemcpy2DAsync, hipMemcpy,hipMemcpyAsync, &
-                     hipcheck, hipdevicesynchronize, hipStreamWaitEvent
+                     hipCheck, hipDeviceSynchronize, hipStreamWaitEvent, hipEventSynchronize
+   USE hip_kernels, ONLY: scalar_init, loop2d_scatter_hip
    !
    IMPLICIT NONE
    !
@@ -2158,10 +2161,6 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
    !
    INTEGER :: iter, dest, sorc, req_cnt
    INTEGER :: istatus(MPI_STATUS_SIZE)
-   !
-#ifdef __GPU_MPI
-   CALL fftx_error__('fft_scatter_many_', 'OMP batched FFT not enabled with gpu_mpi', abs(ierr))
-#endif
    !
    me     = dfft%mype + 1
    !
@@ -2190,6 +2189,8 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
    gcomm = dfft%comm
    !
    ! JR Note: Holding off staging receives until buffer is packed.
+   istat = hipEventSynchronize(dfft%bevents(batch_id))
+   !
    CALL start_clock ('A2A')
 #ifdef __IPC
    !TODO: possibly remove this barrier by ensuring recv buffer is not used by previous operation
@@ -2206,8 +2207,8 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
 #ifdef __IPC
       IF(dfft%IPC_PEER( sorc + 1 ) .eq. 0) THEN
 #endif
-#ifdef __GPU_MPI
-!$omp target data use_device_ptr(f_aux2)
+#if defined(__GPU_MPI_OMP)
+!$omp target data use_device_addr(f_aux2)
          CALL MPI_IRECV( f_aux2((sorc)*sendsiz + 1), sendsiz, MPI_DOUBLE_COMPLEX, sorc, 0, gcomm, dfft%srh(req_cnt+1, batch_id), ierr )
 !$omp end target data
 #else
@@ -2218,7 +2219,7 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
       ENDIF
 #endif
    ENDDO
-
+   !
    DO iter = 2, nprocp
       IF(IAND(nprocp, nprocp-1) == 0) THEN
          dest = IEOR( me-1, iter-1 )
@@ -2230,8 +2231,8 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
          CALL ipc_send( f_aux_d((dest)*sendsiz + 1), sendsiz, f_aux2_d((me-1)*sendsiz + 1), 1, dest, gcomm, ierr )
       ELSE
 #endif
-#ifdef __GPU_MPI
-!$omp target data use_device_ptr(f_aux)
+#if defined(__GPU_MPI_OMP)
+!$omp target data use_device_addr(f_aux)
          CALL MPI_ISEND( f_aux((dest)*sendsiz + 1), sendsiz, MPI_DOUBLE_COMPLEX, dest, 0, gcomm, dfft%srh(req_cnt+1, batch_id), ierr )
 !$omp end target data
 #else
@@ -2270,10 +2271,8 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
                                 dfft%bstreams(batch_id) )
    !$omp end target data
    !
-   CALL hipCheck(hipDeviceSynchronize())
-
    IF(req_cnt .gt. 0) CALL MPI_WAITALL(req_cnt, dfft%srh(1:req_cnt, batch_id), MPI_STATUSES_IGNORE, ierr)
-
+   !
 #ifdef __IPC
    CALL sync_ipc_sends( gcomm )
    CALL MPI_Barrier( gcomm, ierr )
@@ -2281,7 +2280,7 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
    CALL stop_clock ('A2A')
 
    IF( abs(ierr) /= 0 ) CALL fftx_error__ ('fft_scatter', 'info<>0', abs(ierr) )
-#ifndef __GPU_MPI
+#if !defined(__GPU_MPI_OMP)
    DO proc = 1, nprocp
       IF (proc .ne. me) THEN
 #ifdef __IPC
@@ -2303,31 +2302,28 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
    ENDDO
 #endif
    !
-   !i = cudaEventRecord(dfft%bevents(batch_id), dfft%bstreams(batch_id))
-   !i = cudaStreamW(dfft%a2a_comp, dfft%bevents(batch_id), 0)
-   !istat = hipEventRecord( dfft%bevents(batch_id), dfft%bstreams(batch_id) )
-   !istat = hipStreamWaitEvent( dfft%a2a_comp, dfft%bstreams(batch_id), 0)
-   !
-   CALL hipCheck(hipDeviceSynchronize())
-   !
+   istat = hipEventRecord( dfft%bevents(batch_id), dfft%bstreams(batch_id) )
+   istat = hipStreamWaitEvent( dfft%a2a_comp, dfft%bevents(batch_id), 0)
    !
 10 CONTINUE
    !
    ! Zero out f_aux_d
+#if defined(__NO_HIPKERN)
 !$omp target teams distribute parallel do
    do i = lbound(f_aux,1), ubound(f_aux,1)
      f_aux(i) = (0.d0, 0.d0)
    end do
-!$omp end target teams distribute parallel do
-
+#else
+   nnp = 2*batchsize*nxx_
+   CALL scalar_init(f_aux,0.d0,nnp, dfft%a2a_comp)
+#endif
+   !
    npp = dfft%nr3p( me )
    nnp = dfft%nnp
    IF( isgn == 1 ) THEN
-! $ omp taskgroup
       DO ip = 1, nprocp
          ioff = dfft_iss( ip )
          nswip = dfft_nsp( ip )
-!!$omp target teams distribute parallel do collapse(3) nowait
 !$omp target teams distribute parallel do collapse(3)
          DO i = 0, batchsize-1
             DO cuf_j = 1, npp
@@ -2340,13 +2336,13 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
          ENDDO
 !$omp end target teams distribute parallel do
       ENDDO
-! $ omp end taskgroup
+      !
    ELSE
-! $ omp taskgroup
+      !
       DO gproc = 1, nprocp
          ioff = dfft_iss( gproc )
          nswip =  dfft_nsw( gproc )
-!!$omp target teams distribute parallel do collapse(3) nowait
+#if defined(__NO_HIPKERN)
 !$omp target teams distribute parallel do collapse(3)
          DO i = 0, batchsize-1
             DO cuf_j = 1, npp
@@ -2358,18 +2354,29 @@ SUBROUTINE fft_scatter_many_columns_to_planes_send_omp ( dfft, f_in, nr3x, nxx_,
             ENDDO
          ENDDO
 !$omp end target teams distribute parallel do
-      ENDDO
-! $ omp end taskgroup
-   END IF
-
+#else
+         DO i = 0, batchsize-1
+            CALL loop2d_scatter_hip( -1, f_aux2(:), f_aux(:), dfft_ismap(ioff+1:ioff+nswip), nppx, &
+                                     nnp, 2*(gproc-1)*sendsiz+2*i*nppx*ncpx, 2*i*nnr, npp, nswip,  &
+                                     dfft%a2a_comp )
+         ENDDO
 #endif
-
+      ENDDO
+      !
+   END IF
+   !
+#endif
+   !
   RETURN
-
+   !
 END SUBROUTINE fft_scatter_many_columns_to_planes_send_omp
 
 SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_aux, f_aux2, ncp_, npp_, isgn, batchsize, &
                                 batch_id, dfft_iss, dfft_nsw, dfft_nsp, dfft_ismap )
+   !
+   USE hipfft, ONLY: hipEventRecord, hipMemcpy2DAsync, hipMemcpy,hipMemcpyAsync, &
+                     hipcheck, hipdevicesynchronize,hipStreamWaitEvent,hipEventRecord
+   USE hip_kernels, ONLY: loop2d_scatter_hip
    !
    IMPLICIT NONE
    !
@@ -2391,6 +2398,7 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
    LOGICAL :: use_tg
    INTEGER :: iter, dest, sorc
    INTEGER :: istatus(MPI_STATUS_SIZE)
+   COMPLEX(DP) :: dummy
 
    me     = dfft%mype + 1
    !
@@ -2420,7 +2428,7 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
    npp = dfft%nr3p( me )
    nnp = dfft%nnp
    IF( isgn == -1 ) THEN
-! $ omp taskgroup
+      !
       DO iter = 1, nprocp
          IF(IAND(nprocp, nprocp-1) == 0) THEN
             dest = IEOR( me-1, iter-1 )
@@ -2430,7 +2438,6 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
          ip = dest + 1
          ioff = dfft_iss( ip )
          nswip = dfft_nsp( ip )
-!!$omp target teams distribute parallel do collapse(3) nowait
 !$omp target teams distribute parallel do collapse(3)
          DO i = 0, batchsize-1
             DO cuf_j = 1, npp
@@ -2443,9 +2450,9 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
          ENDDO
 !$omp end target teams distribute parallel do
       ENDDO
-! $ omp end taskgroup
+      !
    ELSE
-! $ omp taskgroup
+      !
       DO iter = 1, nprocp
          IF(IAND(nprocp, nprocp-1) == 0) THEN
             dest = IEOR( me-1, iter-1 )
@@ -2455,7 +2462,7 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
          gproc = dest + 1
          ioff = dfft_iss( gproc )
          nswip = dfft_nsw( gproc )
-!!$omp target teams distribute parallel do collapse(3) nowait
+#if defined(__NO_HIPKERN)
 !$omp target teams distribute parallel do collapse(3)
          DO i = 0, batchsize-1
             DO cuf_j = 1, npp
@@ -2466,12 +2473,21 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
                ENDDO
             ENDDO
          ENDDO
-!$omp end target teams distribute parallel do
+#else
+         DO i = 0, batchsize-1
+            CALL loop2d_scatter_hip( 1, f_aux(:), f_aux2(:), dfft_ismap(ioff+1:ioff+nswip), nppx, &
+                                     nnp, 2*(gproc-1)*sendsiz+2*i*nppx*ncpx, 2*i*nnr, npp, nswip, &
+                                     dfft%a2a_comp )
+         ENDDO
+#endif
       ENDDO
-! $ omp end taskgroup
+      !
    END IF
 
-#ifndef __GPU_MPI
+#ifndef __GPU_MPI_OMP
+   i = hipEventRecord( dfft%bevents(batch_id), dfft%a2a_comp )
+   i = hipStreamWaitEvent( dfft%bstreams(batch_id), dfft%bevents(batch_id), 0 )
+
    DO proc = 1, nprocp
       IF (proc .ne. me) THEN
 #ifdef __IPC
@@ -2481,10 +2497,22 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
 #else
          kdest = ( proc - 1 ) * sendsiz
 #endif
-!$omp target update from (f_aux2(kdest+1:kdest+sendsiz))
+         !$omp target data use_device_ptr(f_aux2)
+         istat = hipMemcpyAsync( int(sizeof(dummy)), c_loc(f_aux(kdest+1)), c_loc(f_aux2(kdest+1)), &
+                                 sendsiz,int(2,c_int), dfft%bstreams(batch_id) )
+         !$omp end target data
+         istat = hipMemcpyAsync( int(sizeof(dummy)), c_loc(f_aux2(kdest+1)), c_loc(f_aux(kdest+1)), &
+                                 sendsiz,int(0,c_int), dfft%bstreams(batch_id) )
       ENDIF
    ENDDO
 #endif
+
+#ifdef __GPU_MPI_OMP
+   istat = hipEventRecord( dfft%bevents(batch_id), dfft%a2a_comp )
+#else
+   istat = hipEventRecord( dfft%bevents(batch_id), dfft%bstreams(batch_id) )
+#endif
+
 #endif
 
   RETURN
@@ -2492,6 +2520,9 @@ SUBROUTINE fft_scatter_many_planes_to_columns_store_omp ( dfft, nr3x, nxx_, f_au
 END SUBROUTINE fft_scatter_many_planes_to_columns_store_omp
 
 SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_, f_aux, f_aux2, ncp_, npp_, isgn, batchsize, batch_id )
+   !
+   USE hipfft, ONLY: hipEventRecord, hipMemcpy2DAsync, hipMemcpy,hipMemcpyAsync, &
+                     hipcheck, hipdevicesynchronize, hipEventSynchronize
    !
    IMPLICIT NONE
    !
@@ -2506,6 +2537,7 @@ SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_,
 
    INTEGER :: iter, dest, sorc, req_cnt, npp_gproc, npp_me
    INTEGER :: istatus(MPI_STATUS_SIZE)
+   COMPLEX(DP) :: dummy
 
    me     = dfft%mype + 1
    !
@@ -2537,6 +2569,7 @@ SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_,
    gcomm = dfft%comm
    !
    ! JR Note: Holding off staging receives until buffer is packed.
+   istat = hipEventSynchronize( dfft%bevents(batch_id) )
    CALL start_clock ('A2A')
 #ifdef __IPC
    ! TODO: possibly remove this barrier
@@ -2553,7 +2586,7 @@ SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_,
 #ifdef __IPC
       IF(dfft%IPC_PEER( sorc + 1 ) .eq. 0) THEN
 #endif
-#ifdef __GPU_MPI
+#ifdef __GPU_MPI_OMP
 !$omp target data use_device_ptr(f_aux)
          call MPI_IRECV( f_aux((sorc)*sendsiz + 1), sendsiz, MPI_DOUBLE_COMPLEX, sorc, 0, gcomm, dfft%srh(req_cnt+1, batch_id), ierr )
 !$omp end target data
@@ -2577,7 +2610,8 @@ SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_,
          CALL ipc_send( f_aux2_d((dest)*sendsiz + 1), sendsiz, f_aux_d((me-1)*sendsiz + 1), 0, dest, gcomm, ierr )
       ELSE
 #endif
-#ifdef __GPU_MPI
+
+#ifdef __GPU_MPI_OMP
 !$omp target data use_device_ptr(f_aux2)
          call MPI_ISEND( f_aux2((dest)*sendsiz + 1), sendsiz, MPI_DOUBLE_COMPLEX, dest, 0, gcomm, dfft%srh(req_cnt+1, batch_id), ierr )
 !$omp end target data
@@ -2594,19 +2628,35 @@ SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_,
    ! directly from f_aux_2 to f_in. The rest will be done below.
    offset = 0
    DO proc = 1, me-1
-      offset = offset + npp_ ( proc )
+      offset = offset + npp_(proc)
    ENDDO
    npp_me=npp_(me)
-!$omp target teams distribute parallel do collapse(2)
-    DO k = 1, batchsize * ncpx
-       DO i = 1, npp_me
-         f_in( offset + i + (k-1)*nr3x ) = f_aux2( (me - 1) * sendsiz + i + (k-1)*nppx )
-       END DO
-    END DO
-!$omp end target teams distribute parallel do
+   !!$omp target teams distribute parallel do collapse(2)
+!    DO k = 1, batchsize * ncpx
+!       DO i = 1, npp_me
+!         f_in( offset + i + (k-1)*nr3x ) = f_aux2( (me - 1) * sendsiz + i + (k-1)*nppx )
+!       END DO
+!    END DO
+!!$omp end target teams distribute parallel do
+   kfrom = (me-1)*sendsiz
+   kdest = offset
+   !
+   !$omp target data use_device_addr(f_in,f_aux2)
+   istat = hipMemcpy2DAsync( int(sizeof(dummy)),        &
+                                c_loc(f_in(kdest+1)),   &
+                                c_loc(f_aux2(kfrom+1)), &
+                                nr3x,                  &
+                                nppx,                  &
+                                npp_me,                &
+                                batchsize*ncpx,        &
+                                int(3,c_int),          &
+                                dfft%bstreams(batch_id) )
+   !$omp end target data
+   !
    IF(req_cnt .gt. 0) then
       call MPI_WAITALL(req_cnt, dfft%srh(1:req_cnt, batch_id), MPI_STATUSES_IGNORE, ierr)
    ENDIF
+   !
 #ifdef __IPC
    call sync_ipc_sends( gcomm )
    call MPI_Barrier( gcomm, ierr )
@@ -2617,59 +2667,83 @@ SUBROUTINE fft_scatter_many_planes_to_columns_send_omp ( dfft, f_in, nr3x, nxx_,
    !
    !  Store contiguously the (remaining) columns (one already done above).
    !
-   !! f_in = 0.0_DP
-   !
    offset = 0
-!$omp target update to (f_aux)
-! $ omp taskgroup
+   !
    DO gproc = 1, nprocp
       kdest = ( gproc - 1 ) * sendsiz
       kfrom = offset
       npp_gproc=npp_(gproc)
       IF (gproc .ne. me) THEN ! (me already done above)
-#ifdef __GPU_MPI
-!$omp target data use_device_ptr(f_in, f_aux)
-        DO k = 1, batchsize * ncpx
-           DO i = 1, npp_gproc
-             f_in( kfrom + i + (k-1)*nr3x ) = f_aux( kdest + i + (k-1)*nppx )
-           END DO
-        END DO
-!$omp end target data
+      !
+#ifdef __GPU_MPI_OMP
+      !
+!!$omp target data use_device_ptr(f_in, f_aux)
+!        DO k = 1, batchsize * ncpx
+!           DO i = 1, npp_gproc
+!             f_in( kfrom + i + (k-1)*nr3x ) = f_aux( kdest + i + (k-1)*nppx )
+!           END DO
+!        END DO
+!!$omp end target data
+      !
+      !$omp target data use_device_addr(f_in,f_aux)
+      istat = hipMemcpy2DAsync( int(sizeof(dummy)),    &
+                                c_loc(f_in(kfrom+1)),  &
+                                c_loc(f_aux(kdest+1)), &
+                                nr3x,                  &
+                                nppx,                  &
+                                npp_gproc,             &
+                                batchsize*ncpx,        &
+                                int(3,c_int),          &
+                                dfft%bstreams(batch_id) )
+      !$omp end target data
+      !
 #else
+      !
 #ifdef __IPC
         IF(dfft%IPC_PEER( gproc ) .eq. 1) THEN
-!$omp target teams distribute parallel do collapse(2) nowait
-           DO k = 1, batchsize * ncpx
-              DO i = 1, npp_gproc
-                f_in( kfrom + (k-1)*nr3x + i ) = f_aux( kdest + (k-1)*nppx + i )
-              END DO
-           END DO
-!$omp end target teams distribute parallel do
-        ELSE
-!$omp target teams distribute parallel do collapse(2) nowait
-           DO k = 1, batchsize * ncpx
-              DO i = 1, npp_gproc
-                f_in( kfrom + (k-1)*nr3x + i ) = f_aux( kdest + (k-1)*nppx + i )
-              END DO
-           END DO
-!$omp end target teams distribute parallel do
-        ENDIF
-#else
-!!$omp target teams distribute parallel do collapse(2) nowait
 !$omp target teams distribute parallel do collapse(2)
            DO k = 1, batchsize * ncpx
               DO i = 1, npp_gproc
                 f_in( kfrom + (k-1)*nr3x + i ) = f_aux( kdest + (k-1)*nppx + i )
               END DO
            END DO
-!$omp end target teams distribute parallel do
+        ELSE
+!$omp target teams distribute parallel do collapse(2)
+           DO k = 1, batchsize * ncpx
+              DO i = 1, npp_gproc
+                f_in( kfrom + (k-1)*nr3x + i ) = f_aux( kdest + (k-1)*nppx + i )
+              END DO
+           END DO
+        ENDIF
+     !
+#else
+     !
+!!$omp target teams distribute parallel do collapse(2)
+!           DO k = 1, batchsize * ncpx
+!              DO i = 1, npp_gproc
+!                f_in( kfrom + (k-1)*nr3x + i ) = f_aux( kdest + (k-1)*nppx + i )
+!              END DO
+!           END DO
+!!$omp end target teams distribute parallel do
+        !
+        !$omp target data use_device_addr(f_in)
+        istat = hipMemcpy2DAsync( int(sizeof(dummy)),  &
+                                c_loc(f_in(kfrom+1)),  &
+                                c_loc(f_aux(kdest+1)), &
+                                nr3x,                  &
+                                nppx,                  &
+                                npp_gproc,             &
+                                batchsize*ncpx,        &
+                                int(1,c_int),          &
+                                dfft%bstreams(batch_id) )
+        !$omp end target data
+        !
 #endif
 #endif
       ENDIF
       offset = offset + npp_gproc
    ENDDO
-! $ omp end taskgroup
-
+   !
 20 CONTINUE
 
 #endif

@@ -46,10 +46,10 @@ CONTAINS
    !
    IF( ALLOCATED( dfft%nl ) ) THEN
 #if defined(__OPENMP_GPU)
-     !$omp target exit data map(delete:dfft%nl)
+   !$omp target exit data map(delete:dfft%nl)
 #endif
      DEALLOCATE( dfft%nl )
-   ENDIF
+   END IF 
    ALLOCATE( dfft%nl( dfft%ngm ) )
 #if defined(__OPENMP_GPU)
    !$omp target enter data map(always,alloc:dfft%nl)
@@ -57,10 +57,10 @@ CONTAINS
    if (dfft%lgamma) THEN
       IF( ALLOCATED( dfft%nlm ) ) THEN
 #if defined(__OPENMP_GPU)
-        !$omp target exit data map(delete:dfft%nlm)
+      !$omp target exit data map(delete:dfft%nlm)
 #endif
         DEALLOCATE( dfft%nlm )
-      ENDIF
+      END IF
       ALLOCATE( dfft%nlm( dfft%ngm ) )
 #if defined(__OPENMP_GPU)
       !$omp target enter data map(always,alloc:dfft%nlm)
@@ -107,7 +107,7 @@ CONTAINS
    !
 #if defined(__OPENMP_GPU)
    !$omp target update to(dfft%nl, dfft%nlm)
-#endif
+#endif 
    !
 #if defined(__CUDA)
    IF( ALLOCATED( dfft%nl_d ) ) DEALLOCATE( dfft%nl_d )
@@ -123,3 +123,5 @@ CONTAINS
 !=----------------------------------------------------------------------=
    END MODULE fft_ggen
 !=----------------------------------------------------------------------=
+
+
