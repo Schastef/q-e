@@ -66,7 +66,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   USE eqv,                  ONLY : dvpsi
   USE qpoint,               ONLY : xq, nksq, ikks, ikqs
   USE qpoint_aux,           ONLY : ikmks, becpt, alphapt
-  USE control_lr,           ONLY : convt, rec_code, rec_code_read, where_rec, lrhoun
+  USE control_lr,           ONLY : convt, rec_code, rec_code_read, where_rec, lmultipole
   USE uspp_init,            ONLY : init_us_2
   USE lr_nc_mag,            ONLY : int1_nc_save, deeq_nc_save
   USE dfpt_kernels,         ONLY : dfpt_kernel
@@ -160,7 +160,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
     dr2 = 0.d0
   endif
   !
-  IF (lrhoun) THEN
+  IF (lmultipole) THEN
     !
     IF (irr == 1) THEN
       iter0 = 0
@@ -265,7 +265,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   !
   IF (convt) THEN
      !
-     IF (lrhoun) CALL write_epsilon(npe,drhop)
+     IF (lmultipole) CALL write_epsilon(npe,drhop)
      !
      CALL drhodvus (irr, imode0, dvscfp, npe)
      IF (nlcc_any) CALL dynmat_nlcc (imode0, drhop, npe)

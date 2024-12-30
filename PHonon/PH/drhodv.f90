@@ -55,7 +55,7 @@ subroutine drhodv (nu_i0, nper, drhos)
   USE mp,               ONLY : mp_sum
   USE uspp_init,        ONLY : init_us_2
   USE control_flags,    ONLY : offload_type
-  USE control_lr,       ONLY : lrhoun
+  USE control_lr,       ONLY : lmultipole
 
   implicit none
 
@@ -117,7 +117,7 @@ subroutine drhodv (nu_i0, nper, drhos)
      DO isolv=1, nsolv
         do mu = 1, nper
            !
-           IF (.NOT. lrhoun) THEN
+           IF (.NOT. lmultipole) THEN
              nrec = (mu - 1) * nksq + ik + (isolv-1) * nksq * nper
              if (nksq > 1 .or. nper > 1 .OR. nsolv==2) then
                                call get_buffer(dpsi, lrdwf, iudwf, nrec)

@@ -29,7 +29,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   USE qpoint,           ONLY : xq, eigqts
   USE modes,            ONLY : nmodes
   USE dv_of_drho_lr,    ONLY : dv_of_drho_xc
-  USE control_lr,       ONLY : lmacro, current_mode
+  USE control_lr,       ONLY : current_mode, lmultipole
   !
   IMPLICIT NONE
   !
@@ -163,7 +163,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
      deallocate (auxs)
   endif
   !
-  IF (lmacro .AND. gg(1) < 1d-8) THEN
+  IF (lmultipole .AND. gg(1) < 1d-8) THEN
     CALL Vaeps_dvloc(dvlocin(dffts%nl(1)), current_mode, dffts%nl(1))
   ENDIF
   !

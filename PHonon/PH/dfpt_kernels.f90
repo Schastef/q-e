@@ -120,7 +120,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
    USE qpoint,               ONLY : xq
    USE control_ph,           ONLY : lnoloc
    USE control_lr,           ONLY : lgamma, niter_ph, nmix_ph, tr2_ph, alpha_mix, convt, &
-                                    lgamma_gamma, flmixdpot, where_rec, lrhoun
+                                    lgamma_gamma, flmixdpot, where_rec, lmultipole
    USE dv_of_drho_lr,        ONLY : dv_of_drho
    USE ldaU,                 ONLY : lda_plus_u
    USE lr_nc_mag,            ONLY : int3_nc_save
@@ -313,7 +313,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
          CALL zcopy(npert * nspin_mag * dfftp%nnr, drhos, 1, drhop, 1)
       ENDIF
       !
-      IF (lrhoun) call psymdvscf (drhos)
+      IF (lmultipole) call psymdvscf (drhos)
       !
       !  In the noncolinear, spin-orbit case rotate dbecsum
       !
@@ -385,7 +385,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       IF (.NOT. lgamma_gamma) THEN
          CALL psymdvscf(drhop)
          !
-         IF (lrhoun) THEN
+         IF (lmultipole) THEN
           if (doublegrid) then
             do is = 1, nspin_mag
               do ipert = 1, npert

@@ -14,10 +14,8 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   USE constants,            ONLY : fpi,e2
   USE cell_base,            ONLY : tpiba
   USE qpoint,               ONLY : xq
-  USE control_ph,           ONLY : extpot
   use mp,                   ONLY : mp_sum
   USE mp_bands,             ONLY : intra_bgrp_comm
-  USE control_lr,           ONLY : lmacro
   USE output,               ONLY : fildvscf
   !
   IMPLICIT NONE
@@ -40,8 +38,8 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   CALL fwfft ('Rho', dvscf_toprint(:,1,1), dfftp)
   CALL fwfft ('Rho', drho_toprint(:,1,1), dfftp)
   !
-  drho_toprint = drho_toprint / extpot
-  dvscf_toprint = dvscf_toprint / extpot
+  drho_toprint = drho_toprint 
+  dvscf_toprint = dvscf_toprint 
   !
   drhoaux=0d0
   dvaux=0d0
@@ -57,50 +55,24 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
     iurhoun=find_free_unit()
     OPEN(unit=iurhoun, file=fildvscf)
     !
-    IF (.NOT. lmacro) THEN
-      WRITE(iurhoun, '(a)') "#  Re(\rho^{el}_q),Im(\rho^{el}_q),Re(V^{tot}_q),Im(V^{tot}_q)"
-    ELSE
-      WRITE(iurhoun, '(a)') "#  Re(\bar \rho^{el}_q),Im(\bar \rho^{el}_q),Re(\bar V^{tot}_q),Im(\bar V^{tot}_q)"
-    ENDIF
+    WRITE(iurhoun, '(a)') "#  Re(\bar \rho^{el}_q),Im(\bar \rho^{el}_q),Re(\bar V^{tot}_q),Im(\bar V^{tot}_q)"
     !
     WRITE(iurhoun,'(4f18.12)') real(drhoaux), aimag(drhoaux),&
                                real(dvaux)  , aimag(dvaux)
     !
     vq = fpi*e2/tpiba**2/dot_product(xq,xq)
     !
-    IF (.NOT. lmacro) THEN
-      !
-      WRITE(iurhoun, '(a)') "#  $\epsilon^{-1}_q$ Eq. (93) PRB 110, 094306 (2024)"
-      !
-      epsm1 = 1d0+dvaux
-      WRITE(iurhoun,'(2f18.12)') REAL(epsm1), AIMAG(epsm1)
-      !
-      WRITE(iurhoun, '(a)') "#  $1/\epsilon^{-1}_q$"
-      WRITE(iurhoun,'(2f18.12)') REAL(1d0/epsm1), AIMAG(1d0/epsm1)
-      !
-      WRITE(iurhoun, '(a)') "#  $\chi_{q}$ Eq. (31) PRB 110, 094306 (2024)"
-      !
-      chi = drhoaux
-      WRITE(iurhoun,'(2f18.12)') REAL(chi), AIMAG(chi)
-      !
-      WRITE(iurhoun, '(a)') "#  $\epsilon^{-1}_{L}(q)$   Eq. (44) PRB 110, 094306 (2024)"
-      WRITE(iurhoun,'(2f18.12)') REAL(1d0+vq*chi), AIMAG(1d0+vq*chi)
-      !
-    ELSE
-      !
-      chi0 = drhoaux/(1d0+dvaux)
-      WRITE(iurhoun, '(a)') "#  $\bar \chi^0_q$"
-      WRITE(iurhoun,'(2f18.12)') REAL(chi0), AIMAG(chi0)
-      !
-      WRITE(iurhoun, '(a)') "#  $\bar \chi_q$   Eq. (32) PRB 110, 094306 (2024)"
-      !
-      barchi = drhoaux
-      WRITE(iurhoun,'(2f18.12)') REAL(barchi), AIMAG(barchi)
-      !
-      WRITE(iurhoun, '(a)') "# $1/\epsilon^{-1}_{L}(q)$   Eqs. (43) and (45) PRB 110, 094306 (2024)"
-      WRITE(iurhoun,'(2f18.12)') REAL(1d0-vq*drhoaux), AIMAG(1d0-vq*drhoaux)
-      !
-    ENDIF
+    chi0 = drhoaux/(1d0+dvaux)
+    WRITE(iurhoun, '(a)') "#  $\bar \chi^0_q$"
+    WRITE(iurhoun,'(2f18.12)') REAL(chi0), AIMAG(chi0)
+    !
+    WRITE(iurhoun, '(a)') "#  $\bar \chi_q$   Eq. (32) PRB 110, 094306 (2024)"
+    !
+    barchi = drhoaux
+    WRITE(iurhoun,'(2f18.12)') REAL(barchi), AIMAG(barchi)
+    !
+    WRITE(iurhoun, '(a)') "# $1/\epsilon^{-1}_{L}(q)$   Eqs. (43) and (45) PRB 110, 094306 (2024)"
+    WRITE(iurhoun,'(2f18.12)') REAL(1d0-vq*drhoaux), AIMAG(1d0-vq*drhoaux)
     !
   ENDIF
   !
@@ -125,12 +97,10 @@ SUBROUTINE write_drhoun
   USE uspp_param,     ONLY : upf
   USE constants,      ONLY : tpi, e2 
   USE mp_bands,       ONLY : intra_bgrp_comm
-  USE control_ph,     ONLY : extpot
   USE eqv,            ONLY : vlocq
   USE gvecs,          ONLY : ngms, ngms_g
   USE dynmat,         ONLY : dyn
   use mp,             ONLY : mp_sum
-  USE control_lr,     ONLY : lmacro
   USE output,         ONLY : fildrho
   !
   IMPLICIT NONE
@@ -195,13 +165,8 @@ SUBROUTINE write_drhoun
     iudumpdrho = find_free_unit()
     !
     OPEN(unit=iudumpdrho,file=fildrho)
-    IF (.NOT. lmacro) THEN
-      WRITE(iudumpdrho,*) '#     Re(\rho^{tot}_{qsx}),Im(\rho^{tot}_{qsx}),Re(\rho^{tot}_{qsy}),&
-                                 & Im(\rho^{tot}_{qsy}),Re(\rho^{tot}_{qsz}),Im(\rho^{tot}_{qsz}) '
-    ELSE
-      WRITE(iudumpdrho,*) '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
+    WRITE(iudumpdrho,*) '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
                                  & Im(\bar \rho^{tot}_{qsy}),Re(\bar \rho^{tot}_{qsz}),Im(\bar \rho^{tot}_{qsz}) '
-    ENDIF
     !
     DO ig=1,ngms_g 
       !
@@ -218,8 +183,6 @@ SUBROUTINE write_drhoun
           phase(na)= CMPLX( COS( arg ),  SIN( arg ) ,kind=DP)
           !
         ENDDO
-        !
-        phi = phi / extpot
         !
         DO na=1,nat
           !

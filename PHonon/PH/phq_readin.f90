@@ -63,7 +63,7 @@ SUBROUTINE phq_readin()
 
   USE qpoint,        ONLY : nksq, xq
   USE control_lr,    ONLY : lgamma, lrpa, alpha_mix, lgamma_gamma, tr2_ph, niter_ph, &
-                            nmix_ph, maxter, reduce_io, rec_code_read, lrhoun, lmacro
+                            nmix_ph, maxter, reduce_io, rec_code_read, lmultipole
   ! YAMBO >
   USE YAMBO,         ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <
@@ -127,7 +127,7 @@ SUBROUTINE phq_readin()
                        lshift_q, read_dns_bare, d2ns_type, diagonalization, &
                        ldvscf_interpolate, do_long_range, do_charge_neutral, &
                        wpot_dir, ahc_dir, ahc_nbnd, ahc_nbndskip, &
-                       skip_upper, dftd3_hess, kx, ky, kz, lrhoun, lmacro
+                       skip_upper, dftd3_hess, kx, ky, kz, lmultipole
 
   ! tr2_ph       : convergence threshold
   ! amass        : atomic masses
@@ -212,8 +212,7 @@ SUBROUTINE phq_readin()
   ! skip_upper: If .true., skip the calculation of upper Fan self-energy.
   !
   ! dftd3_hess: file from where the dftd3 hessian is read
-  ! lrhoun : If .true. macroscopic density response to q-potential perturbation is written as output
-  ! lmacro : If .true. a calculation with null macroscopic electric field is performed
+  ! lmultipole : If .true. macroscopic density response to q-potential perturbation is written as output
   !
   ! Note: meta_ionode is a single processor that reads the input
   !       (ionode is also a single processor but per image)
@@ -498,8 +497,8 @@ SUBROUTINE phq_readin()
   ENDIF
   !
   ! Set default value for fildrho and fildvscf if they are required
-  IF ( (lraman.OR.elop.OR.drho_star%open.or.lrhoun) .AND. fildrho == ' ') fildrho = 'drho'
-  IF ( (elph_mat.OR.dvscf_star%open.or.lrhoun) .AND. fildvscf == ' ') fildvscf = 'dvscf'
+  IF ( (lraman.OR.elop.OR.drho_star%open.or.lmultipole) .AND. fildrho == ' ') fildrho = 'drho'
+  IF ( (elph_mat.OR.dvscf_star%open.or.lmultipole) .AND. fildvscf == ' ') fildvscf = 'dvscf'
   !
   !  We can calculate  dielectric, raman or elop tensors and no Born effective
   !  charges dF/dE, but we cannot calculate Born effective charges dF/dE
@@ -858,13 +857,11 @@ SUBROUTINE phq_readin()
   IF (tqr) CALL errore('phq_readin',&
      'The phonon code with Q in real space not available',1)
 
-  ! FM : incompatibility for lrhoun and lmacro
-  IF (lmacro .and. .NOT. lrhoun) CALL errore('phq_readin',&
-     'lmacro only works with lrhoun',1)
-  IF (lmacro .and. (okvan .or. domag)) CALL errore('phq_readin',&
-     'lmacro implemented only for norm-conserving potential, and without magnetization',1)
-  IF (lrhoun .and. (ltetra .OR. lgauss)) CALL errore('phq_readin',&
-          'lrhoun does not work with metal',1)
+  ! FM : incompatibility for lmultipole
+  IF (lmultipole .and. (okvan .or. domag)) CALL errore('phq_readin',&
+     'lmultipole implemented only for norm-conserving potential, and without magnetization',1)
+  IF (lmultipole .and. (ltetra .OR. lgauss)) CALL errore('phq_readin',&
+          'lmultipole does not work with metal',1)
   !
   !
   IF (start_irr < 0 ) CALL errore('phq_readin', 'wrong start_irr',1)

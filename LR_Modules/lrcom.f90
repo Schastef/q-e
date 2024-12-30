@@ -102,10 +102,8 @@ MODULE control_lr
   REAL(DP) :: alpha_mix(maxter)
   !! the mixing parameter
   !
-  LOGICAL :: lrhoun=.FALSE.   
+  LOGICAL :: lmultipole=.FALSE.   
   !! if TRUE macroscopic density response to q-potential perturbation is written as output
-  LOGICAL :: lmacro=.FALSE.   
-  !! if TRUE a calculation with null macroscopic electric field is performed
   INTEGER :: current_mode     
   !! Keeps track of the current mode
 END MODULE control_lr

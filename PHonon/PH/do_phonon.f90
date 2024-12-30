@@ -48,7 +48,7 @@ SUBROUTINE do_phonon(auxdyn)
   USE buffers,        ONLY : close_buffer
   USE control_flags,  ONLY : use_gpu
   USE environment,   ONLY : print_cuda_info
-  USE control_lr,     ONLY : lrhoun
+  USE control_lr,     ONLY : lmultipole
   
   IMPLICIT NONE
   !
@@ -118,8 +118,8 @@ SUBROUTINE do_phonon(auxdyn)
      IF ( trans ) THEN
         !
         CALL phqscf()
-        IF (lrhoun) CALL write_drhoun()
-        IF (.NOT. lrhoun) CALL dynmatrix_new(iq)
+        IF (lmultipole) CALL write_drhoun()
+        IF (.NOT. lmultipole) CALL dynmatrix_new(iq)
         !
      END IF
      !
