@@ -56,6 +56,8 @@ X_AC_QE_LD()
 # Checking CUDA...
 X_AC_QE_CUDA()
 
+# Checking OMP_GPU ... 
+X_AC_QE_OMPGPU()
 # Checking F90 rule...
 X_AC_QE_F90RULE()
 
@@ -143,3 +145,5 @@ AC_OUTPUT
 # final messages
 sed '/@delete@/d' configure.msg
 echo configure: success
+
+
