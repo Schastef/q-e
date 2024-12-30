@@ -51,8 +51,10 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   drhoaux=0d0
   dvaux=0d0
   IF (gg(1) < 1d-8) THEN
+    !      
     drhoaux = drho_toprint(dfftp%nl(1),1,1)
     dvaux   = dvscf_toprint(dfftp%nl(1),1,1)
+    !
   ENDIF
   CALL mp_sum(drhoaux,intra_bgrp_comm)
   CALL mp_sum(dvaux,intra_bgrp_comm)
@@ -259,9 +261,11 @@ SUBROUTINE write_drhoun
       ! bring vector to crystal axis
       !
       DO na = 1, nat
+        !
         phi(:,na) =  vect(1,na)*at(1,:) + &
                      vect(2,na)*at(2,:) + &
                      vect(3,na)*at(3,:)
+        !
       END DO
       !
       !    If no other symmetry is present we quit here
@@ -451,8 +455,10 @@ SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   ALLOCATE(vlocq(ngm,ntyp))
   !
   DO nt = 1, ntyp
+    !
     zval=upf(nt)%zp
     CALL setlocq_coul (xq, zval, tpiba2, ngm, g, omega, vlocq(:,nt))
+    !
   ENDDO
   !
   aux1 = 0.0d0
@@ -465,24 +471,24 @@ SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
     IF (abs (u (mu + 1, mode) ) + abs (u (mu + 2, mode) ) + &
         abs (u (mu + 3, mode) ) > 1.0d-12) THEN
        !
-       nt = ityp (na)
-       u1 = u (mu + 1, mode)
-       u2 = u (mu + 2, mode)
-       u3 = u (mu + 3, mode)
-       gu0 = xq (1) * u1 + xq (2) * u2 + xq (3) * u3
-       !
-       DO ig = 1, ngms
-         !
-         gtau = eigts1 (mill(1,ig), na) * eigts2 (mill(2,ig), na) * &
-                eigts3 (mill(3,ig), na)
-         gu = gu0 + g (1, ig) * u1 + g (2, ig) * u2 + g (3, ig) * u3
-         aux1 (dffts%nl (ig) ) = aux1 (dffts%nl (ig) ) + vlocq (ig, nt) &
-                                   * gu * fact * gtau
-         !
-        ENDDO
+      nt = ityp (na)
+      u1 = u (mu + 1, mode)
+      u2 = u (mu + 2, mode)
+      u3 = u (mu + 3, mode)
+      gu0 = xq (1) * u1 + xq (2) * u2 + xq (3) * u3
+      !
+      DO ig = 1, ngms
         !
-     ENDIF
-     !
+        gtau = eigts1 (mill(1,ig), na) * eigts2 (mill(2,ig), na) * &
+               eigts3 (mill(3,ig), na)
+        gu = gu0 + g (1, ig) * u1 + g (2, ig) * u2 + g (3, ig) * u3
+        aux1 (dffts%nl (ig) ) = aux1 (dffts%nl (ig) ) + vlocq (ig, nt) &
+                                  * gu * fact * gtau
+        !
+      ENDDO
+      !
+    ENDIF
+    !
   ENDDO
   !
   pot = pot - aux1(ind_ig)
@@ -580,21 +586,21 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
   CLOSE (UNIT = iudrho, STATUS='keep')
   !
   IF (doublegrid) THEN
-     !
-     DO is = 1, nspin_mag
+    !
+    DO is = 1, nspin_mag
+      !
+      DO ipert = 1, npe
         !
-        DO ipert = 1, npe
-           !
-           CALL fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
-           !
-        ENDDO
+        CALL fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
         !
-     ENDDO
-     !
+      ENDDO
+      !
+    ENDDO
+    !
   ELSE
-     !
-     CALL zcopy (npe*nspin_mag*dfftp%nnr, drhoscfh, 1, drhoscf, 1)
-     !
+    !
+    CALL zcopy (npe*nspin_mag*dfftp%nnr, drhoscfh, 1, drhoscf, 1)
+    !
   ENDIF
   !
 !----------------------------------------------------------
