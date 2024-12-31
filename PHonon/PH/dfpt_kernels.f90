@@ -415,7 +415,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
             ! No local field effect: set dvscf to 0
             dvscftmp(:, :, ipert) = (0.d0, 0.d0)
          ELSE
-            IF (PRESENT(drhoc)) THEN
+            IF (PRESENT(drhoc) .AND. .NOT. lmultipole) THEN
                CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = drhoc(:, ipert))
             ELSE
                CALL dv_of_drho(dvscftmp(1, 1, ipert))
