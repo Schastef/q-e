@@ -6,7 +6,7 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------
-SUBROUTINE write_epsilon(npe,drhoscfh)
+SUBROUTINE write_epsilon(npe, drhoscfh)
   !----------------------------------------------
   !! F. Macheda (2024)
   ! ---------------------------------------------
@@ -27,18 +27,21 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   !
   IMPLICIT NONE
   INTEGER, INTENT(IN) :: npe
-  COMPLEX(DP), INTENT(IN) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
-  COMPLEX(DP), ALLOCATABLE :: dvscf_toprint(:,:,:), drho_toprint(:,:,:)
+  COMPLEX(DP), INTENT(IN) :: drhoscfh(dfftp%nnr, nspin_mag,npe)
+  COMPLEX(DP), ALLOCATABLE :: dvscf_toprint(:, :, :), drho_toprint(:, :, :)
   INTEGER, EXTERNAL :: find_free_unit
   COMPLEX(DP) :: epsm1, chi, chi0, barchi
   REAL(DP) :: vq
   COMPLEX(DP) :: drhoaux, dvaux
+  INTEGER :: ierr
   !
-  ALLOCATE (dvscf_toprint ( dfftp%nnr, nspin_mag , npe))
-  ALLOCATE (drho_toprint ( dfftp%nnr, nspin_mag , npe))
+  ALLOCATE (dvscf_toprint(dfftp%nnr, nspin_mag , npe), STAT = ierr)
+  IF (ierr /= 0) CALL errore('write_epsilon', 'Error allocating dvscf_toprint', 1)
+  ALLOCATE (drho_toprint(dfftp%nnr, nspin_mag , npe), STAT = ierr)
+  IF (ierr /= 0) CALL errore('write_epsilon', 'Error allocating drho_toprint', 1)
   !
-  CALL zcopy (dfftp%nnr*nspin_mag,drhoscfh,1,dvscf_toprint,1)
-  CALL zcopy (dfftp%nnr*nspin_mag,drhoscfh,1,drho_toprint,1)
+  CALL zcopy (dfftp%nnr*nspin_mag, drhoscfh, 1, dvscf_toprint, 1)
+  CALL zcopy (dfftp%nnr*nspin_mag, drhoscfh, 1, drho_toprint, 1)
   !
   CALL dv_of_drho (dvscf_toprint(1,1,1)) !nlcc cannot be applied since they depend on the perturbation, that we are taking as a scalar here
   !
@@ -52,12 +55,12 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
   dvaux=0d0
   IF (gg(1) < 1d-8) THEN
     !      
-    drhoaux = drho_toprint(dfftp%nl(1),1,1)
-    dvaux   = dvscf_toprint(dfftp%nl(1),1,1)
+    drhoaux = drho_toprint(dfftp%nl(1), 1, 1)
+    dvaux   = dvscf_toprint(dfftp%nl(1), 1, 1)
     !
   ENDIF
-  CALL mp_sum(drhoaux,intra_bgrp_comm)
-  CALL mp_sum(dvaux,intra_bgrp_comm)
+  CALL mp_sum(drhoaux, intra_bgrp_comm)
+  CALL mp_sum(dvaux, intra_bgrp_comm)
   !
   IF (ionode) THEN
     !      
@@ -69,7 +72,7 @@ SUBROUTINE write_epsilon(npe,drhoscfh)
     WRITE(iurhoun,'(4f18.12)') REAL(drhoaux), AIMAG(drhoaux),&
                                REAL(dvaux)  , AIMAG(dvaux)
     !
-    vq = fpi*e2/tpiba**2/DOT_PRODUCT(xq,xq)
+    vq = fpi*e2/tpiba**2/DOT_PRODUCT(xq, xq)
     !
     chi0 = drhoaux/(1d0+dvaux)
     WRITE(iurhoun, '(a)') "#  $\bar \chi^0_q$"
@@ -119,8 +122,8 @@ SUBROUTINE write_drhoun
   !
   INTEGER  :: ig, i, j
   INTEGER  :: ipol, jpol, na, nb 
-  INTEGER, ALLOCATABLE :: itmp_mill(:,:)
-  COMPLEX(DP) :: Im_i=(0._dp,1._dp)
+  INTEGER, ALLOCATABLE :: itmp_mill(:, :)
+  COMPLEX(DP) :: Im_i=(0._dp, 1._dp)
   COMPLEX(DP), ALLOCATABLE :: phase(:)
   REAL(DP)  :: zval
   REAL(DP)  :: arg 
@@ -128,39 +131,42 @@ SUBROUTINE write_drhoun
   INTEGER, EXTERNAL :: find_free_unit
   COMPLEX(DP) :: phi (3, nat) 
   REAL(DP) :: absq
+  INTEGER :: ierr
   !
-  absq = SQRT(DOT_PRODUCT(xq,xq))
+  absq = SQRT(DOT_PRODUCT(xq, xq))
   !
-  ALLOCATE(phase(nat))
+  ALLOCATE(phase(nat), STAT = ierr)
+  IF (ierr /= 0) CALL errore('write_drhoun', 'Error allocating phase', 1)
   !
-  ALLOCATE(itmp_mill(3,ngms_g))
+  ALLOCATE(itmp_mill(3,ngms_g), STAT = ierr)
+  IF (ierr /= 0) CALL errore('write_drhoun', 'Error allocating itmp_mill', 1)
   !
   itmp_mill =0
   !
   DO ig=1,ngms
     !
-    itmp_mill( 1, ig_l2g( ig ) ) = mill(1, ig )
-    itmp_mill( 2, ig_l2g( ig ) ) = mill(2, ig )
-    itmp_mill( 3, ig_l2g( ig ) ) = mill(3, ig )
+    itmp_mill(1, ig_l2g(ig)) = mill(1, ig)
+    itmp_mill(2, ig_l2g(ig)) = mill(2, ig)
+    itmp_mill(3, ig_l2g(ig)) = mill(3, ig)
     !
   ENDDO
   !
-  CALL mp_sum( itmp_mill , intra_bgrp_comm )
+  CALL mp_sum(itmp_mill , intra_bgrp_comm)
   !
   !
   phi = (0.0d0, 0.0d0)
   !
-  DO na=1,nat
+  DO na = 1, nat
     !
-    DO ipol=1,3
+    DO ipol = 1, 3
       !
-      i=(na-1)*3+ipol
+      i = (na-1)*3 + ipol
       DO nb=1,nat
         !
-        DO jpol=1,3
+        DO jpol = 1, 3
           !
-          j=(nb-1)*3+jpol
-          phi(ipol,na) = phi(ipol,na) + dyn (i, j) * CONJG(u (i, j)) 
+          j = (nb-1)*3 + jpol
+          phi(ipol, na) = phi(ipol,na) + dyn (i, j) * CONJG(u (i, j)) 
           !
         ENDDO
         !
@@ -180,28 +186,28 @@ SUBROUTINE write_drhoun
     WRITE(iudumpdrho,*) '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
                          Im(\bar \rho^{tot}_{qsy}),Re(\bar \rho^{tot}_{qsz}),Im(\bar \rho^{tot}_{qsz}) '
     !
-    DO ig=1,ngms_g 
+    DO ig = 1, ngms_g 
       !
-      IF(ABS(itmp_mill(1,ig)).le.1d-8.and.&
-         ABS(itmp_mill(2,ig)).le.1d-8.and.&
-         ABS(itmp_mill(3,ig)).le.1d-8)THEN 
+      IF(ABS(itmp_mill(1, ig)) < 1d-8.and.&
+         ABS(itmp_mill(2, ig)) < 1d-8.and.&
+         ABS(itmp_mill(3, ig)) < 1d-8)THEN 
         !
         DO na = 1, nat
           !
-          arg = (xq(1) * tau(1,na) + &
-                 xq(2) * tau(2,na) + &
-                 xq(3) * tau(3,na))*tpi
+          arg = (xq(1) * tau(1, na) + &
+                 xq(2) * tau(2, na) + &
+                 xq(3) * tau(3, na))*tpi
           !
-          phase(na)= CMPLX( COS( arg ),  SIN( arg ) ,kind=DP)
+          phase(na)= CMPLX(COS(arg), SIN(arg), KIND=DP)
           !
         ENDDO
         !
-        DO na=1,nat
+        DO na = 1, nat
           !
-          zval=upf(ityp(na))%zp
+          zval = upf(ityp(na))%zp
           !
-          write(iudumpdrho,'(6f18.12)') (-sqrt(e2)/omega*(phi(ipol,na)*phase(na)+&
-                                         Im_i*xq(ipol)*tpiba*zval), ipol=1,3)
+          write(iudumpdrho, '(6f18.12)') (-sqrt(e2)/omega*(phi(ipol, na)*phase(na)+&
+                                           Im_i*xq(ipol)*tpiba*zval), ipol = 1, 3)
           !
         ENDDO 
         !
@@ -227,7 +233,7 @@ SUBROUTINE write_drhoun
   !
   CONTAINS
     !--------------------------------------------------------------------------
-    SUBROUTINE symvectorq( nat, vect )
+    SUBROUTINE symvectorq(nat, vect)
       !-----------------------------------------------------------------------
       !! Symmetrize a function \(f(i,na)\) (e.g. the forces in cartesian axis),
       !! where \(i\) is the cartesian component, \(na\) the atom index.
@@ -241,22 +247,26 @@ SUBROUTINE write_drhoun
       !
       INTEGER, INTENT(IN) :: nat
       !! number of atoms
-      COMPLEX(DP), INTENT(INOUT) :: vect(3,nat)
+      COMPLEX(DP), INTENT(INOUT) :: vect(3, nat)
       !! vector function to symmetrize
       !
       ! ... local variables
       !
       INTEGER :: na 
-      COMPLEX(DP), ALLOCATABLE :: phi(:,:), work(:), phip(:,:)
+      COMPLEX(DP), ALLOCATABLE :: phi(:, :), work(:), phip(:, :)
       REAL(DP) :: arg, fase
       COMPLEX(DP) :: faseq(48)
-      INTEGER :: iflb (nat), isymq, kpol, sna, irot
+      INTEGER :: iflb(nat), isymq, kpol, sna, irot
+      INTEGER :: ierr
       !
       IF (nsym == 1) RETURN
       !
-      ALLOCATE (phip(3,nat))
-      ALLOCATE (phi(3,nat))
-      ALLOCATE (work(3))
+      ALLOCATE (phip(3,nat), STAT = ierr)
+      IF (ierr /= 0) CALL errore('symvectorq', 'Error allocating phip', 1)
+      ALLOCATE (phi(3,nat), STAT = ierr)
+      IF (ierr /= 0) CALL errore('symvectorq', 'Error allocating phi', 1)
+      ALLOCATE (work(3), STAT = ierr)
+      IF (ierr /= 0) CALL errore('symvectorq', 'Error allocating work', 1)
       !
       ! bring vector to crystal axis
       !
@@ -266,11 +276,11 @@ SUBROUTINE write_drhoun
                      vect(2,na)*at(2,:) + &
                      vect(3,na)*at(3,:)
         !
-      END DO
+      ENDDO
       !
       !    If no other symmetry is present we quit here
       !
-      IF ( (nsymq == 1) .and. (.not.minus_q) ) return
+      IF ((nsymq == 1) .AND. (.NOT. minus_q)) RETURN
       !
       !    Then we impose the symmetry q -> -q+G IF present
       !
@@ -281,28 +291,28 @@ SUBROUTINE write_drhoun
           DO ipol = 1, 3
             !
             work(:) = (0.d0, 0.d0)
-            sna = irt (irotmq, na)
+            sna = irt(irotmq, na)
             arg = 0.d0
             !
             DO kpol = 1, 3
               !
-              arg = arg + (xq (kpol) * (-rtau (kpol, irotmq, na) ) ) 
+              arg = arg + (xq(kpol) * (-rtau (kpol, irotmq, na))) 
               !
             ENDDO
             !
             arg = arg * tpi
-            fase = CMPLX(cos (arg), sin (arg) ,kind=DP)
+            fase = CMPLX(cos(arg), sin (arg), kind=DP)
             !
             DO kpol = 1, 3
               !
-              work (ipol) = work (ipol) + &
-                            s (ipol, kpol, irotmq) &
-                            * phi (kpol, sna) * fase
+              work(ipol) = work(ipol) + &
+                           s(ipol, kpol, irotmq) &
+                           * phi (kpol, sna) * fase
               !
             ENDDO
             !
-            phip (ipol, na) = (phi (ipol, na) + &
-                               CONJG( work (ipol) ) ) * 0.5d0
+            phip(ipol, na) = (phi(ipol, na) + &
+                              CONJG(work(ipol))) * 0.5d0
             !
           ENDDO
           !
@@ -316,7 +326,7 @@ SUBROUTINE write_drhoun
       !
       IF (nsymq == 1) return
       !
-      iflb (:) = 0
+      iflb(:) = 0
       !
       DO na = 1, nat
         !
@@ -327,17 +337,17 @@ SUBROUTINE write_drhoun
           DO isymq = 1, nsymq
             !
             irot = isymq
-            sna = irt (irot, na)
+            sna = irt(irot, na)
             arg = 0.d0
             !
             DO ipol = 1, 3
               !
-              arg = arg + (xq (ipol) * (-rtau (ipol, irot, na) ) )
+              arg = arg + (xq(ipol) * (-rtau (ipol, irot, na)))
               !
             ENDDO
             !
             arg = arg * tpi
-            faseq (isymq) = CMPLX(cos (arg), sin (arg) ,kind=DP)
+            faseq(isymq) = CMPLX(cos(arg), sin(arg) , kind=DP)
             !
             DO ipol = 1, 3
               !
@@ -345,15 +355,15 @@ SUBROUTINE write_drhoun
                 !
                 IF (t_rev(isymq)==1) THEN
                   !       
-                  work (ipol) = work (ipol) + &
-                                s (ipol, kpol, irot) &
-                                * CONJG(phi (kpol, sna) * faseq (isymq))
+                  work(ipol) = work(ipol) + &
+                                s(ipol, kpol, irot) &
+                                * CONJG(phi(kpol, sna) * faseq(isymq))
                   !
                 ELSE
                   !
-                  work (ipol) = work (ipol) + &
-                                s (ipol, kpol, irot) &
-                                * phi (kpol, sna) * faseq (isymq)
+                  work(ipol) = work(ipol) + &
+                                s(ipol, kpol, irot) &
+                                * phi(kpol, sna) * faseq(isymq)
                   !
                 ENDIF
                 !
@@ -366,25 +376,25 @@ SUBROUTINE write_drhoun
           DO isymq = 1, nsymq
             !
             irot = isymq
-            sna = irt (irot, na)
+            sna = irt(irot, na)
             !
             DO ipol = 1, 3
               !
-              phi (ipol, sna) = (0.d0, 0.d0)
+              phi(ipol, sna) = (0.d0, 0.d0)
               !
               DO kpol = 1, 3
                 !
                 IF (t_rev(isymq)==1) THEN
                   !
-                  phi(ipol,sna)=phi(ipol,sna) &
-                                + s(ipol,kpol,invs(irot))&
-                                * CONJG(work (kpol)*faseq (isymq))
+                  phi(ipol, sna) = phi(ipol, sna) &
+                                + s(ipol, kpol, invs(irot))&
+                                * CONJG(work(kpol)*faseq(isymq))
                   !
                 ELSE
                   !
-                  phi(ipol,sna)=phi(ipol,sna) &
-                                + s(ipol,kpol,invs(irot))&
-                                * work (kpol) * CONJG(faseq (isymq) )
+                  phi(ipol,sna) = phi(ipol, sna) &
+                                + s(ipol, kpol, invs(irot))&
+                                * work(kpol) * CONJG(faseq(isymq))
                   !
                 ENDIF
                 !
@@ -392,7 +402,7 @@ SUBROUTINE write_drhoun
               !
             ENDDO
             !
-            iflb (sna) = 1
+            iflb(sna) = 1
             !
           ENDDO
           !
@@ -400,15 +410,15 @@ SUBROUTINE write_drhoun
         !
       ENDDO
       !
-      phi (:, :) = phi (:, :) / DBLE(nsymq)
+      phi(:, :) = phi(:, :)/DBLE(nsymq)
       !
       ! bring vector back to cartesian axis
       !
       DO na = 1, nat
         !
-        vect(:,na) = phi(1,na)*bg(:,1) + &
-                     phi(2,na)*bg(:,2) + &
-                     phi(3,na)*bg(:,3)
+        vect(:, na) = phi(1, na)*bg(:, 1) + &
+                     phi(2, na)*bg(:, 2) + &
+                     phi(3, na)*bg(:, 3)
         !
       END DO
       !
@@ -442,17 +452,21 @@ SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   INTEGER, INTENT(IN) :: mode
   INTEGER, INTENT(IN) :: ind_ig
   !! Index to be passed
-  REAL (DP), ALLOCATABLE :: vlocq(:,:)  ! ngm, ntyp)
+  REAL (DP), ALLOCATABLE :: vlocq(:, :)  ! ngm, ntyp)
   INTEGER :: na, mu, ig, nt
   INTEGER, ALLOCATABLE :: nl_d(:)
   COMPLEX(DP) :: gtau, gu, fact, u1, u2, u3, gu0
   COMPLEX(DP) , ALLOCATABLE :: aux1 (:)
   REAL(DP) :: zval
+  INTEGER :: ierr
   ! 
-  ALLOCATE( nl_d(dffts%ngm) )
+  ALLOCATE(nl_d(dffts%ngm), STAT = ierr )
+  IF (ierr /= 0) CALL errore('Vaeps_dvloc', 'Error allocating nl_d', 1)
   nl_d  = dffts%nl
-  ALLOCATE (aux1(dffts%nnr)) !aux1 is dvlocin
-  ALLOCATE(vlocq(ngm,ntyp))
+  ALLOCATE(aux1(dffts%nnr), STAT = ierr) !aux1 is dvlocin
+  IF (ierr /= 0) CALL errore('Vaeps_dvloc', 'Error allocating aux1', 1)
+  ALLOCATE(vlocq(ngm,ntyp), STAT = ierr)
+  IF (ierr /= 0) CALL errore('Vaeps_dvloc', 'Error allocating vlocq', 1)
   !
   DO nt = 1, ntyp
     !
@@ -465,25 +479,25 @@ SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   !
   DO na = 1, nat
     !
-    fact = tpiba * (0.d0, -1.d0) * eigqts (na)
+    fact = tpiba * (0.d0, -1.d0) * eigqts(na)
     mu = 3 * (na - 1)
     !
-    IF (abs (u (mu + 1, mode) ) + abs (u (mu + 2, mode) ) + &
-        abs (u (mu + 3, mode) ) > 1.0d-12) THEN
+    IF (abs (u(mu + 1, mode) ) + abs (u(mu + 2, mode)) + &
+        abs (u(mu + 3, mode) ) > 1.0d-12) THEN
        !
-      nt = ityp (na)
-      u1 = u (mu + 1, mode)
-      u2 = u (mu + 2, mode)
-      u3 = u (mu + 3, mode)
-      gu0 = xq (1) * u1 + xq (2) * u2 + xq (3) * u3
+      nt = ityp(na)
+      u1 = u(mu + 1, mode)
+      u2 = u(mu + 2, mode)
+      u3 = u(mu + 3, mode)
+      gu0 = xq(1) * u1 + xq(2) * u2 + xq(3) * u3
       !
       DO ig = 1, ngms
         !
-        gtau = eigts1 (mill(1,ig), na) * eigts2 (mill(2,ig), na) * &
-               eigts3 (mill(3,ig), na)
-        gu = gu0 + g (1, ig) * u1 + g (2, ig) * u2 + g (3, ig) * u3
-        aux1 (dffts%nl (ig) ) = aux1 (dffts%nl (ig) ) + vlocq (ig, nt) &
-                                  * gu * fact * gtau
+        gtau = eigts1(mill(1,ig), na) * eigts2(mill(2,ig), na) * &
+               eigts3(mill(3,ig), na)
+        gu = gu0 + g(1, ig) * u1 + g(2, ig) * u2 + g(3, ig) * u3
+        aux1 (dffts%nl(ig)) = aux1 (dffts%nl(ig)) + vlocq(ig, nt) &
+                              * gu * fact * gtau
         !
       ENDDO
       !
@@ -509,7 +523,7 @@ SUBROUTINE setlocq_coul (xq, zp, tpiba2, ngm, g, omega, vloc)
  IMPLICIT NONE
  !
  INTEGER, INTENT(IN) :: ngm
- REAL(DP) :: xq (3), zp, tpiba2, omega, g(3,ngm)
+ REAL(DP) :: xq (3), zp, tpiba2, omega, g(3, ngm)
  REAL(DP), INTENT (OUT) :: vloc(ngm)
  !
  REAL(DP) :: g2a
@@ -517,8 +531,8 @@ SUBROUTINE setlocq_coul (xq, zp, tpiba2, ngm, g, omega, vloc)
  !
  DO ig = 1, ngm
    !
-   g2a = (xq (1) + g (1, ig) ) **2 + (xq (2) + g (2, ig) ) **2 + &
-         (xq (3) + g (3, ig) ) **2
+   g2a = (xq(1) + g(1, ig)) **2 + (xq(2) + g(2, ig)) **2 + &
+         (xq(3) + g(3, ig)) **2
    !
    IF (g2a < eps8) THEN
      !
@@ -537,7 +551,7 @@ END SUBROUTINE setlocq_coul
 !----------------------------------------------------------------------
 !
 !----------------------------------------------------------
-SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
+SUBROUTINE init_rho(npe, drhoscf, drhoscfh, iq_dummy)
   !----------------------------------------------
   ! F. Macheda (2024)
   ! ---------------------------------------------
@@ -557,8 +571,8 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
   !
   IMPLICIT NONE
   INTEGER, INTENT(IN) :: npe
-  COMPLEX(DP), INTENT(INOUT) :: drhoscf (dffts%nnr,nspin_mag,npe)
-  COMPLEX(DP), INTENT(INOUT) :: drhoscfh (dfftp%nnr,nspin_mag,npe)
+  COMPLEX(DP), INTENT(INOUT) :: drhoscf(dffts%nnr, nspin_mag, npe)
+  COMPLEX(DP), INTENT(INOUT) :: drhoscfh(dfftp%nnr, nspin_mag, npe)
   INTEGER, INTENT(IN) :: iq_dummy
   !
   INTEGER :: ipert, is
@@ -567,13 +581,13 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
   !
   DO ipert = 1, npe
     !
-    IF (fildrho.ne.' ') THEN
+    IF (fildrho .NE. ' ') THEN
       !
       IF (ionode) THEN
         ! 
         INQUIRE(UNIT = iudrho, OPENED = exst)
-        IF (exst) CLOSE (UNIT = iudrho, STATUS='keep')
-        filename = dfile_name(xq, at, fildrho, TRIM(tmp_dir_save)//prefix, generate=.true., index_q=iq_dummy)
+        IF (exst) CLOSE (UNIT = iudrho, STATUS='KEEP')
+        filename = dfile_name(xq, at, fildrho, TRIM(tmp_dir_save)//prefix, generate=.TRUE., index_q=iq_dummy)
         CALL diropn (iudrho, filename, lrdrho, exst)
         !
       ENDIF ! ionode
@@ -583,7 +597,7 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
     ENDIF
     !
   ENDDO
-  CLOSE (UNIT = iudrho, STATUS='keep')
+  CLOSE (UNIT = iudrho, STATUS='KEEP')
   !
   IF (doublegrid) THEN
     !
@@ -591,7 +605,7 @@ SUBROUTINE init_rho(npe,drhoscf,drhoscfh,iq_dummy)
       !
       DO ipert = 1, npe
         !
-        CALL fft_interpolate (dfftp, drhoscfh(:,is,ipert), dffts, drhoscf(:,is,ipert))
+        CALL fft_interpolate (dfftp, drhoscfh(:, is, ipert), dffts, drhoscf(:, is, ipert))
         !
       ENDDO
       !
