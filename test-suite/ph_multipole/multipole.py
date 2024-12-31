@@ -3,30 +3,29 @@
 # Copyright (C) 2021-2025 Changpeng Lin
 # All rights reserved.
 
-import os
-import math
-import pickle
-import numbers
-import datetime
 import argparse
+import datetime
 import itertools
-from io import StringIO
-from copy import deepcopy
+import math
+import numbers
+import os
+import pickle
 from collections import OrderedDict, deque
+from copy import deepcopy
+from io import StringIO
 
-import numpy as np
-import spglib as spg
-import scipy.sparse as sparse
 import ase.io as aseio
+import numpy as np
+import scipy.sparse as sparse
+import spglib as spg
 from ase import Atoms as aseAtoms
-
 
 __version__ = "0.1.0"
 
 
 __logo__ = r"""
- __  __       _ _   _             _      
-|  \/  |_   _| | |_(_)_ __   ___ | | ___ 
+ __  __       _ _   _             _
+|  \/  |_   _| | |_(_)_ __   ___ | | ___
 | |\/| | | | | | __| | '_ \ / _ \| |/ _ \
 | |  | | |_| | | |_| | |_) | (_) | |  __/
 |_|  |_|\__,_|_|\__|_| .__/ \___/|_|\___|
@@ -35,7 +34,7 @@ __logo__ = r"""
 
 def welcome(start_time):
     """Print welcome information."""
-    print(f"Started on {start_time}" + __logo__  + __version__)
+    print(f"Started on {start_time}" + __logo__ + __version__)
 
 
 def goodbye(start_time):
@@ -80,9 +79,7 @@ def timeit(job_string=None):
             start_time = datetime.datetime.now()
             result = func(*args, **kwargs)
             end_time = datetime.datetime.now()
-            print(
-                job_string + f" finished, time elapsed: {end_time - start_time}"
-            )
+            print(job_string + f" finished, time elapsed: {end_time - start_time}")
             return result
 
         return wrapper
@@ -306,9 +303,9 @@ def block_diag_sparse(mats, order, format=None, dtype=None):
     row = np.concatenate(row)
     col = np.concatenate(col)
     data = np.concatenate(data)
-    return sparse.coo_matrix((data, (row, col)), shape=(r_idx, c_idx), dtype=dtype).asformat(
-        format
-    )
+    return sparse.coo_matrix(
+        (data, (row, col)), shape=(r_idx, c_idx), dtype=dtype
+    ).asformat(format)
 
 
 def rref_dense(mat, eps=1e-4):
@@ -675,7 +672,7 @@ class InputParser(argparse.ArgumentParser):
         """Get user-defined settings"""
         settings = deepcopy(self.defaults)
         self.settings = self.parse_args(namespace=settings)
-    
+
     def init_args(self):
         """Initialize arguments and help message."""
 
@@ -703,7 +700,7 @@ class InputParser(argparse.ArgumentParser):
             action="store_true",
             default=False,
             help="""This option asks code to perform multipole expansion.
-                    If `epsil_order` is set, dielectric expansion will be 
+                    If `epsil_order` is set, dielectric expansion will be
                     also performed.""",
         )
         self.add_argument(
@@ -779,7 +776,7 @@ class InputParser(argparse.ArgumentParser):
             default=0.01,
             type=float,
             help="""A wavenumber step in crystal coordinate, only used
-                    together with `MESH`.""",
+                    together with `mesh`.""",
         )
         self.add_argument(
             "--order",
@@ -868,6 +865,15 @@ class InputParser(argparse.ArgumentParser):
                     dielectric function using multipole expansion.""",
         )
         self.add_argument(
+            "--screened",
+            dest="SCREENED",
+            action="store_true",
+            default=False,
+            help="""Set to True if the charge density response is in the screened
+                    type, i.e. the macroscopic potential is not removed in DFPT
+                    calculations.""",
+        )
+        self.add_argument(
             "--seed",
             dest="RAND_SEED",
             action="store",
@@ -891,15 +897,6 @@ class InputParser(argparse.ArgumentParser):
             action="version",
             version="%(prog)s",
             help="Show version information.",
-        )
-        self.add_argument(
-            "--vmacro",
-            dest="VMACRO",
-            action="store_true",
-            default=False,
-            help="""Set to True if the macroscopic potential has been removed in
-                    DFPT, drho being the bare charge density response already.
-                    This should be used when `lmacro=.TRUE.` is set in DFPT.""",
         )
         self.add_argument(
             "--write_symops",
@@ -926,13 +923,13 @@ class Atoms(aseAtoms):
         return self._symops
 
     @classmethod
-    def read(cls, filename="cell.in", format="espresso-in"):
+    def read(cls, filename="scf.in", format="espresso-in"):
         """Read structure from file.
 
         Parameters
         ----------
         filename : str
-            Name of file containing structure. Default is "cell.in".
+            Name of file containing structure. Default is "scf.in".
         format : str
             Format of file. Default is "espresso-in".
 
@@ -1026,7 +1023,7 @@ class Atoms(aseAtoms):
             return alat * self.ANGSTROM_TO_BOHR
         else:
             raise ValueError(f"Unknown unit: {unit}")
-    
+
     def get_volume_by_unit(self, unit="Angstrom"):
         """Calculate the volume of cell.
 
@@ -1053,7 +1050,7 @@ class Atoms(aseAtoms):
             return volume * self.ANGSTROM_TO_BOHR**3
         else:
             raise ValueError(f"Unknown unit: {unit}")
-    
+
     def to_spglib_tuple(self):
         """Convert and return structure information as a tuple.
 
@@ -1271,7 +1268,7 @@ class Site(object):
         if order < 2:
             raise ValueError(
                 "Permutation symmetry cannot be built for "
-                +f"cluster of order lower than {order}."
+                + f"cluster of order lower than {order}."
             )
 
         permuted_list = []
@@ -1314,11 +1311,12 @@ class Optimizer(object):
     to score the model `score_metrics` and `set_model_metrics`.
 
     """
+
     def __init__(self):
         """Initialize an optimizer."""
         self.results = {}
         self.metrics = {}
-    
+
     def fit(self, X, y):
         """Fit regression model with the specified method and parameters.
 
@@ -1337,7 +1335,7 @@ class Optimizer(object):
 
         """Compute various metrics"""
         self.set_model_metrics(X, y)
-    
+
     def predict(self, X):
         """Predict using the linear model.
 
@@ -1353,7 +1351,7 @@ class Optimizer(object):
 
         """
         return X.dot(self.coef_)
-    
+
     def set_model_metrics(self, X, y):
         """Compute various metrics for the model.
 
@@ -1387,9 +1385,7 @@ class Optimizer(object):
         # Root mean squared error
         self.metrics["rmse"] = np.sqrt(self.metrics["mse"])
         # Mean absolute percentage error
-        self.metrics["mape"] = np.mean(
-            np.abs(y_pred - y) / np.maximum(np.abs(y), eps)
-        )
+        self.metrics["mape"] = np.mean(np.abs(y_pred - y) / np.maximum(np.abs(y), eps))
 
 
 class MultipoleSpace(object):
@@ -2159,9 +2155,7 @@ class MultipoleSymmetry(object):
             if settings.CRY_BASIS:
                 print("Symmmetry constraints are imposed in crystal coordinate.")
             else:
-                print(
-                    "Symmmetry constraints are imposed in Cartesian coordinate."
-                )
+                print("Symmmetry constraints are imposed in Cartesian coordinate.")
             multipole_symmetry = cls(
                 pcell,
                 settings.CRY_BASIS,
@@ -2184,9 +2178,7 @@ class MultipoleSymmetry(object):
                 settings.MP_ORDER, settings.NON_POLAR, settings.FIX_ORDER
             )
             if settings.EPSIL_ORDER is not None:
-                print(
-                    "Reconstructing null space of dielectric symmetry from file."
-                )
+                print("Reconstructing null space of dielectric symmetry from file.")
                 NS_epsil = cls.construct_null_space_dielectric_restart(
                     settings.EPSIL_ORDER, settings.FIX_EPSIL_ORDER
                 )
@@ -2251,17 +2243,15 @@ class MultipoleSymmetry(object):
             if order == 2:
                 print("Symmetry constraints on Born effective charge tensors.")
             elif order == 3:
-                print("Symmetry constraints on " + "quadrupole tensors.")
+                print("Symmetry constraints on quadrupole tensors.")
             elif order == 4:
-                print("Symmetry constraints on " + "octupole tensors.")
+                print("Symmetry constraints on octupole tensors.")
             elif order == 5:
-                print("Symmetry constraints on " + "hexadecapole tensors.")
+                print("Symmetry constraints on hexadecapole tensors.")
             elif order == 6:
-                print("Symmetry constraints on " + "triacontadipoles tensors.")
+                print("Symmetry constraints on triacontadipoles tensors.")
             else:
-                print(
-                    "Symmetry constraints on " + f"{order}-order multipole tensors."
-                )
+                print("Symmetry constraints on {order}-order multipole tensors.")
             cons_mat_dict[order] = deque()
             null_space[order] = deque()
             ncomp_free_tensor[order] = deque()
@@ -2358,9 +2348,7 @@ class MultipoleSymmetry(object):
                     f"  Index {idx:<3d} | {symbol:<3s} | Free: {ncomp_free_tensor[order][i]}"
                 )
             sparse.save_npz(f"ns_mp{order}", null_space_list[order - 2])
-        print(
-            "- Total number of free components: {}".format(self._ncomp_free_tot)
-        )
+        print("- Total number of free components: {}".format(self._ncomp_free_tot))
 
         return ns_mat_full
 
@@ -2380,9 +2368,7 @@ class MultipoleSymmetry(object):
             Full null space in COO sparse matrix form for dielectric tensors.
 
         """
-        print(
-            "Symmetrizing dielectric tensors up to " + f"{self._epsil_order}-order."
-        )
+        print("Symmetrizing dielectric tensors up to " + f"{self._epsil_order}-order.")
         symops = multipole_space.get_symmetry()
         cell = multipole_space.cell
         epsil_ns_list = self.symmetrize_dielectric_tensors(symops, cell)
@@ -2747,9 +2733,7 @@ class MultipoleConstructor(object):
                     q_vecs = q_vecs.dot(rcell) * alat_ang
                 else:
                     if settings.Q_DIR is not None:
-                        print(
-                            "Creating q perturbations along a specific direction."
-                        )
+                        print("Creating q perturbations along a specific direction.")
                         q_dir = rcell.T.dot(settings.Q_DIR)
                         q_dir = np.where(abs(q_dir) < settings.EPS, 0.0, q_dir)
                     else:
@@ -2770,9 +2754,7 @@ class MultipoleConstructor(object):
         else:
             """Read sensing matrix from file."""
             if settings.FIT or settings.PREDICT:
-                print(
-                    "Reconstructing sensing matrix of multipole expansion from file."
-                )
+                print("Reconstructing sensing matrix of multipole expansion from file.")
                 self._SMQ1_prime = np.load(self.SensingMatrixQ1File)["mat"]
                 if self._epsil_order is not None:
                     self._SMQ2_prime = np.load(self.SensingMatrixQ2File)["mat"]
@@ -2839,15 +2821,13 @@ class MultipoleConstructor(object):
         if settings.EPSIL_ORDER is not None:
             if not exits_drhodv:
                 raise FileNotFoundError("Dielectric response function not found.")
-            print(
-                "Starting to fit multipole and dielectric tensors by a linear model."
-            )
+            print("Starting to fit multipole and dielectric tensors by a linear model.")
         else:
             print("Starting to fit multipole tensors by a linear model.")
         if exits_drhodv:
             self._read_dielectric_response(
                 settings.NQPTS,
-                vmacro=settings.VMACRO,
+                is_screened=settings.SCREENED,
                 epsil_kernel=settings.EPSIL_KERNEL,
             )
         self._read_charge_density_response(settings.NQPTS)
@@ -2915,7 +2895,7 @@ class MultipoleConstructor(object):
         self.multipole_space.write_dielectric_tensors()
 
     def _read_dielectric_response(
-        self, nqpts, vmacro=False, epsil_kernel=1, save_to_file=True
+        self, nqpts, is_screened=False, epsil_kernel=1, save_to_file=True
     ):
         r"""Read dielectric response function from file.
 
@@ -2923,10 +2903,10 @@ class MultipoleConstructor(object):
         ----------
         nqpts : int
             Number of q points.
-        vmacro : bool, optional
-            If True, the macroscopic potential has been removed in QE-DFPT,
-            drho being the bare charge density response already. This should
-            set to True when 'lmacro=.TRUE.' set in QE-DFPT. By default False.
+        is_screened : bool, optional
+            If True, the macroscopic potential is included in QE-DFPT,
+            i.e. drho being the total charge density response. This should
+            set to True when 'lmacro=.FALSE.' set in DFPT, otherwise False.
         epsil_kernel : int, optional
             The kernel for dielectric screening function. The allowed values
             are 1 for $1+v(q)*\chi(q)$ and 2 for $1/epsilon(q)^{-1}$. This
@@ -2943,14 +2923,14 @@ class MultipoleConstructor(object):
         q_norms = np.linalg.norm(q_vecs, axis=1)
 
         xi = np.zeros(nqpts)
-        if not vmacro:
+        if is_screened:
             epsilon = np.zeros(nqpts, dtype=complex)
         else:
             epsilon = None
         for iq in range(nqpts):
             filename = self.DrhodvFilePattern.format(iq + 1)
             drhodv = read_inverse_dielectric_function(filename)
-            if vmacro:
+            if not is_screened:
                 xi[iq] = drhodv[-1].real * q_norms[iq] ** 2
             else:
                 if epsil_kernel == 1:
@@ -3045,9 +3025,7 @@ class MultipoleConstructor(object):
                 print(
                     "Preprocessing sensing matrix of multipole and dielectric expansions."
                 )
-                print(
-                    f"Dielectric tensors up to {fix_epsil_order}-order kept fixed."
-                )
+                print(f"Dielectric tensors up to {fix_epsil_order}-order kept fixed.")
                 nskip = 0
                 for order in range(2, fix_epsil_order + 1, 2):
                     nskip += np.power(3, order)
@@ -3128,7 +3106,7 @@ class MultipoleConstructor(object):
         if exits_drhodv:
             self._read_dielectric_response(
                 settings.NQPTS,
-                vmacro=settings.VMACRO,
+                is_screened=settings.SCREENED,
                 epsil_kernel=settings.EPSIL_KERNEL,
                 save_to_file=False,
             )
@@ -3197,7 +3175,7 @@ def main():
 
     parser = InputParser()  # instantiate an input parser
 
-    welcome(start_time) # print welcome message
+    welcome(start_time)  # print welcome message
 
     """Parse user settings."""
     settings = parser.settings  # get settings from parser

@@ -6,35 +6,9 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------
-!! F. Macheda (2024)
-!!
-!! EXPLANATION of "lmultipole" flag
-!!
-!! -- General philosophy: The density response to an atomic displacement can be obtained via 1) the self-consistent potential due to
-!! an atomic displacement 2) the self-consistent potential due to an electric field perturbation. We adopt the second procedure, to
-!! obtain a fast scaling (wrt to the number of atoms) implementation.
-!!
-!! -- Global variables: The only global variable is "lmultipole", contanied in LR_Modules/lrcom.f90. 
-!! The code also need two units for writing, "iurhoun" and "iudumprho", contained in phcom.f90
-!! lmutipole is incompatibile, at present (2024) with pseudopotentials that are not NC
-!!
-!! -- Set up the perturbation: we set up an electric field perturbation in dvqpsi_us.f90, where the macroscopic component of dvlocin 
-!! is set to 1 for each perturbation; the nonlocal part of the perturbation is set to zero, as well as any NLCC. They are reintroduced later in the
-!! computation of the density
-!!
-!! -- Perform the DFPT cycle: In the DFPT cycle, we put the macroscopic electrostatic potential to zero. This is needed to obtain
-!! the charge density computed at zero electric field. This is obtained by imposing that the macroscopic potential does not get
-!! contribution by the Hartree term in LR_Modules/dv_of_drho.f90. 
-!!
-!! -- Reconstruct the density response to an atomic displacement: 
-!!
-!! -- Print density after DFPT cycle: This is dealt in dump_drho.f90 (present routine)
-!! dump_drho.f90 is a container for all the practical routines needed to obtain multipoles and response functions 
-!!
-!! The detailed technical explanation of each routines follows their definition
-!----------------------------------------------------------
 SUBROUTINE write_epsilon(npe, drhop)
   !----------------------------------------------
+  !! F. Macheda (2024)
   !! This routine takes the density (drhop) as input, computes the associated potential in real space,
   !! transforms in reciprocal space and takes its macroscopic component. Various response quantities
   !! are printed to file (fildvscf). The most important quantity is the inverse of the macroscopic dielectric function,
@@ -133,6 +107,10 @@ END SUBROUTINE write_epsilon
 !
 !----------------------------------------------------------
 SUBROUTINE write_drhoun
+  !----------------------------------------------
+  !! F. Macheda (2024)
+  !! This routine takes the computed induced density by an atomic displacement, contained in dyn, and
+  !! performs its symmetrization with respect to the small group of q. Then, it prints the results to file. 
   ! ---------------------------------------------
   USE kinds,          ONLY : DP
   USE io_global,      ONLY : stdout, ionode
@@ -474,6 +452,10 @@ END SUBROUTINE write_drhoun
 !----------------------------------------------------------
 SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   !----------------------------------------------------------
+  !! F. Macheda (2024)
+  !! This routine takes the mode-th irreducible component of the potential, pot, and refers its macroscopic components to the value of the Coulomb
+  !! potential (Eq. (B33) of Ref. PRB 110, 094306 (2024))
+  ! ---------------------------------------------
   !
   USE kinds,          ONLY : DP
   USE fft_base,       ONLY : dffts
@@ -591,6 +573,9 @@ END SUBROUTINE Vaeps_dvloc
 !
 !----------------------------------------------------------
 SUBROUTINE init_rho(npe, drhos, drhop, iq_dummy)
+  ! ---------------------------------------------
+  !! F. Macheda (2024)
+  !! This routine simply reads the density drhop from file, and associate the correct drhos
   ! ---------------------------------------------
   USE kinds,                ONLY : DP
   USE io_global,            ONLY : ionode

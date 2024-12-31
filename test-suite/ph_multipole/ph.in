@@ -1,9 +1,9 @@
---
+SiC
  &inputph
-  outdir='./out/',
+  outdir='./',
   prefix='sic',
-  fildyn='sic.dynmat',
   tr2_ph=1.0d-18,
-  lrhoun = .true.
-  lmacro = .true.
-/ 
+  lmultipole = .true.
+  fildrho = 'drho.dat.{}'
+  fildvscf = 'drhodv.dat.{}'
+ /

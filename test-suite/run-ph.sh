@@ -124,7 +124,7 @@ then
 # echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4"
   ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4
   echo "Running Python postprocessing.."
-  python3 multipole.py -f --order 3 --epsil_order 4 -n 8 --vmacro > postprocessing.out
+  python3 multipole.py -f --order 3 --epsil_order 4 -n 8 > postprocessing.out
   echo "postprocessing.out" >> $3
   cat postprocessing.out >> $3
   echo "epsilon.fmt" >> $3

@@ -386,11 +386,11 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
             IF (doublegrid) then
                DO is = 1, nspin_mag
                   DO ipert = 1, npert
-                     CALL fft_interpolate (dfftp, drhop(:,is,ipert), dffts, drhos(:,is,ipert))
+                     CALL fft_interpolate(dfftp, drhop(:, is, ipert), dffts, drhos(:, is, ipert))
                   ENDDO
                ENDDO
             ELSE
-              CALL psymdvscf (drhos)
+              CALL psymdvscf(drhos)
             ENDIF
          ENDIF
          !
