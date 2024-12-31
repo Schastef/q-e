@@ -469,9 +469,14 @@ SUBROUTINE Vaeps_dvloc(uact, pot, ind_ig)
   !
   IMPLICIT NONE
   COMPLEX(DP), INTENT(IN) :: uact(nmodes)
+  !! pattern of the representation
   COMPLEX(DP), INTENT(INOUT) :: pot
+  !! potential to be refered to the Coulombian potential
   INTEGER, INTENT(IN) :: ind_ig
-  !! Index to be passed
+  !! Index to be passed, that identifies the macroscopic component
+  !
+  ! ... local variables
+  !
   REAL (DP), ALLOCATABLE :: vlocq(:, :)  ! ngm, ntyp)
   INTEGER :: na, mu, ig, nt
   INTEGER, ALLOCATABLE :: nl_d(:)
@@ -569,127 +574,6 @@ SUBROUTINE Vaeps_dvloc(uact, pot, ind_ig)
     !
 !----------------------------------------------------------
 END SUBROUTINE Vaeps_dvloc
-!----------------------------------------------------------------------
-!----------------------------------------------------------
-SUBROUTINE Vaeps_dvloc2(pot, mode, ind_ig)
-  !----------------------------------------------------------
-  !! F. Macheda (2024)
-  !! This routine takes the mode-th irreducible component of the potential, pot, and refers its macroscopic components to the value of the Coulomb
-  !! potential (Eq. (B33) of Ref. PRB 110, 094306 (2024))
-  ! ---------------------------------------------
-  !
-  USE kinds,          ONLY : DP
-  USE fft_base,       ONLY : dffts
-  USE modes,          ONLY : u
-  USE ions_base,      ONLY : nat, ityp, ntyp => nsp
-  USE gvect,          ONLY : g, mill, eigts1, eigts2, eigts3, ngm
-  USE qpoint,         ONLY : xq, eigqts
-  USE cell_base,      ONLY : tpiba, tpiba2, omega
-  USE uspp_param,     ONLY : upf
-  USE gvecs,          ONLY : ngms
-  !
-  IMPLICIT NONE
-  COMPLEX(DP), INTENT(INOUT) :: pot
-  INTEGER, INTENT(IN) :: mode
-  INTEGER, INTENT(IN) :: ind_ig
-  !! Index to be passed
-  REAL (DP), ALLOCATABLE :: vlocq(:, :)  ! ngm, ntyp)
-  INTEGER :: na, mu, ig, nt
-  INTEGER, ALLOCATABLE :: nl_d(:)
-  COMPLEX(DP) :: gtau, gu, fact, u1, u2, u3, gu0
-  COMPLEX(DP) , ALLOCATABLE :: aux1 (:)
-  REAL(DP) :: zval
-  INTEGER :: ierr
-  ! 
-  ALLOCATE(nl_d(dffts%ngm), STAT = ierr )
-  IF (ierr /= 0) CALL errore('Vaeps_dvloc', 'Error allocating nl_d', 1)
-  nl_d  = dffts%nl
-  ALLOCATE(aux1(dffts%nnr), STAT = ierr) !aux1 is dvlocin
-  IF (ierr /= 0) CALL errore('Vaeps_dvloc', 'Error allocating aux1', 1)
-  ALLOCATE(vlocq(ngm,ntyp), STAT = ierr)
-  IF (ierr /= 0) CALL errore('Vaeps_dvloc', 'Error allocating vlocq', 1)
-  !
-  DO nt = 1, ntyp
-    !
-    zval=upf(nt)%zp
-    CALL setlocq_coul (xq, zval, tpiba2, ngm, g, omega, vlocq(:,nt))
-    !
-  ENDDO
-  !
-  aux1 = 0.0d0
-  !
-  DO na = 1, nat
-    !
-    fact = tpiba * (0.d0, -1.d0) * eigqts(na)
-    mu = 3 * (na - 1)
-    !
-    IF (abs (u(mu + 1, mode) ) + abs (u(mu + 2, mode)) + &
-        abs (u(mu + 3, mode) ) > 1.0d-12) THEN
-       !
-      nt = ityp(na)
-      u1 = u(mu + 1, mode)
-      u2 = u(mu + 2, mode)
-      u3 = u(mu + 3, mode)
-      gu0 = xq(1) * u1 + xq(2) * u2 + xq(3) * u3
-      !
-      DO ig = 1, ngms
-        !
-        gtau = eigts1(mill(1,ig), na) * eigts2(mill(2,ig), na) * &
-               eigts3(mill(3,ig), na)
-        gu = gu0 + g(1, ig) * u1 + g(2, ig) * u2 + g(3, ig) * u3
-        aux1 (dffts%nl(ig)) = aux1 (dffts%nl(ig)) + vlocq(ig, nt) &
-                              * gu * fact * gtau
-        !
-      ENDDO
-      !
-    ENDIF
-    !
-  ENDDO
-  !
-  pot = pot - aux1(ind_ig)
-  DEALLOCATE(aux1)
-  !
-  CONTAINS
-    !----------------------------------------------------------------------
-    SUBROUTINE setlocq_coul (xq, zp, tpiba2, ngm, g, omega, vloc)
-     !----------------------------------------------------------------------
-     !! Fourier transform of the Coulomb potential - For all-electron
-     !! calculations, in specific cases only, for testing purposes.
-     !
-     USE kinds, ONLY: DP
-     USE constants, ONLY : fpi, e2, eps8
-     IMPLICIT NONE
-     !
-     INTEGER, INTENT(IN) :: ngm
-     REAL(DP) :: xq (3), zp, tpiba2, omega, g(3, ngm)
-     REAL(DP), INTENT (OUT) :: vloc(ngm)
-     !
-     REAL(DP) :: g2a
-     INTEGER :: ig
-     !
-     DO ig = 1, ngm
-       !
-       g2a = (xq(1) + g(1, ig)) **2 + (xq(2) + g(2, ig)) **2 + &
-             (xq(3) + g(3, ig)) **2
-       !
-       IF (g2a < eps8) THEN
-         !
-         vloc (ig) = 0.d0
-         !
-       ELSE
-         !
-         vloc (ig) = - fpi * zp *e2 / omega / tpiba2 / g2a
-         !
-       ENDIF
-       !
-     ENDDO
-     !
-    !----------------------------------------------------------------------
-    END SUBROUTINE setlocq_coul
-    !----------------------------------------------------------------------
-    !
-!----------------------------------------------------------
-END SUBROUTINE Vaeps_dvloc2
 !----------------------------------------------------------------------
 !
 !----------------------------------------------------------
