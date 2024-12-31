@@ -6,9 +6,20 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !----------------------------------------------------------
-SUBROUTINE write_epsilon(npe, drhoscfh)
+!! F. Macheda (2024)
+!!
+!! GENERAL EXPLANATION of "lmultipole" flag
+!! 
+!! dump_drho.f90 is a container for all the practical routines needed to perform the previous tasks
+!!
+!! The detailed technical explanation of each routines follows their definition
+!----------------------------------------------------------
+SUBROUTINE write_epsilon(npe, drhop)
   !----------------------------------------------
-  !! F. Macheda (2024)
+  !! This routine takes the density (drhop) as input, computes the associated potential in real space,
+  !! transforms in reciprocal space and takes its macroscopic component. Various response quantities
+  !! are printed to file (fildvscf). The most important quantity is the inverse of the macroscopic dielectric function,
+  !! corresponding to Eqs. (43) and (45) PRB 110, 094306 (2024)
   ! ---------------------------------------------
   USE kinds,                ONLY : DP
   USE io_global,            ONLY : ionode
@@ -27,29 +38,34 @@ SUBROUTINE write_epsilon(npe, drhoscfh)
   !
   IMPLICIT NONE
   INTEGER, INTENT(IN) :: npe
-  COMPLEX(DP), INTENT(IN) :: drhoscfh(dfftp%nnr, nspin_mag,npe)
-  COMPLEX(DP), ALLOCATABLE :: dvscf_toprint(:, :, :), drho_toprint(:, :, :)
+  !! input: the number of perturbation
+  COMPLEX(DP), INTENT(IN) :: drhop(dfftp%nnr, nspin_mag, npe)
+  !! input: change of the charge density (smooth and hard parts, dfftp)
   INTEGER, EXTERNAL :: find_free_unit
-  COMPLEX(DP) :: epsm1, chi, chi0, barchi
+  !! to find available printing units 
   REAL(DP) :: vq
+  !! Coulombian
+  COMPLEX(DP) :: epsm1, chi, chi0, barchi
+  !! auxiliary variables to enable printing
+  COMPLEX(DP), ALLOCATABLE :: dvscf_toprint(:, :, :), drho_toprint(:, :, :)
+  !! auxiliary variables to enable printing
   COMPLEX(DP) :: drhoaux, dvaux
+  !! auxiliary variables to enable printing
   INTEGER :: ierr
+  !! error status
   !
-  ALLOCATE (dvscf_toprint(dfftp%nnr, nspin_mag , npe), STAT = ierr)
+  ALLOCATE(dvscf_toprint(dfftp%nnr, nspin_mag , npe), STAT = ierr)
   IF (ierr /= 0) CALL errore('write_epsilon', 'Error allocating dvscf_toprint', 1)
-  ALLOCATE (drho_toprint(dfftp%nnr, nspin_mag , npe), STAT = ierr)
+  ALLOCATE(drho_toprint(dfftp%nnr, nspin_mag , npe), STAT = ierr)
   IF (ierr /= 0) CALL errore('write_epsilon', 'Error allocating drho_toprint', 1)
   !
-  CALL zcopy (dfftp%nnr*nspin_mag, drhoscfh, 1, dvscf_toprint, 1)
-  CALL zcopy (dfftp%nnr*nspin_mag, drhoscfh, 1, drho_toprint, 1)
+  CALL zcopy(dfftp%nnr*nspin_mag, drhop, 1, dvscf_toprint, 1)
+  CALL zcopy(dfftp%nnr*nspin_mag, drhop, 1, drho_toprint, 1)
   !
-  CALL dv_of_drho (dvscf_toprint(1,1,1)) !nlcc cannot be applied since they depend on the perturbation, that we are taking as a scalar here
+  CALL dv_of_drho(dvscf_toprint(1, 1, 1)) !nlcc cannot be applied since they depend on the perturbation, that we are taking as a scalar here
   !
-  CALL fwfft ('Rho', dvscf_toprint(:,1,1), dfftp)
-  CALL fwfft ('Rho', drho_toprint(:,1,1), dfftp)
-  !
-  drho_toprint = drho_toprint 
-  dvscf_toprint = dvscf_toprint 
+  CALL fwfft('Rho', dvscf_toprint(:, 1, 1), dfftp)
+  CALL fwfft('Rho', drho_toprint(:, 1, 1), dfftp)
   !
   drhoaux=0d0
   dvaux=0d0
@@ -84,7 +100,7 @@ SUBROUTINE write_epsilon(npe, drhoscfh)
     WRITE(iurhoun,'(2f18.12)') REAL(barchi), AIMAG(barchi)
     !
     WRITE(iurhoun, '(a)') "# $1/\epsilon^{-1}_{L}(q)$   Eqs. (43) and (45) PRB 110, 094306 (2024)"
-    WRITE(iurhoun,'(2f18.12)') REAL(1d0-vq*drhoaux), AIMAG(1d0-vq*drhoaux)
+    WRITE(iurhoun,'(2f18.12)') REAL(1d0 - vq * drhoaux), AIMAG(1d0 - vq * drhoaux)
     !
   ENDIF
   !
@@ -98,8 +114,6 @@ END SUBROUTINE write_epsilon
 !
 !----------------------------------------------------------
 SUBROUTINE write_drhoun
-  !----------------------------------------------
-  ! F. Macheda (2024)
   ! ---------------------------------------------
   USE kinds,          ONLY : DP
   USE io_global,      ONLY : stdout, ionode
@@ -120,20 +134,24 @@ SUBROUTINE write_drhoun
   !
   IMPLICIT NONE
   !
-  INTEGER  :: ig, i, j
-  INTEGER  :: ipol, jpol, na, nb 
+  INTEGER  :: ig, i, j, ipol, jpol, na, nb 
+  !! loop indexes
   INTEGER, ALLOCATABLE :: itmp_mill(:, :)
+  !! Miller indexes
   COMPLEX(DP) :: Im_i=(0._dp, 1._dp)
+  !! Imaginary unit
   COMPLEX(DP), ALLOCATABLE :: phase(:)
+  !! Phase factor
   REAL(DP)  :: zval
+  !! Atomic charge
   REAL(DP)  :: arg 
-  CHARACTER(LEN=6), EXTERNAL :: int_to_char
+  !! Argument of the phase
   INTEGER, EXTERNAL :: find_free_unit
-  COMPLEX(DP) :: phi (3, nat) 
-  REAL(DP) :: absq
+  !! to find available printing units 
+  COMPLEX(DP) :: phi(3, nat) 
+  !! working vector to reconstruct the charge
   INTEGER :: ierr
-  !
-  absq = SQRT(DOT_PRODUCT(xq, xq))
+  !! error status
   !
   ALLOCATE(phase(nat), STAT = ierr)
   IF (ierr /= 0) CALL errore('write_drhoun', 'Error allocating phase', 1)
@@ -258,6 +276,7 @@ SUBROUTINE write_drhoun
       COMPLEX(DP) :: faseq(48)
       INTEGER :: iflb(nat), isymq, kpol, sna, irot
       INTEGER :: ierr
+      !! error status
       !
       IF (nsym == 1) RETURN
       !
@@ -508,52 +527,51 @@ SUBROUTINE Vaeps_dvloc(pot, mode, ind_ig)
   pot = pot - aux1(ind_ig)
   DEALLOCATE(aux1)
   !
+  CONTAINS
+    !----------------------------------------------------------------------
+    SUBROUTINE setlocq_coul (xq, zp, tpiba2, ngm, g, omega, vloc)
+     !----------------------------------------------------------------------
+     !! Fourier transform of the Coulomb potential - For all-electron
+     !! calculations, in specific cases only, for testing purposes.
+     !
+     USE kinds, ONLY: DP
+     USE constants, ONLY : fpi, e2, eps8
+     IMPLICIT NONE
+     !
+     INTEGER, INTENT(IN) :: ngm
+     REAL(DP) :: xq (3), zp, tpiba2, omega, g(3, ngm)
+     REAL(DP), INTENT (OUT) :: vloc(ngm)
+     !
+     REAL(DP) :: g2a
+     INTEGER :: ig
+     !
+     DO ig = 1, ngm
+       !
+       g2a = (xq(1) + g(1, ig)) **2 + (xq(2) + g(2, ig)) **2 + &
+             (xq(3) + g(3, ig)) **2
+       !
+       IF (g2a < eps8) THEN
+         !
+         vloc (ig) = 0.d0
+         !
+       ELSE
+         !
+         vloc (ig) = - fpi * zp *e2 / omega / tpiba2 / g2a
+         !
+       ENDIF
+       !
+     ENDDO
+     !
+    !----------------------------------------------------------------------
+    END SUBROUTINE setlocq_coul
+    !----------------------------------------------------------------------
+    !
 !----------------------------------------------------------
 END SUBROUTINE Vaeps_dvloc
 !----------------------------------------------------------------------
 !
-!----------------------------------------------------------------------
-SUBROUTINE setlocq_coul (xq, zp, tpiba2, ngm, g, omega, vloc)
- !----------------------------------------------------------------------
- !! Fourier transform of the Coulomb potential - For all-electron
- !! calculations, in specific cases only, for testing purposes.
- !
- USE kinds, ONLY: DP
- USE constants, ONLY : fpi, e2, eps8
- IMPLICIT NONE
- !
- INTEGER, INTENT(IN) :: ngm
- REAL(DP) :: xq (3), zp, tpiba2, omega, g(3, ngm)
- REAL(DP), INTENT (OUT) :: vloc(ngm)
- !
- REAL(DP) :: g2a
- INTEGER :: ig
- !
- DO ig = 1, ngm
-   !
-   g2a = (xq(1) + g(1, ig)) **2 + (xq(2) + g(2, ig)) **2 + &
-         (xq(3) + g(3, ig)) **2
-   !
-   IF (g2a < eps8) THEN
-     !
-     vloc (ig) = 0.d0
-     !
-   ELSE
-     !
-     vloc (ig) = - fpi * zp *e2 / omega / tpiba2 / g2a
-     !
-   ENDIF
-   !
- ENDDO
- !
-!----------------------------------------------------------------------
-END SUBROUTINE setlocq_coul
-!----------------------------------------------------------------------
-!
 !----------------------------------------------------------
-SUBROUTINE init_rho(npe, drhoscf, drhoscfh, iq_dummy)
-  !----------------------------------------------
-  ! F. Macheda (2024)
+SUBROUTINE init_rho(npe, drhos, drhop, iq_dummy)
   ! ---------------------------------------------
   USE kinds,                ONLY : DP
   USE io_global,            ONLY : ionode
@@ -571,8 +589,10 @@ SUBROUTINE init_rho(npe, drhoscf, drhoscfh, iq_dummy)
   !
   IMPLICIT NONE
   INTEGER, INTENT(IN) :: npe
-  COMPLEX(DP), INTENT(INOUT) :: drhoscf(dffts%nnr, nspin_mag, npe)
-  COMPLEX(DP), INTENT(INOUT) :: drhoscfh(dfftp%nnr, nspin_mag, npe)
+  COMPLEX(DP), INTENT(INOUT) :: drhos(dffts%nnr, nspin_mag, npe)
+  !! input/output: change of the charge density (smooth and hard parts, dfftp)
+  COMPLEX(DP), INTENT(INOUT) :: drhop(dfftp%nnr, nspin_mag, npe)
+  !! input/output: change of the charge density (smooth parts, dffts)
   INTEGER, INTENT(IN) :: iq_dummy
   !
   INTEGER :: ipert, is
@@ -592,7 +612,7 @@ SUBROUTINE init_rho(npe, drhoscf, drhoscfh, iq_dummy)
         !
       ENDIF ! ionode
       !     
-      CALL davcio_drho (drhoscfh(1,1,ipert), lrdrho, iudrho, 1, -1)
+      CALL davcio_drho (drhop(1,1,ipert), lrdrho, iudrho, 1, -1)
       !
     ENDIF
     !
@@ -605,7 +625,7 @@ SUBROUTINE init_rho(npe, drhoscf, drhoscfh, iq_dummy)
       !
       DO ipert = 1, npe
         !
-        CALL fft_interpolate (dfftp, drhoscfh(:, is, ipert), dffts, drhoscf(:, is, ipert))
+        CALL fft_interpolate (dfftp, drhop(:, is, ipert), dffts, drhos(:, is, ipert))
         !
       ENDDO
       !
@@ -613,7 +633,7 @@ SUBROUTINE init_rho(npe, drhoscf, drhoscfh, iq_dummy)
     !
   ELSE
     !
-    CALL zcopy (npe*nspin_mag*dfftp%nnr, drhoscfh, 1, drhoscf, 1)
+    CALL zcopy (npe*nspin_mag*dfftp%nnr, drhop, 1, drhos, 1)
     !
   ENDIF
   !

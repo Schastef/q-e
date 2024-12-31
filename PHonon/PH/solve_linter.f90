@@ -265,7 +265,7 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   !
   IF (convt) THEN
      !
-     IF (lmultipole) CALL write_epsilon(npe,drhop)
+     IF (lmultipole) CALL write_epsilon(npe, drhop)
      !
      CALL drhodvus (irr, imode0, dvscfp, npe)
      IF (nlcc_any) CALL dynmat_nlcc (imode0, drhop, npe)

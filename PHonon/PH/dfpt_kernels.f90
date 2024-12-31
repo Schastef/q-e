@@ -384,17 +384,16 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       IF (.NOT. lgamma_gamma) THEN
          CALL psymdvscf(drhop)
-         !
          IF (lmultipole) THEN
-          if (doublegrid) then
-            do is = 1, nspin_mag
-              do ipert = 1, npert
-                call fft_interpolate (dfftp, drhop(:,is,ipert), dffts, drhos(:,is,ipert))
-              enddo
-            enddo
-          else
-            call psymdvscf (drhos)
-          endif
+            IF (doublegrid) then
+               DO is = 1, nspin_mag
+                  DO ipert = 1, npert
+                     CALL fft_interpolate (dfftp, drhop(:,is,ipert), dffts, drhos(:,is,ipert))
+                  ENDDO
+               ENDDO
+            ELSE
+              CALL psymdvscf (drhos)
+            ENDIF
          ENDIF
          !
          IF (okpaw) THEN
