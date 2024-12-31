@@ -29,7 +29,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   USE qpoint,           ONLY : xq, eigqts
   USE modes,            ONLY : nmodes
   USE dv_of_drho_lr,    ONLY : dv_of_drho_xc
-  USE control_lr,       ONLY : current_mode, lmultipole
+  USE control_lr,       ONLY : lmultipole
   !
   IMPLICIT NONE
   !
@@ -164,7 +164,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
   endif
   !
   IF (lmultipole .AND. gg(1) < 1d-8) THEN
-    CALL Vaeps_dvloc(dvlocin(dffts%nl(1)), current_mode, dffts%nl(1))
+    CALL Vaeps_dvloc(uact, dvlocin(dffts%nl(1)), dffts%nl(1))
   ENDIF
   !
   ! Now we compute dV_loc/dtau in real space

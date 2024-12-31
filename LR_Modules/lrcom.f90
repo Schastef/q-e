@@ -104,8 +104,6 @@ MODULE control_lr
   !
   LOGICAL :: lmultipole=.FALSE.   
   !! if TRUE macroscopic density response to q-potential perturbation is written as output
-  INTEGER :: current_mode     
-  !! Keeps track of the current mode
 END MODULE control_lr
 !
 MODULE eqv
