@@ -242,9 +242,17 @@ SUBROUTINE solve_linter (irr, imode0, npe, drhos, drhop)
   ! Compute the change of core charge due to atomic displacement
   ! drhoc is computed only once, stored in drhoc, passed to dfpt_kernel.
   !
-  DO ipert = 1, npe
-     CALL addcore(u(1, imode0+ipert), drhoc(1, ipert))
-  ENDDO
+  IF (.NOT. lmultipole) THEN
+    !
+    DO ipert = 1, npe
+      CALL addcore(u(1, imode0+ipert), drhoc(1, ipert))
+    ENDDO
+    !
+  ELSE
+    !
+    drhoc(:, :) = (0.0_DP, 0.0_DP)
+    !
+  ENDIF
   !
   ! Set records for restart
   !
