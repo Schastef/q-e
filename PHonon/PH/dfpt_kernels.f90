@@ -313,8 +313,6 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
          CALL zcopy(npert * nspin_mag * dfftp%nnr, drhos, 1, drhop, 1)
       ENDIF
       !
-      IF (lmultipole) call psymdvscf (drhos)
-      !
       !  In the noncolinear, spin-orbit case rotate dbecsum
       !
       IF (noncolin .AND. okvan) THEN

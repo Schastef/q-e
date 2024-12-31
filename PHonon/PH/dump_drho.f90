@@ -8,9 +8,28 @@
 !----------------------------------------------------------
 !! F. Macheda (2024)
 !!
-!! GENERAL EXPLANATION of "lmultipole" flag
-!! 
-!! dump_drho.f90 is a container for all the practical routines needed to perform the previous tasks
+!! EXPLANATION of "lmultipole" flag
+!!
+!! -- General philosophy: The density response to an atomic displacement can be obtained via 1) the self-consistent potential due to
+!! an atomic displacement 2) the self-consistent potential due to an electric field perturbation. We adopt the second procedure, to
+!! obtain a fast scaling (wrt to the number of atoms) implementation.
+!!
+!! -- Global variables: The only global variable is "lmultipole", contanied in LR_Modules/lrcom.f90. 
+!! The code also need two units for writing, "iurhoun" and "iudumprho", contained in phcom.f90
+!! lmutipole is incompatibile, at present (2024) with pseudopotentials that are not NC
+!!
+!! -- Set up the perturbation: we set up an electric field perturbation in dvqpsi_us.f90, where the macroscopic component of dvlocin 
+!! is set to 1 for each perturbation; the nonlocal part of the perturbation is set to zero, as well as any NLCC. They are reintroduced later in the
+!! computation of the density
+!!
+!! -- Perform the DFPT cycle: In the DFPT cycle, we put the macroscopic electrostatic potential to zero. This is needed to obtain
+!! the charge density computed at zero electric field. This is obtained by imposing that the macroscopic potential does not get
+!! contribution by the Hartree term in LR_Modules/dv_of_drho.f90. 
+!!
+!! -- Reconstruct the density response to an atomic displacement: 
+!!
+!! -- Print density after DFPT cycle: This is dealt in dump_drho.f90 (present routine)
+!! dump_drho.f90 is a container for all the practical routines needed to obtain multipoles and response functions 
 !!
 !! The detailed technical explanation of each routines follows their definition
 !----------------------------------------------------------

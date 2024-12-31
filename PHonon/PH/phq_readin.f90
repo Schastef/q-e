@@ -859,9 +859,11 @@ SUBROUTINE phq_readin()
 
   ! FM : incompatibility for lmultipole
   IF (lmultipole .and. (okvan .or. domag)) CALL errore('phq_readin',&
-     'lmultipole implemented only for norm-conserving potential, and without magnetization',1)
+     'lmultipole implemented only for norm-conserving potential, and without magnetization', 1)
   IF (lmultipole .and. (ltetra .OR. lgauss)) CALL errore('phq_readin',&
-          'lmultipole does not work with metal',1)
+     'lmultipole does not work with metal', 1)
+  IF (lmultipole .and. epsil) CALL errore('phq_readin',&
+     'lmultipole is already an electric field calculation', 1)
   !
   !
   IF (start_irr < 0 ) CALL errore('phq_readin', 'wrong start_irr',1)
