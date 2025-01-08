@@ -274,8 +274,8 @@ MODULE control_flags
   TYPE(offload_kind_cpu), PUBLIC :: offload_cpu  ! flag to select no offload type (CPU execution)
 #if defined(__CUDA)
   TYPE(offload_kind_acc), PUBLIC :: offload_type ! flag to point the actual currently used offload type 
-#elif defined(__OPENMP_GPU)
-  TYPE(offload_kind_omp), PUBLIC :: offload_type
+!#elif defined(__OPENMP_GPU)
+!  TYPE(offload_kind_omp), PUBLIC :: offload_type
 #else
   TYPE(offload_kind_cpu), PUBLIC :: offload_type
 #endif
