@@ -374,13 +374,19 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
   ALLOCATE( psi1(n,npol) )
   ALLOCATE( psic(dffts_nnr,npol) )
   !
-  !$acc data present_or_copyout(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+  !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+#if defined(__OPENMP_GPU)
+  !$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+#endif
   !
   ! ... the local potential V_Loc psi. First the psi in real space
   !
   DO ibnd = 1, m, incr
      !
      !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do collapse(2)
+#endif
      DO ipol = 1, npol
         DO j = 1, n
            psi1(j,ipol) = psi(j+lda*(ipol-1),ibnd)
@@ -388,11 +394,14 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
      END DO
      DO ipol = 1, npol
         CALL wave_g2r( psi1(:,ipol:ipol), psic(:,ipol), dffts, &
-             igk=igk_k(:,current_k) )
+             igk=igk_k(:,current_k), omp_mod=0 )
      ENDDO
      !
      IF (domag) THEN
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, dffts_nnr
            sup  = psic(j,1) * (v(j,1)+v(j,4)) + &
                 psic(j,2) * (v(j,2)-(0.d0,1.d0)*v(j,3))
@@ -403,6 +412,9 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
         ENDDO
      ELSE
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO ipol = 1, npol
            DO j = 1, dffts_nnr
               psic(j,ipol) = psic(j,ipol) * v(j,1)
@@ -412,9 +424,12 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
      !
      DO ipol = 1, npol
         CALL wave_r2g( psic(:,ipol), psi1(:,1:1), dffts, &
-             igk=igk_k(:,current_k) )
+             igk=igk_k(:,current_k), omp_mod=0 )
         !
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, n
            hpsi(j,ipol,ibnd) = hpsi(j,ipol,ibnd) + psi1(j,1)
         ENDDO
@@ -422,6 +437,9 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
      !
   ENDDO
   !$acc end data
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   DEALLOCATE( psic )
   DEALLOCATE( psi1 )
   !
