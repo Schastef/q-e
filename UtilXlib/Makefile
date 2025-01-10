@@ -6,6 +6,7 @@ include ../make.inc
 MODFLAGS=$(MOD_FLAG).
 
 UTIL = clib_wrappers.o \
+roctx_wrapper.o \
 clocks_handler.o \
 cptimer.o \
 copy.o \
