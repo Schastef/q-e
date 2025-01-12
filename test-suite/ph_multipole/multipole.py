@@ -42,7 +42,7 @@ def goodbye(start_time):
     info1 = "You are using `Multipole` program developed in the work:"
     info2 = "Please consider to cite it if you find the program useful."
     authors = "C. Lin, S. Ponce, F. Macheda, F. Mauri, and N. Marzari, "
-    journal = "arXiv:xxxx.xxxxx (2024)."
+    journal = "https://arxiv.org/abs/2412.18482 (2024)."
 
     end_time = datetime.datetime.now()
     elapsed_time = end_time - start_time
