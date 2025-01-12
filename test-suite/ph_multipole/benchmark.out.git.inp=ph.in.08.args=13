@@ -1,5 +1,5 @@
 
-     Program PHONON v.7.4 starts on 23Dec2024 at 15:48:42 
+     Program PHONON v.7.4 starts on 12Jan2025 at 13:57:36 
 
      This program is part of the open-source Quantum ESPRESSO suite
      for quantum simulation of materials; please cite
@@ -13,7 +13,7 @@
      Parallel version (MPI), running on     1 processors
 
      MPI processes distributed on     1 nodes
-     4094 MiB available memory on the printing compute node when the environment starts
+     1381 MiB available memory on the printing compute node when the environment starts
 
      Waiting for input...
      Reading input from standard input
@@ -64,7 +64,7 @@
      SiC                                                                        
 
 
-     bravais-lattice index     =            2
+     bravais-lattice index     =            0
      lattice parameter (alat)  =       8.2370  a.u.
      unit-cell volume          =     139.7163 (a.u.)^3
      number of atoms/cell      =            2
@@ -153,7 +153,7 @@
 
      SiC                                                                        
 
-     bravais-lattice index     =            2
+     bravais-lattice index     =            0
      lattice parameter (alat)  =       8.2370  a.u.
      unit-cell volume          =     139.7163 (a.u.)^3
      number of atoms/cell      =            2
@@ -233,7 +233,7 @@
 
      Message from routine init_vloc:
      Interpolation table for Vloc re-allocated
-     PHONON       :      0.83s CPU      0.86s WALL
+     PHONON       :      0.85s CPU      0.87s WALL
 
 
 
@@ -305,7 +305,7 @@
  ------------------------------------------------------------------------
 
      init_run     :      0.02s CPU      0.02s WALL (       1 calls)
-     electrons    :      0.71s CPU      0.74s WALL (       1 calls)
+     electrons    :      0.72s CPU      0.74s WALL (       1 calls)
 
      Called by init_run:
      wfcinit      :      0.00s CPU      0.00s WALL (       1 calls)
@@ -313,21 +313,21 @@
      hinit0       :      0.02s CPU      0.02s WALL (       1 calls)
 
      Called by electrons:
-     c_bands      :      0.71s CPU      0.74s WALL (       1 calls)
+     c_bands      :      0.72s CPU      0.74s WALL (       1 calls)
      v_of_rho     :      0.00s CPU      0.00s WALL (       2 calls)
 
      Called by c_bands:
      init_us_2    :      0.02s CPU      0.02s WALL (     896 calls)
-     cegterg      :      0.54s CPU      0.56s WALL (     112 calls)
+     cegterg      :      0.55s CPU      0.56s WALL (     112 calls)
 
      Called by *egterg:
      cdiaghg      :      0.04s CPU      0.04s WALL (    1258 calls)
-     h_psi        :      1.97s CPU      2.04s WALL (    5076 calls)
+     h_psi        :      2.01s CPU      2.06s WALL (    5076 calls)
      g_psi        :      0.00s CPU      0.00s WALL (    1146 calls)
 
      Called by h_psi:
      h_psi:calbec :      0.04s CPU      0.04s WALL (    5076 calls)
-     vloc_psi     :      1.88s CPU      1.95s WALL (    5076 calls)
+     vloc_psi     :      1.92s CPU      1.97s WALL (    5076 calls)
                                         0.00s GPU  (    5076 calls)
      add_vuspsi   :      0.03s CPU      0.04s WALL (    5076 calls)
 
@@ -335,12 +335,12 @@
      calbec       :      0.05s CPU      0.05s WALL (    6644 calls)
      fft          :      0.00s CPU      0.00s WALL (      50 calls)
      ffts         :      0.01s CPU      0.01s WALL (     136 calls)
-     fftw         :      2.04s CPU      2.11s WALL (   46466 calls)
+     fftw         :      2.08s CPU      2.13s WALL (   46466 calls)
      davcio       :      0.02s CPU      0.02s WALL (    2951 calls)
 
      Parallel routines
 
-     PHONON       :      2.75s CPU      2.84s WALL
+     PHONON       :      2.79s CPU      2.86s WALL
 
      INITIALIZATION: 
      phq_setup    :      0.00s CPU      0.00s WALL (       1 calls)
@@ -352,22 +352,22 @@
      init_us_2    :      0.02s CPU      0.02s WALL (     896 calls)
 
      DYNAMICAL MATRIX:
-     phqscf       :      1.92s CPU      1.98s WALL (       1 calls)
+     phqscf       :      1.94s CPU      1.99s WALL (       1 calls)
 
-     phqscf       :      1.92s CPU      1.98s WALL (       1 calls)
-     solve_linter :      1.89s CPU      1.95s WALL (       4 calls)
-     dfpt_kernel  :      1.85s CPU      1.91s WALL (       1 calls)
-     sth_kernel   :      1.82s CPU      1.89s WALL (       8 calls)
+     phqscf       :      1.94s CPU      1.99s WALL (       1 calls)
+     solve_linter :      1.91s CPU      1.96s WALL (       4 calls)
+     dfpt_kernel  :      1.88s CPU      1.92s WALL (       1 calls)
+     sth_kernel   :      1.86s CPU      1.90s WALL (       8 calls)
      h_prec       :      0.00s CPU      0.00s WALL (     448 calls)
      apply_dpot_b :      0.16s CPU      0.16s WALL (     392 calls)
      ortho        :      0.00s CPU      0.00s WALL (     448 calls)
-     cgsolve      :      1.45s CPU      1.50s WALL (     448 calls)
+     cgsolve      :      1.48s CPU      1.52s WALL (     448 calls)
      incdrhoscf   :      0.18s CPU      0.19s WALL (     448 calls)
                                         0.00s GPU  (     448 calls)
      dv_of_drho   :      0.00s CPU      0.00s WALL (      12 calls)
      mix_pot      :      0.00s CPU      0.00s WALL (       8 calls)
      drhodv       :      0.02s CPU      0.02s WALL (       4 calls)
-     psymdvscf    :      0.02s CPU      0.02s WALL (      24 calls)
+     psymdvscf    :      0.01s CPU      0.01s WALL (      16 calls)
      com_dvloc    :      0.00s CPU      0.00s WALL (      24 calls)
                                         0.00s GPU  (      24 calls)
      addcore      :      0.00s CPU      0.00s WALL (       1 calls)
@@ -383,35 +383,35 @@
      calbec       :      0.05s CPU      0.05s WALL (    6644 calls)
      fft          :      0.00s CPU      0.00s WALL (      50 calls)
      ffts         :      0.01s CPU      0.01s WALL (     136 calls)
-     fftw         :      2.04s CPU      2.11s WALL (   46466 calls)
+     fftw         :      2.08s CPU      2.13s WALL (   46466 calls)
      davcio       :      0.02s CPU      0.02s WALL (    2951 calls)
      write_rec    :      0.00s CPU      0.00s WALL (      12 calls)
 
       Additional routines
-     ch_psi       :      1.43s CPU      1.48s WALL (    3706 calls)
-     last         :      0.04s CPU      0.04s WALL (    3706 calls)
+     ch_psi       :      1.46s CPU      1.50s WALL (    3706 calls)
+     last         :      0.04s CPU      0.05s WALL (    3706 calls)
      Hesh         :      0.00s CPU      0.00s WALL (    3706 calls)
      ch_psi_all_k :      0.03s CPU      0.04s WALL (    3706 calls)
                                         0.00s GPU  (    3706 calls)
-     h_psi_bgrp   :      1.98s CPU      2.05s WALL (    5076 calls)
-     h_psi        :      1.97s CPU      2.04s WALL (    5076 calls)
-     h_psi:pot    :      1.97s CPU      2.03s WALL (    5076 calls)
+     h_psi_bgrp   :      2.02s CPU      2.06s WALL (    5076 calls)
+     h_psi        :      2.01s CPU      2.06s WALL (    5076 calls)
+     h_psi:pot    :      2.01s CPU      2.05s WALL (    5076 calls)
      h_psi:calbec :      0.04s CPU      0.04s WALL (    5076 calls)
      s_psi_bgrp   :      0.00s CPU      0.00s WALL (    7860 calls)
 
 
-     PHONON       :      2.75s CPU      2.84s WALL
+     PHONON       :      2.79s CPU      2.86s WALL
 
 
-   This run was terminated on:  15:48:45  23Dec2024            
+   This run was terminated on:  13:57:39  12Jan2025            
 
 =------------------------------------------------------------------------------=
    JOB DONE.
 =------------------------------------------------------------------------------=
 postprocessing.out
-Started on 2024-12-23 15:48:45.722131
- __  __       _ _   _             _      
-|  \/  |_   _| | |_(_)_ __   ___ | | ___ 
+Started on 2025-01-12 13:57:40.052855
+ __  __       _ _   _             _
+|  \/  |_   _| | |_(_)_ __   ___ | | ___
 | |\/| | | | | | __| | '_ \ / _ \| |/ _ \
 | |  | | |_| | | |_| | |_) | (_) | |  __/
 |_|  |_|\__,_|_|\__|_| .__/ \___/|_|\___|
@@ -465,7 +465,7 @@ Summary of multipole tensors fitting:
 - Relative norm error: 0.04136345392068712
 - r2 score: 0.9982890645165146
 Writing multipole tensors into files.
-Multipole tensor fitting finished, time elapsed: 0:00:00.000902
+Multipole tensor fitting finished, time elapsed: 0:00:00.000925
 Fitting dielectric tensors via the ordinary least-square.
 Summary of dielectric tensors fitting:
 - Free dielectric components: 3
@@ -475,11 +475,11 @@ Summary of dielectric tensors fitting:
 - Relative norm error: 1.062885756474235e-09
 - r2 score: 1.0
 Writing dielectric tensors into files.
-Dielectric tensor fitting finished, time elapsed: 0:00:00.000486
-Finshed on 2024-12-23 15:48:45.749108, total time elapsed: 0:00:00.026977
+Dielectric tensor fitting finished, time elapsed: 0:00:00.000500
+Finshed on 2025-01-12 13:57:40.083128, total time elapsed: 0:00:00.030273
 ####################################################################################
 # You are using `Multipole` program developed in the work:                         #
-# C. Lin, S. Ponce, F. Macheda, F. Mauri, and N. Marzari, arXiv:xxxx.xxxxx (2024). #
+# C. Lin, S. Ponce, F. Macheda, F. Mauri, and N. Marzari, https://arxiv.org/abs/2412.18482 (2024). #
 # Please consider to cite it if you find the program useful.                       #
 ####################################################################################
 epsilon.fmt
