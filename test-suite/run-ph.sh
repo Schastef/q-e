@@ -26,19 +26,19 @@ then
   then
     cat $3
   fi
-elif [[ "$1" == "11" ]] 
-then 
-  if [[ -e CRASH ]] 
+elif [[ "$1" == "11" ]]
+then
+  if [[ -e CRASH ]]
   then
-    cat CRASH > $3 
+    cat CRASH > $3
   else
     echo "Running PH ..."
     ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4
     if [[ -e CRASH ]]
-    then 
-      cat $3 
-    fi 
-  fi 
+    then
+      cat $3
+    fi
+  fi
 elif [[ "$1" == "2" ]]
 then
   echo "Running PH ..."
@@ -104,24 +104,29 @@ then
     cat $3
   fi
 elif [[ "$1" == "9" ]]
-then 
-   echo "Running DYNMAT ... " 
-   ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/dynmat.x < $2 > $3 2> $4  
+then
+   echo "Running DYNMAT ... "
+   ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/dynmat.x < $2 > $3 2> $4
 elif [[ "$1" == "12" ]]
 then
   echo "Running PW ..."
-# echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/pw.x ${PARA_SUFFIX} < $2 > $3 2> $4"
+  echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/pw.x ${PARA_SUFFIX} < $2 > $3 2> $4"
   ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/pw.x ${PARA_SUFFIX} < $2 > $3 2> $4
   if [[ -e CRASH ]]
   then
     cat $3
   fi
-  echo "Running Python preprocessing..."
+  echo "Before running the multipole.py Python script, pip install ase and spglib dependencies"
+  echo " "
+  pip install ase
+  pip install spglib
+  echo " "
+  echo "Running Python multipole.py preprocessing..."
   python3 multipole.py -e --order 3 --epsil_order 4 -p -n 8 --mesh 2 2 2 --mesh_step 0.01 > preprocessing.out
 elif [[ "$1" == "13" ]]
 then
   echo "Running PH ..."
-# echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4"
+  echo "${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4"
   ${PARA_PREFIX} ${ESPRESSO_ROOT}/bin/ph.x ${PARA_SUFFIX} < $2 > $3 2> $4
   echo "Running Python postprocessing.."
   python3 multipole.py -f --order 3 --epsil_order 4 -n 8 > postprocessing.out
