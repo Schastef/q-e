@@ -186,9 +186,7 @@ subroutine dv_of_drho (dvscf, drhoc)
                g2  = g(1,ig)**2 + g(2,ig)**2 + g(3,ig)**2
                IF (lnolr) THEN
                  !
-                 IF (g2 < 1d-8 .OR. qg2 < 1.d-8) THEN
-                    dvaux(dfftp%nl(ig),is) = dvaux(dfftp%nl(ig),is)
-                 ELSE
+                 IF (g2 > 1d-8 .AND. qg2 > 1.d-8) THEN
                     dvaux(dfftp%nl(ig),is) = dvaux(dfftp%nl(ig),is) + &
                                    & e2 * fpi * dvscf(dfftp%nl(ig),1) / (tpiba2 * qg2)
                  ENDIF
