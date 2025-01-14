@@ -198,7 +198,7 @@ SUBROUTINE write_drhoun
     iudumpdrho = find_free_unit()
     !
     OPEN(unit=iudumpdrho,file=fildrho)
-    WRITE(iudumpdrho,*) '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
+    WRITE(iudumpdrho,'(a)') '#     Re(\bar \rho^{tot}_{qsx}),Im(\bar \rho^{tot}_{qsx}),Re(\bar \rho^{tot}_{qsy}),&
                          Im(\bar \rho^{tot}_{qsy}),Re(\bar \rho^{tot}_{qsz}),Im(\bar \rho^{tot}_{qsz}) '
     !
     DO ig = 1, ngms_g 
