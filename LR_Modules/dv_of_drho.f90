@@ -35,7 +35,7 @@ subroutine dv_of_drho (dvscf, drhoc)
   USE Coul_cut_2D,       ONLY : do_cutoff_2D  
   USE Coul_cut_2D_ph,    ONLY : cutoff_dv_of_drho 
   USE qpoint,            ONLY : xq
-  USE control_lr,        ONLY : lrpa, lmultipole
+  USE control_lr,        ONLY : lrpa, lnolr
 
   IMPLICIT NONE
   COMPLEX(DP), INTENT(INOUT) :: dvscf(dfftp%nnr, nspin_mag)
@@ -184,7 +184,7 @@ subroutine dv_of_drho (dvscf, drhoc)
             do ig = 1, ngm
                qg2 = (g(1,ig)+xq(1))**2 + (g(2,ig)+xq(2))**2 + (g(3,ig)+xq(3))**2
                g2  = g(1,ig)**2 + g(2,ig)**2 + g(3,ig)**2
-               IF (lmultipole) THEN
+               IF (lnolr) THEN
                  !
                  IF (g2 < 1d-8 .OR. qg2 < 1.d-8) THEN
                     dvaux(dfftp%nl(ig),is) = dvaux(dfftp%nl(ig),is)

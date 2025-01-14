@@ -382,7 +382,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
       !
       IF (.NOT. lgamma_gamma) THEN
          CALL psymdvscf(drhop)
-         IF (lmultipole) THEN
+         IF (lmultipole) THEN !FM: density computed for the first representation only, needs to be symmetrized
             IF (doublegrid) then
                DO is = 1, nspin_mag
                   DO ipert = 1, npert
@@ -390,7 +390,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
                   ENDDO
                ENDDO
             ELSE
-              CALL psymdvscf(drhos)
+              CALL zcopy(npert * nspin_mag * dfftp%nnr, drhop, 1, drhos, 1)
             ENDIF
          ENDIF
          !
@@ -417,7 +417,7 @@ SUBROUTINE dfpt_kernel(code, npert, iter0, lrdvpsi, iudvpsi, dr2, drhos, drhop, 
          ELSE
             IF (PRESENT(drhoc) .AND. .NOT. lmultipole) THEN
                CALL dv_of_drho(dvscftmp(1, 1, ipert), drhoc = drhoc(:, ipert))
-            ELSE
+            ELSE !FM: as the case of solve_e
                CALL dv_of_drho(dvscftmp(1, 1, ipert))
             ENDIF
          ENDIF

@@ -63,7 +63,7 @@ SUBROUTINE phq_readin()
 
   USE qpoint,        ONLY : nksq, xq
   USE control_lr,    ONLY : lgamma, lrpa, alpha_mix, lgamma_gamma, tr2_ph, niter_ph, &
-                            nmix_ph, maxter, reduce_io, rec_code_read, lmultipole
+                            nmix_ph, maxter, reduce_io, rec_code_read, lmultipole, lnolr
   ! YAMBO >
   USE YAMBO,         ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <
@@ -858,6 +858,7 @@ SUBROUTINE phq_readin()
      'The phonon code with Q in real space not available',1)
 
   ! FM : incompatibility for lmultipole
+  IF (lmultipole) lnolr = .TRUE.
   IF (lmultipole .and. (okvan .or. domag)) CALL errore('phq_readin',&
      'lmultipole implemented only for norm-conserving potential, and without magnetization', 1)
   IF (lmultipole .and. (ltetra .OR. lgauss)) CALL errore('phq_readin',&

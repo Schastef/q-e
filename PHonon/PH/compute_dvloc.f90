@@ -163,7 +163,7 @@ subroutine compute_dvloc (uact, addnlcc, dvlocin)
      deallocate (auxs)
   endif
   !
-  IF (lmultipole .AND. gg(1) < 1d-8) THEN
+  IF (lmultipole .AND. gg(1) < 1d-8) THEN !FM: refer potential to all-electron calculation, see routine description
     CALL Vaeps_dvloc(uact, dvlocin(dffts%nl(1)), dffts%nl(1))
   ENDIF
   !
