@@ -116,9 +116,8 @@ then
   then
     cat $3
   fi
-  echo "Before running the multipole.py Python script, pip install ase and spglib dependencies"
+  echo "Before running the multipole.py Python script, pip install spglib dependency"
   echo " "
-  pip install ase
   pip install spglib
   echo " "
   echo "Running Python multipole.py preprocessing..."

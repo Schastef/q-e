@@ -10,15 +10,22 @@ import math
 import numbers
 import os
 import pickle
-from collections import OrderedDict, deque
+from collections import Counter, OrderedDict, deque
 from copy import deepcopy
 from io import StringIO
 
-import ase.io as aseio
 import numpy as np
 import scipy.sparse as sparse
 import spglib as spg
-from ase import Atoms as aseAtoms
+
+try:
+    from ase import Atoms as baseAtoms
+
+    __ASE__ = True
+except ImportError:
+    baseAtoms = object
+    __ASE__ = False
+
 
 __version__ = "0.1.0"
 
@@ -42,7 +49,7 @@ def goodbye(start_time):
     info1 = "You are using `Multipole` program developed in the work:"
     info2 = "Please consider to cite it if you find the program useful."
     authors = "C. Lin, S. Ponce, F. Macheda, F. Mauri, and N. Marzari, "
-    journal = "https://arxiv.org/abs/2412.18482 (2024)."
+    journal = "arXiv:2412.18482 (2024)."
 
     end_time = datetime.datetime.now()
     elapsed_time = end_time - start_time
@@ -907,7 +914,7 @@ class InputParser(argparse.ArgumentParser):
         )
 
 
-class Atoms(aseAtoms):
+class Atoms(baseAtoms):
     """Adapted version of Atoms class inheriting from aseAtoms class.
 
     https://gitlab.com/ase/ase/-/blob/master/ase/atoms.py
@@ -917,6 +924,109 @@ class Atoms(aseAtoms):
     """Constants"""
     ANGSTROM_TO_BOHR = 1.8897261246257702
 
+    def __init__(
+        self,
+        aseAtoms=None,
+        cell=None,
+        positions=None,
+        scaled_positions=None,
+        symbols=None,
+        numbers=None,
+    ):
+        """Initialize Atoms object."
+
+        Parameters
+        ----------
+        aseAtoms : ase.Atoms
+            An ASE Atoms object. Default is None.
+        cell : numpy.ndarray
+            Lattice vectors of primitive cell. Default is None.
+        positions : numpy.ndarray
+            Positions of atoms in Cartesian coordinate in the shape of (natom, 3).
+            Default is None.
+        scaled_positions : numpy.ndarray
+            Positions of atoms in crystal coordinate in the shape of (natom, 3).
+            Default is None.
+        symbols : list
+            Chemical symbols of atoms in the shape of (natom,). Default is None.
+        numbers : list
+            Atom type index of atoms in the shape of (natom,). Default is None.
+
+        """
+        if aseAtoms is not None:
+            super(Atoms, self).__init__(aseAtoms)
+        else:
+            self._cell = cell
+            self._positions = positions
+            self._scaled_positions = scaled_positions
+            self._symbols = symbols
+            self._numbers = numbers
+
+    @property
+    def cell(self):
+        """numpy.ndarray : lattice vectors of primitive cell."""
+        if __ASE__:
+            return super().cell.real
+        else:
+            return self._cell.copy()
+
+    @property
+    def positions(self):
+        """numpy.ndarray : positions of atoms in Cartesian coordinate."""
+        if __ASE__:
+            return super().positions
+        else:
+            return self._positions.copy()
+
+    @property
+    def scaled_positions(self):
+        """numpy.ndarray : positions of atoms in crystal coordinate."""
+        if __ASE__:
+            return super().positions.dot(np.linalg.inv(self.cell))
+        else:
+            return self._scaled_positions.copy()
+
+    def reciprocal(self):
+        """numpy.ndarray : reciprocal lattice vectors."""
+        if __ASE__:
+            return super().cell.reciprocal().real
+        else:
+            return np.linalg.inv(self.cell).T
+
+    def get_global_number_of_atoms(self):
+        """Return the global number of atoms."""
+        if __ASE__:
+            return super().get_global_number_of_atoms()
+        else:
+            return len(self._numbers)
+
+    def get_chemical_formula(self):
+        """Return the chemical formula."""
+        if __ASE__:
+            return super().get_chemical_formula()
+        else:
+            formula = ""
+            for symbol, count in Counter(self._symbols).items():
+                if count == 1:
+                    formula += symbol
+                else:
+                    formula += symbol + str(count)
+            return formula
+
+    def get_chemical_symbols(self):
+        """Return the chemical symbols."""
+        if __ASE__:
+            return super().get_chemical_symbols()
+        else:
+            return self._symbols.copy()
+
+    def get_atomic_numbers(self):
+        """Return the atomic numbers."""
+        if __ASE__:
+            return super().get_atomic_numbers()
+        else:
+            return self._numbers.copy()
+
     @property
     def symops(self):
         """dict : symmetry operations from space group."""
@@ -925,6 +1035,10 @@ class Atoms(aseAtoms):
     @classmethod
     def read(cls, filename="scf.in", format="espresso-in"):
         """Read structure from file.
+
+        Note that if ASE is not installed, the structure will be read
+        using the built-in `read` method of Atoms class which only
+        supports reading from Quantum ESPRESSO input file with ibrav=0.
 
         Parameters
         ----------
@@ -939,8 +1053,13 @@ class Atoms(aseAtoms):
             Structure object.
 
         """
-        cell = aseio.read(filename, format=format)
-        return cls(cell)
+        if __ASE__:
+            import ase.io as aseio
+
+            cell = aseio.read(filename, format=format)
+            return cls(aseAtoms=cell)
+        else:
+            return cls.read_pwscf(filename)
 
     def get_space_group(self, symprec=1e-5, angle_tolerance=-1.0, symbol_type=0):
         """Return space group information.
@@ -999,6 +1118,8 @@ class Atoms(aseAtoms):
 
     def get_number_of_symmetries(self):
         """Return number of space group symmetry operations."""
+        if not hasattr(self, "_nsym"):
+            self.get_symmetry()
         return self._nsym
 
     def get_lattice_constants(self, unit="Angstrom"):
@@ -1016,7 +1137,7 @@ class Atoms(aseAtoms):
             Lattice constants of three lattice vectors.
 
         """
-        alat = np.linalg.norm(self.cell.real, axis=1)
+        alat = np.linalg.norm(self.cell, axis=1)
         if unit.upper() == "ANGSTROM":
             return alat
         elif unit.upper() == "BOHR":
@@ -1024,12 +1145,8 @@ class Atoms(aseAtoms):
         else:
             raise ValueError(f"Unknown unit: {unit}")
 
-    def get_volume_by_unit(self, unit="Angstrom"):
+    def get_volume(self, unit="Angstrom"):
         """Calculate the volume of cell.
-
-        This method will call the built-in method of
-        ase.Atoms, get_volume, to calculate the volume
-        of cell and convert it into the input unit.
 
         Parameters
         ----------
@@ -1043,7 +1160,7 @@ class Atoms(aseAtoms):
             Volume of cell.
 
         """
-        volume = self.get_volume()
+        volume = abs(self.cell[0].dot(np.cross(self.cell[1], self.cell[2])))
         if unit.upper() == "ANGSTROM":
             return volume
         elif unit.upper() == "BOHR":
@@ -1063,10 +1180,104 @@ class Atoms(aseAtoms):
              the corresponding atom types).
 
         """
-        cell = self.cell.real
-        scaled_positions = self.get_scaled_positions()
-        types = self.get_atomic_numbers()
-        return (cell, scaled_positions, types)
+        return (self.cell, self.scaled_positions, self.get_atomic_numbers())
+
+    @classmethod
+    def read_pwscf(cls, filename):
+        """Read structure from Quantum ESPRESSO input file.
+
+        Parameters
+        ----------
+        filename : str
+            Name of file containing structure.
+
+        Returns
+        -------
+        Atoms
+            Crystal structure object.
+
+        """
+        with open(filename, "r") as f:
+            lines = f.readlines()
+            lines = [line.strip() for line in lines]
+            lines = [line.replace(",", "") for line in lines]
+            lines = [line.replace("(", "") for line in lines]
+            lines = [line.replace(")", "") for line in lines]
+            lines = list(filter(None, lines))
+
+        is_pwscf = False
+        for n, line in enumerate(lines):
+            line_split = line.split()
+            if line_split[0].lower() == "&system":
+                is_pwscf = True
+            if "=" in line_split:
+                if line_split[0].lower() == "ibrav":
+                    ibrav = int(line_split[2])
+                    if ibrav != 0:
+                        raise ValueError(
+                            "Only ibrav=0 is supported if ASE is not installed."
+                        )
+                if line_split[0].lower() == "nat":
+                    nat = int(line_split[2])
+                if line_split[0].lower() == "ntyp":
+                    ntyp = int(line_split[2])
+                if line_split[0].lower() == "celldm1":
+                    alat = float(line_split[2]) / cls.ANGSTROM_TO_BOHR
+                if line_split[0].upper() == "A":
+                    alat = float(line_split[2])
+            if line_split[0].upper() == "CELL_PARAMETERS":
+                cell = np.zeros((3, 3))
+                for i in range(3):
+                    cell[i] = list(map(float, lines[n + i + 1].split()))
+                if "bohr" in line_split:
+                    cell *= cls.ANGSTROM_TO_BOHR
+                    alat = np.linalg.norm(cell[0])
+                elif "angstrom" in line_split:
+                    alat = np.linalg.norm(cell[0])
+                else:
+                    cell *= alat
+            if line_split[0].upper() == "ATOMIC_POSITIONS":
+                atom_pos = np.zeros((nat, 3))
+                symbols = []
+                for i in range(nat):
+                    atom_info = lines[n + i + 1].split()
+                    symbols.append(atom_info[0])
+                    atom_pos[i] = list(map(float, atom_info[1:]))
+                if "alat" in line_split:
+                    positions = atom_pos * alat
+                    scaled_positions = positions.dot(np.linalg.inv(cell))
+                elif "crystal" in line_split:
+                    positions = atom_pos.dot(cell)
+                    scaled_positions = atom_pos
+                elif "bohr" in line_split:
+                    positions = atom_pos / cls.ANGSTROM_TO_BOHR
+                    scaled_positions = positions.dot(np.linalg.inv(cell))
+                elif "angstrom" in line_split:
+                    positions = atom_pos
+                    scaled_positions = positions.dot(np.linalg.inv(cell))
+                else:
+                    raise ValueError("Unknown unit for atomic positions.")
+            if line_split[0].upper() == "ATOMIC_SPECIES":
+                types = []
+                for i in range(ntyp):
+                    atom_info = lines[n + i + 1].split()
+                    types.append(atom_info[0])
+        numbers = []
+        for i in range(nat):
+            for j in range(ntyp):
+                if symbols[i] == types[j]:
+                    numbers.append(j)
+                    break
+        if not is_pwscf:
+            raise ValueError("Not a Quantum ESPRESSO input file.")
+
+        return cls(
+            cell=cell,
+            positions=positions,
+            scaled_positions=scaled_positions,
+            symbols=symbols,
+            numbers=numbers,
+        )
 
 
 class Site(object):
@@ -1303,7 +1514,7 @@ class Site(object):
 
 
 class Optimizer(object):
-    """Multipole- and dielectri-tensor optimizer.
+    """Multipole and dielectric tensor optimizer.
 
     This class adopts the ordinary least-square to extract mulipole
     and dielectric tensors from a perturbation expansion. It mainly
@@ -1619,7 +1830,7 @@ class MultipoleSpace(object):
 
         """
         nsym = pcell.symops["translations"].shape[0]
-        atoms = pcell.get_scaled_positions()
+        atoms = pcell.scaled_positions
         types = pcell.get_atomic_numbers()
         symbols = pcell.get_chemical_symbols()
         if "equivalent_atoms" in pcell.symops:
@@ -1658,7 +1869,7 @@ class MultipoleSpace(object):
                         < eps
                     )[0][0]
                     if rep_idx == hid_idx:
-                        crotmat = get_rotation_cartesian(rotmat, pcell.cell.real)
+                        crotmat = get_rotation_cartesian(rotmat, pcell.cell)
                         iso_clus = {
                             "rotmat": rotmat,
                             "crotmat": crotmat,
@@ -1678,7 +1889,7 @@ class MultipoleSpace(object):
                             lrep=False,
                         )
                         hid_clus.crotmat = get_rotation_cartesian(
-                            hid_clus.rotmat, pcell.cell.real
+                            hid_clus.rotmat, pcell.cell
                         )
                         clus_orbit.append(hid_clus)
                 rep_clus.set_isotropy_group(list(isotropy))
@@ -1686,7 +1897,7 @@ class MultipoleSpace(object):
                 MS.append(list(clus_orbit))
                 print(f"- Index {rep_idx} | {symbols[rep_idx]}")
 
-        return MultipoleSpace(pcell.cell.real, pcell.symops, MS, max_order)
+        return MultipoleSpace(pcell.cell, pcell.symops, MS, max_order)
 
     def set_multipole_tensors(self, mp_mat, natom):
         """Set the multipole tensors as an attribute.
@@ -2723,7 +2934,7 @@ class MultipoleConstructor(object):
                 print("Reading q perturbations from file.")
                 q_vecs = np.loadtxt(self.QPointsFile)
             else:
-                rcell = self.pcell.cell.reciprocal().real
+                rcell = self.pcell.reciprocal()
                 if settings.MESH is not None:
                     print("Creating q perturbations on a mesh grid.")
                     alat_ang = self.pcell.get_lattice_constants(unit="Angstrom")[0]
@@ -2958,7 +3169,7 @@ class MultipoleConstructor(object):
 
         """
         print(f"Reading charge density response, {nqpts} q-points.")
-        volume = self.pcell.get_volume_by_unit("Bohr")
+        volume = self.pcell.get_volume("Bohr")
 
         drho_cpl = np.zeros([nqpts, self.natom, 3], dtype=complex)
         for iq in range(nqpts):
@@ -3145,7 +3356,7 @@ class MultipoleConstructor(object):
         nqpts = qpts.shape[0]
         alat = self.pcell.get_lattice_constants(unit="Bohr")[0]
         q_norms = np.linalg.norm(qpts, axis=1) * 2 * np.pi / alat
-        volume = self.pcell.get_volume_by_unit("Bohr")
+        volume = self.pcell.get_volume("Bohr")
 
         if self._epsil_order is not None:
             zeff_pred, xi_pred = self.multipole_space.predit(
