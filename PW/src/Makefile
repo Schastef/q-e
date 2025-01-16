@@ -15,6 +15,7 @@ add_bfield.o \
 add_efield.o \
 add_dmft_occ.o \
 add_vuspsi.o \
+add_vuspsi_acc.o \
 add_gatefield.o \
 add_paw_to_deeq.o \
 add_vhub_to_deeq.o \
@@ -148,6 +149,7 @@ non_scf.o \
 offset_atom_wfc.o \
 openfil.o \
 orthoatwfc.o \
+orthoUwfc.o \
 output_tau.o \
 para.o \
 paw_exx.o \
@@ -276,7 +278,6 @@ d3hess_mod.o
 PWLIBS += \
   h_psi_gpu.o \
   vhpsi_gpu.o \
-  add_vuspsi_gpu.o \
   newd_gpu.o \
   add_paw_to_deeq_gpu.o \
   add_vhub_to_deeq_gpu.o \

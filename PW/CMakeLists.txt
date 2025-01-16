@@ -4,6 +4,7 @@ set(src_pw
    src/add_efield.f90 
    src/add_dmft_occ.f90 
    src/add_vuspsi.f90 
+   src/add_vuspsi_acc.f90
    src/add_gatefield.f90 
    src/add_paw_to_deeq.f90 
    src/add_vhub_to_deeq.f90 
@@ -137,6 +138,7 @@ set(src_pw
    src/offset_atom_wfc.f90 
    src/openfil.f90 
    src/orthoatwfc.f90 
+   src/orthoUwfc.f90 
    src/output_tau.f90 
    src/para.f90 
    src/paw_exx.f90 
@@ -249,7 +251,6 @@ set(src_pw
    src/newd_gpu.f90
    src/add_paw_to_deeq_gpu.f90
    src/rotate_wfc_gpu.f90
-   src/add_vuspsi_gpu.f90
    src/hs_1psi_gpu.f90
    src/add_vhub_to_deeq_gpu.f90
    src/s_1psi_gpu.f90
@@ -289,7 +290,6 @@ target_link_libraries(qe_pw
         qe_lax
         qe_kssolver_davidson
         qe_kssolver_cg
-        qe_kssolver_ppcg
         qe_kssolver_paro
         qe_kssolver_rmmdiis
         qe_kssolver_dense

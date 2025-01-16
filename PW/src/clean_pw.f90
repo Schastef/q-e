@@ -1,5 +1,5 @@
 
-! Copyright (C) 2001-2012 Quantum ESPRESSO group
+! Copyright (C) 2001-2024 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
 ! in the root directory of the present distribution,
@@ -19,7 +19,6 @@ SUBROUTINE clean_pw( lflag )
   !! phonon, vc-relax). Beware: the new calculation should not CALL any
   !! of the routines mentioned above.
   !
-  USE basis,                ONLY : swfcatom
   USE cellmd,               ONLY : lmovecell
   USE ions_base,            ONLY : deallocate_ions_base
   USE fixed_occ,            ONLY : f_inp
@@ -33,7 +32,7 @@ SUBROUTINE clean_pw( lflag )
                                    vrs, kedtau, destroy_scf_type, vnew
   USE symm_base,            ONLY : irt
   USE symme,                ONLY : sym_rho_deallocate
-  USE wavefunctions,        ONLY : psic, psic_nc
+  USE wavefunctions,        ONLY : deallocate_wfc, psic, psic_nc
   USE uspp,                 ONLY : deallocate_uspp
   USE uspp_param,           ONLY : upf
   USE atwfc_mod,            ONLY : deallocate_tab_atwfc
@@ -169,7 +168,6 @@ SUBROUTINE clean_pw( lflag )
   ! ... arrays allocated in allocate_wfc.f90 ( and never deallocated )
   !
   CALL deallocate_wfc ( )
-  IF ( ALLOCATED( swfcatom ) )   DEALLOCATE( swfcatom )
   !
   ! ... fft structures allocated in data_structure.f90  
   !
