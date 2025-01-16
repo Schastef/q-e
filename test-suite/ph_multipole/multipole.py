@@ -10,6 +10,7 @@ import math
 import numbers
 import os
 import pickle
+import warnings
 from collections import Counter, OrderedDict, deque
 from copy import deepcopy
 from io import StringIO
@@ -25,6 +26,9 @@ try:
 except ImportError:
     baseAtoms = object
     __ASE__ = False
+    warnings.warn(
+        "ASE is not installed. Plese install ASE <= 3.22.1 for the case when ibrav!=0."
+    )
 
 
 __version__ = "0.1.0"
@@ -1230,7 +1234,7 @@ class Atoms(baseAtoms):
                 for i in range(3):
                     cell[i] = list(map(float, lines[n + i + 1].split()))
                 if "bohr" in line_split:
-                    cell *= cls.ANGSTROM_TO_BOHR
+                    cell /= cls.ANGSTROM_TO_BOHR
                     alat = np.linalg.norm(cell[0])
                 elif "angstrom" in line_split:
                     alat = np.linalg.norm(cell[0])
