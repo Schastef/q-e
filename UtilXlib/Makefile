@@ -12,7 +12,7 @@ cptimer.o \
 copy.o \
 c_mkdir.o \
 rocblas.o \
-onemkl_omp.o \
+onemkl_omp5.o \
 device_helper.o \
 divide.o \
 data_buffer.o \

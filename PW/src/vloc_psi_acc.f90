@@ -53,7 +53,8 @@ SUBROUTINE vloc_psi_gamma_acc( lda, n, m, psi, v, hpsi )
   ALLOCATE( psic(dffts_nnr*incr) )
   !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
 #if defined(__OPENMP_GPU)
-  !$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !!$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !$omp target data map(to:v) map(alloc:psi1,psic)
 #endif
   !
   IF (many_fft > 1) THEN
@@ -231,7 +232,8 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
   ALLOCATE( psic(dffts_nnr*incr) )
   !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
 #if defined(__OPENMP_GPU)
-  !$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !!$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !$omp target data map(to:v) map(alloc:psi1,psic)
 #endif
   !
   IF (many_fft > 1) THEN
@@ -376,7 +378,8 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
   !
   !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
 #if defined(__OPENMP_GPU)
-  !$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !!$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !$omp target data map(to:v) map(alloc:psi1,psic)
 #endif
   !
   ! ... the local potential V_Loc psi. First the psi in real space
