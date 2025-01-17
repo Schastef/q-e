@@ -117,7 +117,13 @@ SUBROUTINE paro_gamma_new( h_psi_ptr, s_psi_ptr, hs_psi_ptr, g_psi_ptr, overlap,
   psi(:,1:nbnd) = evc(:,1:nbnd) ! copy input evc into work vector
   !$acc end kernels
   !$acc data present(psi, spsi, hpsi)
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:psi) map(from:hpsi)
+#endif
   call h_psi_ptr (npwx,npw,nbnd,psi,hpsi) ! computes H*psi
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   call s_psi_ptr (npwx,npw,nbnd,psi,spsi) ! computes S*psi
   !$acc end data
 

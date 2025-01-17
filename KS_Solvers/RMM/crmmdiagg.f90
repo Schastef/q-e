@@ -275,7 +275,13 @@ CONTAINS
     hpsi = ZERO
     !$acc end kernels
     !
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:psi) map(from:hpsi)
+#endif
     CALL h_psi_ptr( npwx, npw, nbnd, psi, hpsi )
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
     ! ... Operate the Overlap : S |psi>
     !
@@ -890,7 +896,13 @@ CONTAINS
     !
     ! ... Operate the Hamiltonian : H K (H - eS) |psi>
     !
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:kpsi) map(from:hkpsi)
+#endif
     CALL h_psi_ptr( npwx, npw, notconv, kpsi, hkpsi )
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
     ! ... Operate the Overlap : S K (H - eS) |psi>
     !

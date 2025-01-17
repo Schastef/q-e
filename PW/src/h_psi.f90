@@ -136,7 +136,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   ! ... Here we set the kinetic energy (k+G)^2 psi and clean up garbage
   !
 #if defined(__OPENMP_GPU)
-  !$omp target data map(to:psi,g2kin,vrs) map(from:hpsi)
+  !$omp target data map(to:g2kin,vrs)
   !$omp target teams distribute parallel do
 #else
   !$omp parallel do
@@ -254,10 +254,11 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   !
   IF ( nkb > 0 .AND. .NOT. real_space) THEN
      !
+     !$omp target update from(psi,hpsi)
      CALL start_clock( 'h_psi:calbec' )
      CALL calbec( n, vkb, psi, becp, m )
      CALL stop_clock( 'h_psi:calbec' )
-     !$omp target update from(hpsi)
+!     !$omp target update from(hpsi)
      CALL add_vuspsi( lda, n, m, hpsi )
      !$omp target update to(hpsi)
      !
@@ -271,7 +272,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   !
   IF (xclib_dft_is('meta')) THEN
 #if defined(__OPENMP_GPU)
-    !$omp target update from(hpsi)
+    !$omp target update from(psi,hpsi)
 #endif
     CALL h_psi_meta( lda, n, m, psi, hpsi )
 #if defined(__OPENMP_GPU)
@@ -284,7 +285,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   IF ( lda_plus_u .AND. Hubbard_projectors.NE."pseudo" ) THEN
      !
 #if defined(__OPENMP_GPU)
-     !$omp target update from(hpsi)
+     !$omp target update from(psi,hpsi)
 #endif
      IF ( noncolin ) THEN
         CALL vhpsi_nc( lda, n, m, psi, hpsi )
@@ -301,7 +302,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   !
   IF (scissor) THEN
 #if defined(__OPENMP_GPU)
-    !$omp target update from(hpsi)
+    !$omp target update from(psi,hpsi)
 #endif
     CALL p_psi(lda,n,m,psi,hpsi)
 #if defined(__OPENMP_GPU)

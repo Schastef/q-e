@@ -212,14 +212,14 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... hpsi contains h times the basis vectors
   !
-  !********REMOVE THIS***************
-  !$omp target update from(psi)
-  !***********************************
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi ) ; nhpsi = nhpsi + nvec
   !
   ! ... spsi contains s times the basis vectors
   !
   IF ( uspp ) THEN
+#if defined(__OPENMP_GPU)
+      !$omp target update from(psi)
+#endif
       CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
 #if defined(__OPENMP_GPU)
       !$omp target update to(spsi)
@@ -573,18 +573,15 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !******REMOVE****************
-     !$omp target update from(psi)
-     !*************************
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !
      IF ( uspp ) THEN
 #if defined(__OPENMP_GPU)
-      !$omp target update from(psi)
+      !$omp target update from(psi(:,nb1:nvecx))
 #endif
         CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
 #if defined(__OPENMP_GPU)
-      !$omp target update to(spsi)
+      !$omp target update to(spsi(:,nb1:nvecx))
 #endif
      ENDIF
      !
@@ -1110,7 +1107,13 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... hpsi contains h times the basis vectors
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:psi) map(from:hpsi)
+#endif
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi ) ; nhpsi = nhpsi + nvec
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !
   IF ( uspp ) CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
   !
@@ -1226,7 +1229,13 @@ SUBROUTINE pcegterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:psi) map(from:hpsi)
+#endif
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
      IF ( uspp ) CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
      !

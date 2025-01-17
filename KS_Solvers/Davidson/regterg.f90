@@ -181,7 +181,13 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... hpsi contains h times the basis vectors
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:psi) map(from:hpsi)
+#endif
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi )  ; nhpsi = nvec
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !
   ! ... spsi contains s times the basis vectors
   !
@@ -382,7 +388,13 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:psi(:,nb1:nvecx)) map(from:hpsi(:,nb1:nvecx))
+#endif
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
      IF ( uspp ) CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
      !
@@ -838,7 +850,13 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... hpsi contains h times the basis vectors
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:psi) map(from:hpsi)
+#endif
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi )  ; nhpsi = nvec
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !
   IF ( uspp ) CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
   !
@@ -939,7 +957,13 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:psi(:,nb1:nvecx)) map(from:hpsi(:,nb1:nvecx))
+#endif
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
      IF ( uspp ) CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
      !
