@@ -126,7 +126,7 @@ then
   pip3 install spglib
   echo " "
   echo "Running Python multipole.py preprocessing..."
-  python3 multipole.py -e --order 3 --epsil_order 4 -p -n 8 --mesh 2 2 2 --mesh_step 0.01 > preprocessing.out
+  python3 multipole.py -e --order 3 --epsil_order 4 -p -n 8 --mesh 2 2 2 --mesh_step 0.1 > preprocessing.out
 elif [[ "$1" == "13" ]]
 then
   echo "Running PH ..."
