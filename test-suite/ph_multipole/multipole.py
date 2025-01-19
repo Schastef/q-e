@@ -27,7 +27,7 @@ except ImportError:
     baseAtoms = object
     __ASE__ = False
     warnings.warn(
-        "ASE is not installed. Plese install ASE <= 3.22.1 for the case when ibrav!=0."
+        "ASE is not installed. Please install ASE <= 3.22.1 for the case when ibrav!=0."
     )
 
 
@@ -697,6 +697,16 @@ class InputParser(argparse.ArgumentParser):
             help="""Primitive cell filename.""",
         )
         self.add_argument(
+            "--alat",
+            dest="ALAT",
+            action="store",
+            default=None,
+            type=str,
+            help="""The celldm(1) or A parameter in pwscf input, required when ASE
+                    is present. The format must be like `1.0A` or `1.0B` where `A`
+                    and `B` are the units angstrom and bohr, respectively.""",
+        )
+        self.add_argument(
             "--cry_basis",
             dest="CRY_BASIS",
             action="store_true",
@@ -931,6 +941,7 @@ class Atoms(baseAtoms):
     def __init__(
         self,
         aseAtoms=None,
+        alat=None,
         cell=None,
         positions=None,
         scaled_positions=None,
@@ -943,6 +954,8 @@ class Atoms(baseAtoms):
         ----------
         aseAtoms : ase.Atoms
             An ASE Atoms object. Default is None.
+        alat : float
+            Lattice constant in pwscf. Default is None.
         cell : numpy.ndarray
             Lattice vectors of primitive cell. Default is None.
         positions : numpy.ndarray
@@ -965,6 +978,7 @@ class Atoms(baseAtoms):
             self._scaled_positions = scaled_positions
             self._symbols = symbols
             self._numbers = numbers
+        self._alat = alat
 
     @property
     def cell(self):
@@ -1037,7 +1051,7 @@ class Atoms(baseAtoms):
         return self._symops
 
     @classmethod
-    def read(cls, filename="scf.in", format="espresso-in"):
+    def read(cls, filename="scf.in", format="espresso-in", alat=None):
         """Read structure from file.
 
         Note that if ASE is not installed, the structure will be read
@@ -1050,6 +1064,8 @@ class Atoms(baseAtoms):
             Name of file containing structure. Default is "scf.in".
         format : str
             Format of file. Default is "espresso-in".
+        alat : str
+            Lattice constant in pwscf. Default is None.
 
         Returns
         -------
@@ -1060,8 +1076,19 @@ class Atoms(baseAtoms):
         if __ASE__:
             import ase.io as aseio
 
+            if alat is None:
+                warnings.warn(
+                    "Lattice parameter `alat` is not set, q-point unit maybe wrong."
+                )
+            else:
+                if "B" in alat.upper():
+                    alat = float(alat.upper().split("B")[0]) / cls.ANGSTROM_TO_BOHR
+                elif "A" in alat.upper():
+                    alat = float(alat.upper().split("A")[0])
+                else:
+                    raise ValueError("Unknown lattice constant unit.")
             cell = aseio.read(filename, format=format)
-            return cls(aseAtoms=cell)
+            return cls(aseAtoms=cell, alat=alat)
         else:
             return cls.read_pwscf(filename)
 
@@ -1126,22 +1153,25 @@ class Atoms(baseAtoms):
             self.get_symmetry()
         return self._nsym
 
-    def get_lattice_constants(self, unit="Angstrom"):
-        """Calculate lattice constants of three lattice vectors.
+    def get_lattice_constant(self, unit="Angstrom"):
+        """Calculate lattice constant of the first lattice vector.
 
         Parameters
         ----------
         unit : str
-            The unit of lattice constants to be computed,
+            The unit of lattice constant to be computed,
             can be "Angstrom" or "Bohr".
 
         Returns
         -------
-        List
-            Lattice constants of three lattice vectors.
+        float
+            Lattice constant of the first lattice vector.
 
         """
-        alat = np.linalg.norm(self.cell, axis=1)
+        if hasattr(self, "_alat") and self._alat is not None:
+            alat = self._alat
+        else:
+            alat = np.linalg.norm(self.cell[0])
         if unit.upper() == "ANGSTROM":
             return alat
         elif unit.upper() == "BOHR":
@@ -1276,6 +1306,7 @@ class Atoms(baseAtoms):
             raise ValueError("Not a Quantum ESPRESSO input file.")
 
         return cls(
+            alat=alat,
             cell=cell,
             positions=positions,
             scaled_positions=scaled_positions,
@@ -2906,7 +2937,7 @@ class MultipoleConstructor(object):
             User settings.
 
         """
-        self.pcell = Atoms.read(settings.CELL_FILENAME)
+        self.pcell = Atoms.read(settings.CELL_FILENAME, alat=settings.ALAT)
         self.natom = self.pcell.get_global_number_of_atoms()
 
         """Print crystal system information."""
@@ -2941,7 +2972,7 @@ class MultipoleConstructor(object):
                 rcell = self.pcell.reciprocal()
                 if settings.MESH is not None:
                     print("Creating q perturbations on a mesh grid.")
-                    alat_ang = self.pcell.get_lattice_constants(unit="Angstrom")[0]
+                    alat_ang = self.pcell.get_lattice_constant(unit="Angstrom")
                     q_vecs = wavevector_perturb_uniform(
                         settings.MESH, settings.MESH_STEP
                     )
@@ -2985,7 +3016,7 @@ class MultipoleConstructor(object):
 
         """
         nqpts = q_vecs.shape[0]
-        alat = self.pcell.get_lattice_constants(unit="Bohr")[0]
+        alat = self.pcell.get_lattice_constant(unit="Bohr")
 
         sensing_mat_q1 = deque()
         sensing_mat_q2 = deque()
@@ -3133,7 +3164,7 @@ class MultipoleConstructor(object):
 
         """
         print(f"Reading inverse dielectric function, {nqpts} q-points.")
-        alat = self.pcell.get_lattice_constants(unit="Bohr")[0]
+        alat = self.pcell.get_lattice_constant(unit="Bohr")
         q_vecs = np.loadtxt(self.QPointsFile) * 2.0 * np.pi / alat
         q_norms = np.linalg.norm(q_vecs, axis=1)
 
@@ -3358,7 +3389,7 @@ class MultipoleConstructor(object):
         """
         print("Predicting dielectric properties using the fitted expansion.")
         nqpts = qpts.shape[0]
-        alat = self.pcell.get_lattice_constants(unit="Bohr")[0]
+        alat = self.pcell.get_lattice_constant(unit="Bohr")
         q_norms = np.linalg.norm(qpts, axis=1) * 2 * np.pi / alat
         volume = self.pcell.get_volume("Bohr")
 
