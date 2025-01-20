@@ -231,15 +231,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... spsi contains s times the basis vectors
   !
-  IF ( uspp ) THEN
-#if defined(__OPENMP_GPU)
-     !$omp target update from(psi)
-#endif
-     CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
-#if defined(__OPENMP_GPU)
-     !$omp target update to(spsi)
-#endif
-  ENDIF
+  IF ( uspp ) CALL s_psi_ptr( npwx, npw, nvec, psi, spsi )
   !
   ! ... hr contains the projection of the hamiltonian onto the reduced
   ! ... space vr contains the eigenvectors of hr
@@ -521,11 +513,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !
-     IF ( uspp ) THEN
-       !$omp target update from(psi)
-       CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
-       !$omp target update to(spsi(:,nb1:nvecx))
-     ENDIF
+     IF ( uspp ) CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
      !
      ! ... update the reduced hamiltonian
      !
