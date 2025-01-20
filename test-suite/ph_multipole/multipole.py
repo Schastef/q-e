@@ -477,6 +477,50 @@ def wavevector_perturb_uniform(grid, q_step=0.01):
     return q_vecs
 
 
+def get_irreducible_qpoints(qpts, symops, is_time_reversal=True, eps=1e-5):
+    """Get irreducible q-points using symmetry operations.
+
+    Parameters
+    ----------
+    qpts : numpy.ndarray
+        The q-points in crystal coordinate.
+    symops : dict
+        The symmetry operations in crystal coordinate.
+    is_time_reversal : bool, optional
+        Whether time reversal symmetry is present. By default True.
+    eps : float, optional
+        The numerical tolerance. By default 1E-5.
+
+    Returns
+    -------
+    numpy.ndarray
+        The irreducible q-points in crystal coordinate.
+
+    """
+    q_ir = []
+    inds_eq = set()
+    nqts = qpts.shape[0]
+    for iq in range(nqts):
+        if iq in inds_eq:
+            continue
+        q = qpts[iq]
+        qs_rot = np.dot(symops["rotations"], q)
+        if is_time_reversal:
+            qs_rot = np.vstack((qs_rot, -qs_rot))
+        qs_rot = np.unique(qs_rot, axis=0)
+        inds = [
+            ind[0] if len(ind) > 0 else -1
+            for q in qs_rot
+            for ind in [
+                np.where(np.linalg.norm(qpts - q - np.rint(qpts - q), axis=1) < eps)[0]
+            ]
+        ]
+        inds_eq = inds_eq.union(set(inds))
+        q_ir.append(q)
+
+    return np.array(q_ir)
+
+
 def build_multipole_wavevector_matrix(multipole_space, natom, q_vec):
     """Construct sensing matrix of given wavevector for multipole expansion.
 
@@ -782,6 +826,13 @@ class InputParser(argparse.ArgumentParser):
                     fix them during fitting procedure.""",
         )
         self.add_argument(
+            "--ir_q",
+            dest="IR_Q",
+            action="store_true",
+            default=False,
+            help="Set to True to use only irreducible q-points for ph.x.",
+        )
+        self.add_argument(
             "--mesh",
             dest="MESH",
             action="store",
@@ -812,7 +863,7 @@ class InputParser(argparse.ArgumentParser):
             "--nq",
             dest="NQPTS",
             action="store",
-            default=5,
+            default=None,
             type=int,
             help="Number of q-points for charge density response calculations.",
         )
@@ -2976,6 +3027,10 @@ class MultipoleConstructor(object):
                     q_vecs = wavevector_perturb_uniform(
                         settings.MESH, settings.MESH_STEP
                     )
+                    if settings.IR_Q:
+                        print("Finding irreducible q points.")
+                        symops = self.pcell.get_symmetry()
+                        q_vecs = get_irreducible_qpoints(q_vecs, symops)
                     q_vecs = q_vecs.dot(rcell) * alat_ang
                 else:
                     if settings.Q_DIR is not None:
@@ -3004,6 +3059,15 @@ class MultipoleConstructor(object):
                 self._SMQ1_prime = np.load(self.SensingMatrixQ1File)["mat"]
                 if self._epsil_order is not None:
                     self._SMQ2_prime = np.load(self.SensingMatrixQ2File)["mat"]
+                if settings.NQPTS is not None:
+                    self._nqpts = settings.NQPTS
+                    self._SMQ1_prime = self._SMQ1_prime[
+                        : 3 * self.natom * settings.NQPTS
+                    ]
+                    if self._epsil_order is not None:
+                        self._SMQ2_prime = self._SMQ2_prime[: settings.NQPTS]
+                else:
+                    self._nqpts = self._SMQ1_prime.shape[0] // (3 * self.natom)
 
     @timeit("Construction of sensing matrix for multipole expansion")
     def _compute_sensing_matrix(self, q_vecs):
@@ -3072,11 +3136,11 @@ class MultipoleConstructor(object):
             print("Starting to fit multipole tensors by a linear model.")
         if exits_drhodv:
             self._read_dielectric_response(
-                settings.NQPTS,
+                self._nqpts,
                 is_screened=settings.SCREENED,
                 epsil_kernel=settings.EPSIL_KERNEL,
             )
-        self._read_charge_density_response(settings.NQPTS)
+        self._read_charge_density_response(self._nqpts)
         self._preprocess_sensing_matrix(
             non_polar=settings.NON_POLAR,
             fix_order=settings.FIX_ORDER,
@@ -3351,13 +3415,13 @@ class MultipoleConstructor(object):
         exits_drhodv = os.path.isfile(self.DrhodvFilePattern.format(1))
         if exits_drhodv:
             self._read_dielectric_response(
-                settings.NQPTS,
+                q_vecs.shape[0],
                 is_screened=settings.SCREENED,
                 epsil_kernel=settings.EPSIL_KERNEL,
                 save_to_file=False,
             )
-        self._read_charge_density_response(settings.NQPTS, save_to_file=False)
-        self._read_effective_charges(settings.NQPTS, save_to_file=False)
+        self._read_charge_density_response(q_vecs.shape[0], save_to_file=False)
+        self._read_effective_charges(q_vecs.shape[0], save_to_file=False)
         np.savez_compressed(
             self.DielectricTestFile,
             q=q_norms,
@@ -3368,7 +3432,7 @@ class MultipoleConstructor(object):
 
         """Predict charge density response, effective charges and
            dielectric function from the fitted expansion."""
-        pred_dict = self._predict_charge_density_response(q_vecs)
+        pred_dict = self._predict_dielectric_response(q_vecs)
         np.savez_compressed(self.DielectricPredictFile, **pred_dict)
 
     def _predict_dielectric_response(self, qpts):
