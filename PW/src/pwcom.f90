@@ -88,8 +88,13 @@ CONTAINS
     REAL(DP), ALLOCATABLE :: gk(:)
     INTEGER :: ik
     !
-    IF (.NOT.ALLOCATED(igk_k)) ALLOCATE( igk_k(npwx,nks) )
-    !$acc enter data create(igk_k(1:npwx,1:nks))
+    IF (.NOT.ALLOCATED(igk_k)) THEN
+       ALLOCATE( igk_k(npwx,nks) )
+       !$acc enter data create(igk_k(1:npwx,1:nks))
+#if defined(__OPENMP_GPU)
+       !$omp target enter data map(alloc:igk_k)
+#endif
+    ENDIF
     !
     IF (.NOT.ALLOCATED(ngk))   ALLOCATE( ngk(nks) )
     !
@@ -103,6 +108,9 @@ CONTAINS
        CALL gk_sort( xk(1,ik), ngm, g, gcutw, ngk(ik), igk_k(1,ik), gk )
     ENDDO
     !$acc update device(igk_k)
+#if defined(__OPENMP_GPU)
+    !$omp target update to(igk_k)
+#endif
     !
     DEALLOCATE( gk )
     !
@@ -112,8 +120,13 @@ CONTAINS
     !
     IF (ALLOCATED(ngk))     DEALLOCATE( ngk )
     !
-    !$acc exit data delete(igk_k)
-    IF (ALLOCATED(igk_k))   DEALLOCATE( igk_k )
+    IF (ALLOCATED(igk_k)) THEN
+      !$acc exit data delete(igk_k)
+#if defined(__OPENMP_GPU)
+      !$omp target exit data map(delete:igk_k)
+#endif
+      DEALLOCATE( igk_k )
+    ENDIF
     !
   END SUBROUTINE deallocate_igk
   !

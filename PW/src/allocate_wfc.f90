@@ -47,7 +47,10 @@ SUBROUTINE allocate_wfc_k()
   !   g2kin contains the kinetic energy \hbar^2(k+G)^2/2m
   !
   ALLOCATE( g2kin(npwx) )
-  !$acc enter data create(g2kin) 
+  !$acc enter data create(g2kin)
+#if defined(__OPENMP_GPU)
+  !$omp target enter data map(alloc:g2kin)
+#endif
   !
   !
   RETURN

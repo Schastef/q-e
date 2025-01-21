@@ -59,7 +59,7 @@ SUBROUTINE hs_1psi( lda, n, psi, hpsi, spsi )
 #endif
   CALL h_psi( lda, n, 1, psi, hpsi ) ! apply H to a single wfc (no bgrp parallelization here)
 #if defined(__OPENMP_GPU)
-  !$omp target update from(hpsi(1:n))
+  !$omp target update from(hpsi)
 #endif
   CALL s_psi( lda, n, 1, psi, spsi ) ! apply S to a single wfc (no bgrp parallelization here)
        endif

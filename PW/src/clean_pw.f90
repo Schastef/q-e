@@ -136,8 +136,13 @@ SUBROUTINE clean_pw( lflag )
   IF ( ALLOCATED( rhog_core ) )  DEALLOCATE( rhog_core )
   IF ( ALLOCATED( psic    ) )    DEALLOCATE( psic    )
   IF ( ALLOCATED( psic_nc ) )    DEALLOCATE( psic_nc )
-  !$acc exit data delete(vrs)
-  IF ( ALLOCATED( vrs     ) )    DEALLOCATE( vrs     )
+  IF ( ALLOCATED( vrs     ) ) THEN
+    !$acc exit data delete(vrs)
+#if defined(__OPENMP_GPU)
+    !$omp target exit data map(delete:vrs)
+#endif
+    DEALLOCATE( vrs )
+  ENDIF
   !
   ! ... arrays allocated in allocate_locpot.f90 ( and never deallocated )
   !
@@ -155,8 +160,13 @@ SUBROUTINE clean_pw( lflag )
   !
   ! ... arrays allocated in init_run.f90 ( and never deallocated )
   !
-  !$acc exit data delete(g2kin)
-  IF ( ALLOCATED( g2kin ) )      DEALLOCATE( g2kin )
+  IF ( ALLOCATED( g2kin ) ) THEN
+     !$acc exit data delete(g2kin)
+#if defined(__OPENMP_GPU)
+     !$omp target exit data map(delete:g2kin)
+#endif
+     DEALLOCATE( g2kin )
+  ENDIF
   !$acc exit data delete(et)
   IF ( ALLOCATED( et ) )         DEALLOCATE( et )
   IF ( ALLOCATED( wg ) )         DEALLOCATE( wg )
