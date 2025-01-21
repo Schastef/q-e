@@ -94,7 +94,7 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   USE uspp,                    ONLY: vkb, nkb
   USE ldaU,                    ONLY: lda_plus_u, Hubbard_projectors
   USE gvect,                   ONLY: gstart
-  USE control_flags,           ONLY: gamma_only, scissor
+  USE control_flags,           ONLY: gamma_only, scissor, offload_type2
   USE noncollin_module,        ONLY: npol, noncolin
   USE realus,                  ONLY: real_space, invfft_orbital_gamma, fwfft_orbital_gamma, &
                                      calbec_rs_gamma, add_vuspsir_gamma, invfft_orbital_k,  &
@@ -254,13 +254,18 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   !
   IF ( nkb > 0 .AND. .NOT. real_space) THEN
      !
-     !$omp target update from(psi,hpsi)
+#if defined(__OPENMP_GPU)
+     !$omp target update from(hpsi)
+     !$omp target data map(to:vkb)
+#endif
      CALL start_clock( 'h_psi:calbec' )
-     CALL calbec( n, vkb, psi, becp, m )
+     CALL calbec( offload_type2, n, vkb, psi, becp, m )
      CALL stop_clock( 'h_psi:calbec' )
-!     !$omp target update from(hpsi)
      CALL add_vuspsi( lda, n, m, hpsi )
+#if defined(__OPENMP_GPU)
+     !$omp end target data
      !$omp target update to(hpsi)
+#endif
      !
   ENDIF
   !
