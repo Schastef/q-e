@@ -269,7 +269,13 @@ SUBROUTINE sum_band()
      !
      ! ... Here we add the (unsymmetrized) Ultrasoft contribution to the charge
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:becsum)
+#endif
      CALL addusdens( rho%of_g )
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
   ENDIF
   !
