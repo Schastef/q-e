@@ -49,7 +49,7 @@ SUBROUTINE allocate_wfc_k()
   ALLOCATE( g2kin(npwx) )
   !$acc enter data create(g2kin)
 #if defined(__OPENMP_GPU)
-  !$omp target enter data map(alloc:g2kin)
+  !$omp target enter data map(alloc:vkb,g2kin)
 #endif
   !
   !

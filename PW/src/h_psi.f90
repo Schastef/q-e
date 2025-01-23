@@ -254,18 +254,10 @@ SUBROUTINE h_psi_( lda, n, m, psi, hpsi )
   !
   IF ( nkb > 0 .AND. .NOT. real_space) THEN
      !
-#if defined(__OPENMP_GPU)
-     !$omp target update from(hpsi)
-     !$omp target data map(to:vkb)
-#endif
      CALL start_clock( 'h_psi:calbec' )
      CALL calbec( offload_type3, n, vkb, psi, becp, m )
      CALL stop_clock( 'h_psi:calbec' )
      CALL add_vuspsi( lda, n, m, hpsi )
-#if defined(__OPENMP_GPU)
-     !$omp end target data
-     !$omp target update to(hpsi)
-#endif
      !
   ENDIF
   !

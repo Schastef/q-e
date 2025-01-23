@@ -372,6 +372,9 @@ CONTAINS
         DEALLOCATE( nhtoj )
     END IF
     IF( ALLOCATED( vkb ) ) THEN
+#if defined(__OPENMP_GPU)
+        !$omp target exit data map(delete:vkb)
+#endif
         !$acc exit data delete(vkb ) 
         DEALLOCATE( vkb )
     END IF 
