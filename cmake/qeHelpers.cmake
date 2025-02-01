@@ -96,6 +96,10 @@ function(_qe_add_cuda_link_flags TGT)
 endfunction(_qe_add_cuda_link_flags)
 
 function(qe_git_submodule_update PATH)
+    # If the user does not have git setup, assume they have already setup the submodules
+    if(NOT Git_FOUND)
+        return()
+    endif ()
     # validate submodule_commit_hash_records against git database
     get_filename_component(SUBMODULE_NAME ${PATH} NAME)
     get_filename_component(SUBMODULE_UPPER_DIR ${PATH} DIRECTORY)
