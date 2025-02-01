@@ -407,7 +407,7 @@ endif(QE_ENABLE_MPI)
 ###########################################################
 # Git
 ###########################################################
-find_package(Git 2.13 REQUIRED)
+find_package(Git 2.13)
 if(EXISTS ${qe_SOURCE_DIR}/.git)
   message(STATUS "Source files are cloned from a git repository.")
   set(IS_GIT_PROJECT 1)
