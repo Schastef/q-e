@@ -224,7 +224,6 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   IMPLICIT NONE
   !
   ! please do not capitalize (FORD rules)
-  include 'ks_solver_interfaces.fh'
   !  
   INTEGER, INTENT(IN) :: iter
   !! iteration index
@@ -237,7 +236,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !
   REAL(KIND=DP) :: cg_iter, rmm_iter
   ! (weighted) number of iterations in RMM-DIIS
-  INTEGER :: npw, ig, dav_iter, ntry, notconv, nhpsi
+  INTEGER :: npw, dav_iter, ntry, notconv, nhpsi
   ! number of iterations in Davidson
   ! number or repeated call to diagonalization in case of non convergence
   ! number of notconverged elements
@@ -342,7 +341,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
     !
     IMPLICIT NONE
     !
-    INTEGER :: j
+    INTEGER :: ig
     !
     IF ( isolve == 1 .OR. isolve == 2 .OR. isolve == 3 .OR. rmm_use_paro(iter))   THEN
        !
@@ -371,9 +370,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 IF (.not. use_gpu) THEN
                    CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
-                   !$acc host_data use_device(et)
                    CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                   !$acc end host_data
                 END IF
                 !
                 avg_iter = avg_iter + 1.D0
@@ -476,15 +473,12 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           ELSE IF ( .NOT. lrot ) THEN
              !
              IF (.not. use_gpu) THEN
-                CALL rotate_xpsi( h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                               evc, hevc, sevc, et(:,ik), USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = .TRUE. )
+                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                               evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE. )
 #if defined(__CUDA)
              ELSE
-                !$acc host_data use_device(et)
-                CALL rotate_xpsi( h_psi, s_psi, h_psi_gpu, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
-                               evc, hevc, sevc, et(:,ik), USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = .TRUE.)
-                !$acc end host_data
-                !$acc update self(et)
+                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi_gpu, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                               evc, hevc, sevc, et(:,ik), use_para_diag, .TRUE.)
 #endif
              END IF
              !
@@ -498,13 +492,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                          et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                          okvan, lrot, exx_is_active(), notconv, rmm_iter )
           ELSE
-             !$acc data present(g2kin)
-             !$acc host_data use_device(g2kin)
-             CALL rrmmdiagg_gpu( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, evc, hevc, sevc, &
+             CALL rrmmdiagg( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, evc, hevc, sevc, &
                           et(1,ik), g2kin, btype(1,ik), ethr, rmm_ndim, &
                           okvan, lrot, exx_is_active(), notconv, rmm_iter )
-             !$acc end host_data 
-             !$acc end data
           END IF
           !
           !
@@ -522,16 +512,8 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        ! ... Gram-Schmidt orthogonalization
        !
-       IF (.not. use_gpu) THEN
-        CALL gram_schmidt_gamma( npwx, npw, nbnd, evc, hevc, sevc, et(1,ik), &
-                        okvan, .TRUE., .TRUE., gs_nblock )
-       ELSE
-          !$acc host_data use_device(evc, hevc, sevc)
-          CALL gram_schmidt_gamma_gpu( npwx, npw, nbnd, evc, hevc, sevc, et(1,ik), &
-                          okvan, .TRUE., .TRUE., gs_nblock )
-          !$acc end host_data
-          !$acc update device(et)
-       END IF
+       CALL gram_schmidt_gamma( npwx, npw, nbnd, evc, hevc, sevc, et(1,ik), &
+                       okvan, .TRUE., .TRUE., gs_nblock )
        !
        avg_iter = avg_iter + 0.5D0
        !
@@ -622,7 +604,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
     INTEGER :: ipol
     REAL(DP) :: eps=0.000001d0
     ! --- Define a small number ---
-    INTEGER :: j
+    INTEGER :: ig
     !
     !write (*,*) ' enter diag_bands_k'; FLUSH(6)
     IF ( lelfield ) THEN
@@ -688,9 +670,7 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                 IF ( .not. use_gpu ) THEN
                    CALL rotate_wfc( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
                 ELSE
-                   !$acc host_data use_device(et)
                    CALL rotate_wfc_gpu( npwx, npw, nbnd, gstart, nbnd, evc, npol, okvan, evc, et(1,ik) )
-                   !$acc end host_data
                 END IF
                 !
                 avg_iter = avg_iter + 1.D0
@@ -784,17 +764,14 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           ELSE IF ( .NOT. lrot ) THEN
              !
              IF ( .not. use_gpu ) THEN
-                CALL rotate_xpsi( h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi, s_psi, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
                                   evc, hevc, sevc, et(:,ik), & 
-                                  USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = gamma_only )
+                                  use_para_diag, gamma_only )
 #if defined(__CUDA)
              ELSE
-                !$acc host_data use_device(et)
-                CALL rotate_xpsi( h_psi, s_psi, h_psi_gpu, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
+                CALL rotate_xpsi_driver( h_psi, s_psi, h_psi_gpu, s_psi_acc, npwx, npw, nbnd, nbnd, evc, npol, okvan, &
                                   evc, hevc, sevc, et(:,ik), &
-                                  USE_PARA_DIAG = use_para_diag, GAMMA_ONLY = gamma_only )
-                !$acc end host_data
-                !$acc update self(et)
+                                  use_para_diag, gamma_only )
 #endif
              END IF
              !
@@ -807,13 +784,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
                              et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                              okvan, lrot, exx_is_active(), notconv, rmm_iter )
           ELSE
-             !$acc data present(g2kin)
-             !$acc host_data use_device(g2kin)
-             CALL crmmdiagg_gpu( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, npol, evc, hevc, sevc, &
+             CALL crmmdiagg( h_psi_gpu, s_psi_acc, npwx, npw, nbnd, npol, evc, hevc, sevc, &
                              et(1,ik), g2kin(1), btype(1,ik), ethr, rmm_ndim, &
                              okvan, lrot, exx_is_active(), notconv, rmm_iter )
-             !$acc end host_data
-             !$acc end data
           END IF
           !
           IF ( lscf .AND. ( .NOT. rmm_conv ) ) notconv = 0
@@ -830,16 +803,8 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
        !
        ! ... Gram-Schmidt orthogonalization
        !
-       IF ( .not. use_gpu ) THEN
-          CALL gram_schmidt_k( npwx, npw, nbnd, npol, evc, hevc, sevc, et(1,ik), &
-                             okvan, .TRUE., .TRUE., gs_nblock )
-       ELSE
-          !$acc host_data use_device(evc, hevc, sevc)
-          CALL gram_schmidt_k_gpu( npwx, npw, nbnd, npol, evc, hevc, sevc, et(1,ik), &
-                             okvan, .TRUE., .TRUE., gs_nblock )
-          !$acc end host_data
-          !$acc update device(et)
-       END IF
+       CALL gram_schmidt_k( npwx, npw, nbnd, npol, evc, hevc, sevc, et(1,ik), &
+                          okvan, .TRUE., .TRUE., gs_nblock )
        !
        avg_iter = avg_iter + 0.5D0
        !

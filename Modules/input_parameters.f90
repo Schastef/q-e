@@ -1096,10 +1096,10 @@ MODULE input_parameters
 
         CHARACTER(len=80) :: ion_dynamics = 'none'
         !! set how ions should be moved
-        CHARACTER(len=80) :: ion_dynamics_allowed(11)
+        CHARACTER(len=80) :: ion_dynamics_allowed(12)
         !! allowed options for ion\_dynamics.
         DATA ion_dynamics_allowed / 'none', 'sd', 'cg', 'langevin', &
-                                    'damp', 'verlet', 'bfgs', 'beeman',& 
+                                    'damp', 'verlet', 'velocity-verlet', 'bfgs', 'beeman',& 
                                     'langevin-smc', 'ipi', 'fire' /
 
         REAL(DP) :: ion_radius(nsx) = 0.5_DP
@@ -1230,6 +1230,7 @@ MODULE input_parameters
         !
 
         INTEGER ::  bfgs_ndim = 1
+        LOGICAL ::  tgdiis_step = .TRUE. 
 
         REAL(DP)  :: trust_radius_max = 0.8_DP
         REAL(DP)  :: trust_radius_min = 1.E-3_DP
@@ -1257,7 +1258,7 @@ MODULE input_parameters
                           refold_pos, upscale, delta_t, pot_extrapolation,     &
                           wfc_extrapolation, nraise, remove_rigid_rot,         &
                           trust_radius_max, trust_radius_min,                  &
-                          trust_radius_ini, w_1, w_2, bfgs_ndim,               &
+                          trust_radius_ini, w_1, w_2, bfgs_ndim,tgdiis_step,   &
                           fire_nmin, fire_f_inc, fire_f_dec, fire_alpha_init,  &
                           fire_falpha, fire_dtmax 
 
