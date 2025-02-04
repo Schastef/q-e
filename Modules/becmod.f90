@@ -1002,7 +1002,7 @@ CONTAINS
 
     IF ( gamma_only ) THEN
        !
-       CALL calbec_gamma_omp ( offload_omp, npw, beta, psi, betapsi%r, local_nbnd, intra_bgrp_comm )
+       CALL calbec_gamma_omp ( offload_omp, npw, beta, psi, betapsi%r, local_nbnd )
        !
     ELSEIF ( noncolin) THEN
        !
@@ -1019,31 +1019,35 @@ CONTAINS
   END SUBROUTINE calbec_bec_type_omp
   !
   !-----------------------------------------------------------------------
-  SUBROUTINE calbec_gamma_omp ( offload, npw, beta, psi, betapsi, nbnd, comm )
+  SUBROUTINE calbec_gamma_omp ( offload, npw, beta, psi, betapsi, nbnd )
     !-----------------------------------------------------------------------
     !! matrix times matrix with summation index (k=1,npw) running on
     !! half of the G-vectors or PWs - assuming k=0 is the G=0 component:
     !
     !! $$ betapsi(i,j) = 2Re(\sum_k beta^*(i,k)psi(k,j)) + beta^*(i,0)psi(0,j) $$
     !
-    USE mp,        ONLY : mp_sum
+    USE mp_bands,  ONLY : intra_bgrp_comm
+    USE mp,        ONLY : mp_sum, mp_size
     !
     IMPLICIT NONE
     TYPE(offload_kind_omp), INTENT(IN) :: offload
     COMPLEX (DP), INTENT (in) :: beta(:,:), psi(:,:)
     REAL (DP), INTENT (out) :: betapsi(:,:)
     INTEGER, INTENT (in) :: npw
-    INTEGER, INTENT (in) :: nbnd
-    INTEGER, INTENT (in) :: comm
+    INTEGER, INTENT (in), OPTIONAL :: nbnd
     !
     INTEGER :: nkb, npwx, m, i
     !
-    m = nbnd
+    IF ( present (nbnd) ) THEN
+        m = nbnd
+    ELSE
+        m = size ( psi, 2)
+    ENDIF
     !
     nkb = size (beta, 2)
     IF ( nkb == 0 ) RETURN
     !
-    CALL start_clock( 'calbec_omp' )
+    CALL start_clock( 'calbec' )
     IF ( npw == 0 ) betapsi(:,:)=0.0_DP
 #if defined(__OPENMP_GPU)
     !$omp target data map(tofrom:betapsi)
@@ -1084,9 +1088,9 @@ CONTAINS
 #if defined(__OPENMP_GPU)
     !$omp end target data
 #endif
-    CALL mp_sum( betapsi( :, 1:m ), comm )
+    IF (mp_size(intra_bgrp_comm) > 1)  CALL mp_sum( betapsi(:,1:m), intra_bgrp_comm )
     !
-    CALL stop_clock( 'calbec_omp' )
+    CALL stop_clock( 'calbec' )
     !
     RETURN
     !
