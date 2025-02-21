@@ -302,6 +302,7 @@ SUBROUTINE screen_coeff ()
        IF (irr_bz) CALL clean_pw_kcw()
        !
     ENDDO
+    FLUSH(iun_res)
     !
     IF (.NOT. irr_bz) CALL clean_pw_kcw( )
     DEALLOCATE ( rhog , delta_vg, vh_rhog, drhog_scf, delta_vg_ )
@@ -311,6 +312,7 @@ SUBROUTINE screen_coeff ()
       IF (.NOT. exst) OPEN(986, file=TRIM(tmp_dir_kcw)//TRIM(prefix)//'.alpha.status')
       REWIND(986)
       WRITE(986,'(i5)') iq
+      FLUSH(986)
     ENDIF
     !
   ENDDO ! qpoints
@@ -379,7 +381,7 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
   USE io_global,        ONLY : ionode, ionode_id, stdout
   USE mp,               ONLY : mp_bcast
   USE mp_global,        ONLY : intra_image_comm
-  USE control_kcw,      ONLY : l_do_alpha, iorb_start, iorb_end, tmp_dir_kcw
+  USE control_kcw,      ONLY : l_do_alpha, iorb_start, iorb_end, tmp_dir_kcw, irr_bz, fbz2ibz
   USE io_files,         ONLY : prefix
   !
   IMPLICIT NONE
@@ -407,9 +409,21 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
     !
     WRITE(stdout, '(5X, "restart FOUND. Results up to now:")')
     DO iq = 1, iq_start -1 
+
+      IF (irr_bz) THEN
+         IF ( skip_iq(iq, iorb_start, iorb_end)) THEN
+            WRITE(stdout, 9012) iq
+            CYCLE
+         END IF
+      END IF
       WRITE (stdout, '(/)')
       DO iwann = iorb_start, iorb_end
         IF ( .NOT. l_do_alpha (iwann)) CYCLE
+        IF (irr_bz) THEN
+            IF (fbz2ibz(iq, iwann) .EQ. -1) THEN
+               CYCLE
+            END IF
+        END IF
         IF (do_real_space) THEN 
           READ(iun_res, '(2I5,8F20.12)') iq_, iwann_ , pi_q_relax, pi_q_relax_rs, pi_q_unrelax, sh_q
           WRITE(stdout, 9011) iq, iwann, pi_q_relax, pi_q_relax_rs, pi_q_unrelax, sh_q
@@ -443,6 +457,22 @@ SUBROUTINE restart_screen (num_wann, iq_start, vki_r, vki_u, sh, do_real_space)
                "rPi_q_RS =", 2f15.8, 3x, "uPi_q =", 2f15.8, 3x, "Self Hartree =", 2f15.8)
 9011 FORMAT(/, 8x, "iq =", i4, 3x, "iwann =", i4, 3x, "rPi_q =", 2f15.8, 3x, "uPi_q =", & 
                2f15.8, 3x, "SH_q =", 2f15.8)
+9012 FORMAT(/, 8x,' Read skipping for #iq = ',i4)
+  !
+  CONTAINS
+
+     FUNCTION skip_iq(iq, iwann_start, iwann_end) RESULT(skip)
+       INTEGER, INTENT(IN) :: iq, iwann_start, iwann_end
+
+       INTEGER :: iwan
+       LOGICAL :: skip
+
+       skip = .TRUE.
+
+       DO iwan = iwann_start, iwann_end
+            skip = skip .and. (fbz2ibz(iq, iwan) .EQ. -1)
+       END DO
+    END FUNCTION
   !
 END SUBROUTINE restart_screen 
 
