@@ -26,7 +26,7 @@ SUBROUTINE orthoatwfc (orthogonalize_wfc)
   USE uspp,             ONLY : nkb, vkb
   USE becmod,           ONLY : allocate_bec_type_acc, deallocate_bec_type_acc, &
                                bec_type, becp, calbec
-  USE control_flags,    ONLY : gamma_only, use_gpu, offload_type
+  USE control_flags,    ONLY : gamma_only, use_gpu, offload_type, offload_type2
   USE noncollin_module, ONLY : noncolin, npol
   USE uspp_init,        ONLY : init_us_2
   IMPLICIT NONE
@@ -45,7 +45,10 @@ SUBROUTINE orthoatwfc (orthogonalize_wfc)
   ALLOCATE(  wfcatom(npwx*npol,natomwfc) )
   ALLOCATE( swfcatom(npwx*npol,natomwfc) )
   !$acc enter data create(wfcatom, swfcatom)
-
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:wfcatom, swfcatom)
+#endif
+  !
   ! Allocate the array becp = <beta|wfcatom>
   CALL allocate_bec_type_acc (nkb,natomwfc, becp) 
   
@@ -56,22 +59,41 @@ SUBROUTINE orthoatwfc (orthogonalize_wfc)
      ELSE
        CALL atomic_wfc (ik, wfcatom)
      ENDIF
+#if defined(__OPENMP_GPU)
+     !$omp target update to(wfcatom)
+#endif
      npw = ngk (ik)
      !
      CALL init_us_2 (npw, igk_k(1,ik), xk (1, ik), vkb, use_gpu)
      !
-     CALL calbec (offload_type, npw, vkb, wfcatom, becp)     
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:vkb)
+#endif
+     CALL calbec( offload_type2, npw, vkb, wfcatom, becp )
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+     CALL s_psi_omp( npwx, npw, natomwfc, wfcatom, swfcatom )
+#else
      CALL s_psi_acc( npwx, npw, natomwfc, wfcatom, swfcatom )
+#endif
      !
-     IF (orthogonalize_wfc) CALL ortho_swfc ( npw, normalize_only, natomwfc, wfcatom, swfcatom, .FALSE. )
+     IF (orthogonalize_wfc) THEN
+             CALL ortho_swfc ( npw, normalize_only, natomwfc, wfcatom, swfcatom, .FALSE. )
+     ENDIF
      !
      ! write S * atomic wfc to unit iunsat
      !
      !$acc update host(swfcatom)
+#if defined(__OPENMP_GPU)
+     !$omp target update from(swfcatom)
+#endif
      CALL save_buffer (swfcatom, nwordatwfc, iunsat, ik)
      !
   ENDDO
   !$acc exit data delete(wfcatom, swfcatom)
+#if defined(__OPENMP_GPU)  
+  !$omp end target data
+#endif
   DEALLOCATE (swfcatom)
   DEALLOCATE ( wfcatom)
   CALL deallocate_bec_type_acc ( becp )

@@ -6,6 +6,9 @@
 ! or http://www.gnu.org/copyleft/gpl.txt .
 !
 !
+
+#ifdef __ABCABC
+
 !----------------------------------------------------------------------
 SUBROUTINE s_psi_omp( lda, n, m, psi, spsi )
   !--------------------------------------------------------------------
@@ -370,7 +373,7 @@ SUBROUTINE s_psi_omp_( lda, n, m, psi, spsi )
        !
        RETURN
        !
-     END SUBROUTINE s_psi_omp_k     
+     END SUBROUTINE s_psi_omp_k 
      !
      !
      !-----------------------------------------------------------------------
@@ -480,3 +483,498 @@ SUBROUTINE s_psi_omp_( lda, n, m, psi, spsi )
     !
 END SUBROUTINE s_psi_omp_
 
+
+#endif
+
+
+
+!
+!----------------------------------------------------------------------
+SUBROUTINE s_psi_omp( lda, n, m, psi, spsi )
+  !--------------------------------------------------------------------
+  !! This routine applies the S matrix to m wavefunctions psi and puts 
+  !! the results in spsi.
+  !! Requires the products of psi with all beta functions in array 
+  !! becp(nkb,m) (calculated in h_psi or by calbec).
+  !
+  !! \(\textit{Wrapper routine}\): performs bgrp parallelization on 
+  !! non-distributed bands if suitable and required, calls old S\psi
+  !! routine s_psi_ . See comments in h_psi.f90 about band 
+  !! parallelization.
+  !
+  USE kinds,            ONLY : DP
+  USE noncollin_module, ONLY : npol
+  USE xc_lib,           ONLY : exx_is_active
+  USE mp_bands,         ONLY : use_bgrp_in_hpsi, inter_bgrp_comm
+  USE mp,               ONLY : mp_allgather, mp_size, &
+                               mp_type_create_column_section, mp_type_free
+  !
+  IMPLICIT NONE
+  !
+  INTEGER, INTENT(IN) :: lda
+  !! leading dimension of arrays psi, spsi
+  INTEGER, INTENT(IN) :: n
+  !! true dimension of psi, spsi
+  INTEGER, INTENT(IN) :: m
+  !! number of states psi
+  COMPLEX(DP), INTENT(IN) :: psi(lda*npol,m)
+  !! the m wavefunctions
+  COMPLEX(DP), INTENT(OUT)::spsi(lda*npol,m)
+  !! S matrix dot wavefunctions psi
+  !
+  ! ... local variables
+  !
+  INTEGER :: m_start, m_end
+  INTEGER :: column_type
+  INTEGER, ALLOCATABLE :: recv_counts(:), displs(:)
+  !
+  CALL start_clock( 's_psi_bgrp' )
+  !
+  IF (use_bgrp_in_hpsi .AND. .NOT. exx_is_active() .AND. m > 1) THEN
+     ! use band parallelization here
+     ALLOCATE( recv_counts(mp_size(inter_bgrp_comm)), displs(mp_size(inter_bgrp_comm)) )
+     CALL divide_all( inter_bgrp_comm,m,m_start,m_end, recv_counts,displs )
+     !$acc host_data use_device(spsi)
+     CALL mp_type_create_column_section( spsi(1,1), 0, lda*npol, lda*npol, column_type )
+     !$acc end host_data
+     !
+     ! Check if there at least one band in this band group
+     IF (m_end >= m_start) &
+        CALL s_psi__omp( lda, n, m_end-m_start+1, psi(1,m_start), spsi(1,m_start) )
+     !$acc host_data use_device(spsi)
+#if defined(__OPENMP_GPU)
+     !$omp target update from(spsi)
+#endif
+     CALL mp_allgather( spsi, column_type, recv_counts, displs, inter_bgrp_comm )
+     !$acc end host_data
+#if defined(__OPENMP_GPU)
+     !$omp target update to(spsi)
+#endif
+     !
+     CALL mp_type_free( column_type )
+     DEALLOCATE( recv_counts )
+     DEALLOCATE( displs )
+  ELSE
+     ! don't use band parallelization here
+     CALL s_psi__omp( lda, n, m, psi, spsi )
+  ENDIF
+  !
+  CALL stop_clock( 's_psi_bgrp' )
+  !
+  RETURN
+  !
+END SUBROUTINE s_psi_omp
+!
+!
+!----------------------------------------------------------------------------
+SUBROUTINE s_psi__omp( lda, n, m, psi, spsi )
+  !----------------------------------------------------------------------------
+  !! This routine applies the S matrix to m wavefunctions psi and puts 
+  !! the results in spsi.
+  !! Requires the products of psi with all beta functions in array 
+  !! becp(nkb,m) (calculated in h_psi or by calbec).
+  !
+  USE kinds,            ONLY: DP
+  USE becmod,           ONLY: becp
+  USE uspp,             ONLY: vkb, nkb, okvan, qq_at, qq_so, ofsbeta
+  USE uspp_param,       ONLY: upf, nh, nhm
+  USE ions_base,        ONLY: nat, nsp, ityp
+  USE control_flags,    ONLY: gamma_only 
+  USE noncollin_module, ONLY: npol, noncolin, lspinorb
+  USE realus,           ONLY: real_space, fwfft_orbital_gamma, s_psir_gamma, &
+                              fwfft_orbital_k, s_psir_k
+  USE wavefunctions,    ONLY: psic
+  USE fft_base,         ONLY: dffts
+#if defined (__CUDA)
+  USE device_memcpy_m,  ONLY : dev_memcpy
+#endif
+  !
+  IMPLICIT NONE
+  !
+  INTEGER, INTENT(IN) :: lda
+  !! leading dimension of arrays psi, spsi
+  INTEGER, INTENT(IN) :: n
+  !! true dimension of psi, spsi
+  INTEGER, INTENT(IN) :: m
+  !! number of states psi
+  COMPLEX(DP), INTENT(IN) :: psi(lda*npol,m)
+  !! the m wavefunctions
+  COMPLEX(DP), INTENT(OUT)::spsi(lda*npol,m)
+  !! S matrix dot wavefunctions psi
+  !
+  ! ... local variables
+  !
+  INTEGER :: ibnd, i, j, lda_npol
+  !
+  ! ... initialize  spsi
+  !
+  lda_npol = lda*npol
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do collapse(2)
+#endif
+  DO j = 1, m
+    DO i = 1, lda_npol
+      spsi(i,j) = psi(i,j)
+    END DO
+  END DO
+
+  !
+  IF ( nkb == 0 .OR. .NOT. okvan ) RETURN
+  !
+  CALL start_clock( 's_psi' )  
+  !
+  ! ... The product with the beta functions
+  !
+  IF ( gamma_only ) THEN
+     !
+     IF ( real_space ) THEN
+        !
+        DO ibnd = 1, m, 2
+!SdG: the becp are already computed ! no need to invfft psi to real space.
+!           CALL invfft_orbital_gamma( psi, ibnd, m ) 
+!SdG: we just need to clean psic in real space ...
+           CALL threaded_barrier_memset(psic, 0.D0, dffts%nnr*2)
+!SdG: ... before computing the us-only contribution ...
+           CALL s_psir_gamma( ibnd, m )
+!SdG: ... and add it to spsi (already containing psi).
+#if defined(__OPENMP_GPU)
+           !$omp target update from(spsi)
+#endif
+           CALL fwfft_orbital_gamma( spsi, ibnd, m, add_to_orbital=.TRUE. )
+#if defined(__OPENMP_GPU)
+           !$omp target update to(spsi)
+#endif
+        ENDDO
+        !
+     ELSE
+        !
+        CALL s_psi_gamma_omp()
+        !
+     ENDIF
+     !
+  ELSEIF ( noncolin ) THEN
+     !
+     CALL s_psi_nc_omp()
+     !
+  ELSE 
+     !
+     IF ( real_space ) THEN
+        !
+        DO ibnd = 1, m
+!SdG: the becp are already computed ! no need to invfft psi to real space.
+!           CALL invfft_orbital_k( psi, ibnd, m )
+!SdG: we just need to clean psic in real space ...
+           CALL threaded_barrier_memset(psic, 0.D0, dffts%nnr*2)
+!SdG: ... before computing the us-only contribution ...
+           CALL s_psir_k( ibnd, m )
+!SdG: ... and add it to spsi (already containing psi).
+#if defined(__OPENMP_GPU)
+           !$omp target update from(spsi)
+#endif
+           CALL fwfft_orbital_k( spsi, ibnd, m, add_to_orbital=.TRUE. )
+#if defined(__OPENMP_GPU)
+           !$omp target update to(spsi)
+#endif
+        ENDDO
+        !
+     ELSE
+        !
+        CALL s_psi_k_omp()
+        !
+     ENDIF    
+     !
+  ENDIF    
+  !
+  CALL stop_clock( 's_psi' )
+  !
+  RETURN
+  !
+  CONTAINS
+     !
+     !-----------------------------------------------------------------------
+     SUBROUTINE s_psi_gamma_omp()
+       !---------------------------------------------------------------------
+       !! Gamma version of \(\textrm{s_psi}\) routine.
+       !
+       USE mp,            ONLY : mp_get_comm_null, mp_circular_shift_left
+       !
+       IMPLICIT NONE  
+       !
+       ! ... local variables
+       !
+       INTEGER :: ikb, jkb, ih, jh, na, nt, ibnd, ierr
+       ! counters
+       REAL(DP), ALLOCATABLE :: ps(:,:)
+       ! the product vkb and psi
+       !
+       ! becp(l,i) = <beta_l|psi_i>, with vkb(n,l)=|beta_l>
+       !
+       ALLOCATE( ps( nkb, m ), STAT=ierr )
+       IF( ierr /= 0 ) &
+          CALL errore( ' s_psi_gamma ', ' cannot allocate memory (ps) ', ABS(ierr) )
+       !    
+#if defined(__OPENMP_GPU)
+       !$omp target data map(alloc:ps) map(to:vkb,qq_at,becp%r)
+       !$omp target teams distribute parallel do collapse(2)
+#endif
+       DO jh = 1, m
+         DO ih = 1, nkb
+           ps(ih,jh) = 0.0_DP
+         END DO
+       END DO
+       !
+       !   In becp=<vkb_i|psi_j> terms corresponding to atom na of type nt
+       !   run from index i=ofsbeta(na)+1 to i=ofsbeta(na)+nh(nt)
+       !
+       DO nt = 1, nsp
+          IF ( upf(nt)%tvanp ) THEN
+             DO na = 1, nat
+                IF ( ityp(na) == nt ) THEN
+                   !
+                   ! Next operation computes ps(l',i)=\sum_m qq(l,m) becp(m',i)
+                   ! (l'=l+ijkb0, m'=m+ijkb0, indices run from 1 to nh(nt))
+                   !
+                   CALL MYDGEMM2('N', 'N', nh(nt), m, nh(nt), 1.0_dp, &
+                                  qq_at(1,1,na), nhm, becp%r(ofsbeta(na)+1,1),&
+                                  nkb, 0.0_dp, ps(ofsbeta(na)+1,1), nkb, .TRUE. )
+                ENDIF
+             ENDDO
+          ENDIF
+       ENDDO
+       !
+       IF ( m == 1 ) THEN
+          CALL MYDGEMV2( 'N', 2 * n, nkb, 1.D0, vkb, &
+                          2 * lda, ps, 1, 1.D0, spsi, 1 )
+       ELSE
+          CALL MYDGEMM2( 'N', 'N', 2 * n, m, nkb, 1.D0, vkb, &
+                          2 * lda, ps, nkb, 1.D0, spsi, 2*lda, .TRUE. )
+       ENDIF
+       !
+#if defined(__OPENMP_GPU)
+       !$omp end target data
+#endif
+       DEALLOCATE( ps ) 
+       !
+       RETURN
+       !
+     END SUBROUTINE s_psi_gamma_omp
+     !
+     !-----------------------------------------------------------------------
+     SUBROUTINE s_psi_k_omp()
+       !-----------------------------------------------------------------------
+       !! k-points version of \(\textrm{s_psi}\) routine.
+       !
+       IMPLICIT NONE
+       !
+       ! ... local variables
+       !
+       INTEGER :: ikb, jkb, ih, jh, na, nt, nhnt, ofsbeta_na, ibnd, ierr
+       ! counters
+       COMPLEX(DP), ALLOCATABLE :: ps(:,:), qqc(:,:)
+       ! ps = product vkb and psi ; qqc = complex version of qq
+       !
+       ALLOCATE( ps( nkb, m ), STAT=ierr )
+       !
+       IF( ierr /= 0 ) &
+          CALL errore( ' s_psi_k ', ' cannot allocate memory (ps) ', ABS(ierr) )
+       !
+#if defined(__OPENMP_GPU)
+
+
+       !$omp target update from(spsi)
+
+
+
+       !$omp target data map(to:vkb,qq_at,becp%k) map(alloc:ps)
+#endif
+
+       DO nt = 1, nsp
+          !
+          IF ( upf(nt)%tvanp ) THEN
+             ! qq is real:  copy it into a complex variable to perform
+             ! a zgemm - simple but sub-optimal solution
+             ALLOCATE( qqc(nh(nt),nh(nt)) )
+#if defined(__OPENMP_GPU)
+             !$omp target data map(alloc:qqc)
+#endif
+             DO na = 1, nat
+                IF ( ityp(na) == nt ) THEN
+                  nhnt = nh(nt)
+                  ofsbeta_na = ofsbeta(na)
+#if defined(__OPENMP_GPU)
+                  !$omp target teams distribute parallel do collapse(2)
+#endif
+                  DO jh = 1, nhnt
+                    DO ih = 1, nhnt
+                      qqc(ih,jh) = CMPLX( qq_at(ih,jh,na), 0.0_dp, KIND=DP )
+                    ENDDO
+                  ENDDO
+                  !
+                  CALL MYZGEMM2( 'N','N', nh(nt), m, nh(nt), (1.0_DP,0.0_DP), &
+                                 qqc, nh(nt), becp%k(ofsbeta_na+1,1), nkb,   &
+                                 (0.0_DP,0.0_DP), ps(ofsbeta_na+1,1), nkb, .TRUE. )
+                ENDIF
+             ENDDO
+             !
+#if defined(__OPENMP_GPU)
+             !$omp end target data
+#endif
+             DEALLOCATE( qqc )
+             !
+          ELSE
+             !
+             IF (nh(nt)>0) THEN
+                DO na = 1, nat
+                  IF (ityp(na)==nt) THEN
+                    nhnt = nh(nt)
+                    ofsbeta_na = ofsbeta(na)
+#if defined(__OPENMP_GPU)
+                    !$omp target teams distribute parallel do collapse(2)
+#endif
+                    DO ih = 1, nhnt
+                      DO jh = 1, m
+                        ps(ofsbeta_na+ih,jh) = (0.0_DP,0.0_DP)
+                      ENDDO
+                    ENDDO
+                    !
+                  ENDIF
+                ENDDO
+             ENDIF
+             !
+          ENDIF
+          !
+       ENDDO
+       !
+       IF ( m == 1 ) THEN
+          !
+          CALL MYZGEMV2( 'N', n, nkb, ( 1.D0, 0.D0 ), vkb, &
+                         lda, ps, 1, ( 1.D0, 0.D0 ), spsi, 1 )
+          !
+       ELSE
+          !
+          CALL MYZGEMM2( 'N', 'N', n, m, nkb, ( 1.D0, 0.D0 ), vkb, &
+                         lda, ps, nkb, ( 1.D0, 0.D0 ), spsi, lda, .TRUE.)
+          !
+       ENDIF
+       !
+#if defined(__OPENMP_GPU)
+       !$omp end target data
+#endif
+       DEALLOCATE( ps )
+       !
+       RETURN
+       !
+     END SUBROUTINE s_psi_k_omp
+     !
+     !
+     !-----------------------------------------------------------------------
+       SUBROUTINE s_psi_nc_omp ( )
+       !*******THIS ROUTINE IS THE OLD VERSION OF s_psi_nc.
+       !****** TODO: get rid of this when merging s_psi_acc and s_psi_omp
+       !-----------------------------------------------------------------------
+       !! k-points noncolinear/spinorbit version of \(\textrm{s_psi}\) routine.
+       !        
+       IMPLICIT NONE
+       !  
+       ! ... local variables
+       !
+       INTEGER :: ikb, jkb, ih, jh, na, nt, ibnd, ipol, ierr
+       ! counters
+
+       COMPLEX (DP), ALLOCATABLE :: ps(:,:,:), qqc(:,:,:)
+       ! the product vkb and psi
+       !
+       ALLOCATE( ps(nkb,npol,m), STAT=ierr )
+       IF( ierr /= 0 ) &
+          CALL errore( ' s_psi_nc ', ' cannot allocate memory (ps) ', ABS(ierr) )
+       !
+#if defined(__OPENMP_GPU)
+       !$omp target data map(alloc:ps) map(to:vkb,qq_at,qq_so,becp%nc)
+       !$omp target teams distribute parallel do collapse(3)
+#endif
+       DO jkb = 1, m
+         DO ipol = 1, npol
+           DO ikb = 1, nkb
+             ps(ikb,ipol,jkb)=(0.D0,0.D0)
+           END DO
+         END DO
+       END DO
+       !
+       IF ( .NOT. lspinorb ) THEN
+          ALLOCATE( qqc(1:nhm, 1:nhm, 1:nat), STAT=ierr )
+#if defined(__OPENMP_GPU)
+          !$omp target enter data map(alloc:qqc)
+#endif
+          IF( ierr /= 0 .and. ierr /= -1 ) &
+             CALL errore( ' s_psi_nc ', ' cannot allocate buffer (qqc) ', ABS(ierr) )
+#if defined(__OPENMP_GPU)
+          !$omp target teams distribute parallel do collapse(3)
+#endif
+          DO na = 1, nat
+             DO jh = 1, nhm
+                DO ih = 1, nhm
+                   qqc(ih, jh, na) = CMPLX ( qq_at(ih,jh, na), 0.0_dp, KIND=dp )
+                END DO
+             END DO
+          END DO
+       END IF
+       !
+       DO nt = 1, nsp
+          !
+          IF ( upf(nt)%tvanp ) THEN
+             !
+             IF ( .NOT. lspinorb ) THEN
+                DO na = 1, nat
+                   IF ( ityp(na) == nt ) THEN
+                      DO ipol=1,npol
+                         CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
+                              qqc(1,1, na), nhm, becp%nc(ofsbeta(na)+1,ipol,1), nkb*npol, &
+                              (0.0_dp,0.0_dp), ps(ofsbeta(na)+1,ipol,1), nkb*npol, .TRUE. )
+                       END DO
+                    END IF
+                END DO
+             ELSE
+                DO na = 1, nat
+                   IF ( ityp(na) == nt ) THEN
+                      CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
+                           qq_so(1,1,1,nt), nhm, becp%nc(ofsbeta(na)+1,1,1), nkb*npol, &
+                           (0.0_dp,0.0_dp), ps(ofsbeta(na)+1,1,1), nkb*npol, .true. )
+                      CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
+                           qq_so(1,1,2,nt), nhm, becp%nc(ofsbeta(na)+1,2,1), nkb*npol, &
+                           (1.0_dp,0.0_dp), ps(ofsbeta(na)+1,1,1), nkb*npol, .true. )
+                      !
+                      CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
+                           qq_so(1,1,3,nt), nhm, becp%nc(ofsbeta(na)+1,1,1), nkb*npol, &
+                           (0.0_dp,0.0_dp), ps(ofsbeta(na)+1,2,1), nkb*npol, .true. )
+                      CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
+                           qq_so(1,1,4,nt), nhm, becp%nc(ofsbeta(na)+1,2,1), nkb*npol, &
+                           (1.0_dp,0.0_dp), ps(ofsbeta(na)+1,2,1), nkb*npol, .true. )
+                    END IF
+                END DO
+             END IF
+          END IF
+       END DO
+
+       IF ( .NOT. lspinorb ) THEN
+#if defined(__OPENMP_GPU)
+         !$omp target exit data map(delete:qqc)
+#endif
+         DEALLOCATE( qqc )
+       ENDIF
+       !
+       CALL MYZGEMM2 ( 'N', 'N', n, m*npol, nkb, (1.d0,0.d0) , vkb, &
+                    lda, ps, nkb, (1.d0,0.d0) , spsi(1,1), lda, .true. )
+       !
+#if defined(__OPENMP_GPU)
+       !$omp end target data
+#endif
+       DEALLOCATE( ps )
+       !
+       !
+       RETURN
+       !
+    END SUBROUTINE s_psi_nc_omp
+
+
+    !
+END SUBROUTINE s_psi__omp
