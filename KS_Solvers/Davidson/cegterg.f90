@@ -237,7 +237,8 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   my_n = n_end - n_start + 1; !write (*,*) nbase,n_start,n_end
   !
   if (n_start .le. n_end) &
-     CALL MYZGEMM2( 'C','N', nbase, my_n, kdim, ONE, psi, kdmx, hpsi(1,n_start), kdmx, ZERO, hc(1,n_start), nvecx, .TRUE. )
+     CALL MYZGEMM2( 'C','N', nbase, my_n, kdim, ONE, psi, kdmx, hpsi(1,n_start),&
+                    kdmx, ZERO, hc(1,n_start), nvecx, .TRUE. )
   !$omp target update from(hc)
   !
   if (n_start .le. n_end) & 

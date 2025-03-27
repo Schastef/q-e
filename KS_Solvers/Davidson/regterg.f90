@@ -227,7 +227,6 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   ! ... hpsi contains h times the basis vectors
   !
-  !$acc host_data use_device(psi, hpsi, spsi)
   CALL h_psi_ptr( npwx, npw, nvec, psi, hpsi )  ; nhpsi = nvec
   !
   ! ... spsi contains s times the basis vectors
@@ -241,7 +240,6 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !$omp target update to(spsi)
 #endif
   ENDIF
-  !$acc end host_data
   !
   ! ... hr contains the projection of the hamiltonian onto the reduced
   ! ... space vr contains the eigenvectors of hr
@@ -268,7 +266,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   CALL divide(inter_bgrp_comm,nbase,n_start,n_end)
   my_n = n_end - n_start + 1; !write (*,*) nbase,n_start,n_end
   if (n_start .le. n_end) then
-     CALL MYDGEMM2( 'T','N', nbase, my_n, npw2, 2.D0 , psi, npwx2, hpsi(1,n_start), npwx2, 0.D0, hr(1,n_start), nvecx, .TRUE. )
+     CALL MYDGEMM2( 'T','N', nbase, my_n, npw2, 2.D0 , psi, npwx2, hpsi(1,n_start), npwx2, &
+                    0.D0, hr(1,n_start), nvecx, .TRUE. )
   endif
   IF ( gstart == 2 ) THEN
      CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, hpsi(1,n_start), npwx2, hr(1,n_start), nvecx, .TRUE. )
@@ -286,7 +285,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   IF ( uspp ) THEN
      !
      if (n_start .le. n_end) then
-        CALL MYDGEMM2( 'T','N', nbase, my_n, npw2, 2.D0, psi, npwx2, spsi(1,n_start), npwx2, 0.D0, sr(1,n_start), nvecx, .TRUE. )
+        CALL MYDGEMM2( 'T','N', nbase, my_n, npw2, 2.D0, psi, npwx2, spsi(1,n_start), npwx2, &
+                       0.D0, sr(1,n_start), nvecx, .TRUE. )
      endif
      IF ( gstart == 2 ) THEN
         CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, spsi(1,n_start), npwx2, sr(1,n_start), nvecx, .TRUE. )
@@ -295,8 +295,10 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   ELSE
      !
      if (n_start .le. n_end) &
-     CALL MYDGEMM2( 'T','N', nbase, my_n, npw2, 2.D0, psi, npwx2, psi(1,n_start), npwx2, 0.D0, sr(1,n_start), nvecx, .TRUE. )
-     IF ( gstart == 2 ) CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, psi(1,n_start), npwx2, sr(1,n_start), nvecx, .TRUE. )
+     CALL MYDGEMM2( 'T','N', nbase, my_n, npw2, 2.D0, psi, npwx2, psi(1,n_start), npwx2, 0.D0,&
+                    sr(1,n_start), nvecx, .TRUE. )
+     IF ( gstart == 2 ) CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, psi(1,n_start), npwx2,  &
+                                      sr(1,n_start), nvecx, .TRUE. )
      !
   END IF
 #if defined(__OPENMP_GPU)
@@ -421,12 +423,14 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      IF ( uspp ) THEN
         !
         if (n_start .le. n_end) &
-           CALL MYDGEMM2( 'N','N', npw2, notcnv, my_n, 1.D0, spsi(1,n_start), npwx2, vr(n_start,1), nvecx, 0.D0, psi(1,nb1), npwx2,.TRUE. )
+           CALL MYDGEMM2( 'N','N', npw2, notcnv, my_n, 1.D0, spsi(1,n_start), npwx2, vr(n_start,1),&
+                          nvecx, 0.D0, psi(1,nb1), npwx2,.TRUE. )
         !
      ELSE
         !
         if (n_start .le. n_end) &
-           CALL MYDGEMM2( 'N','N', npw2, notcnv, my_n, 1.D0, psi(1,n_start), npwx2, vr(n_start,1), nvecx, 0.D0, psi(1,nb1), npwx2,.TRUE. )
+           CALL MYDGEMM2( 'N','N', npw2, notcnv, my_n, 1.D0, psi(1,n_start), npwx2, vr(n_start,1),&
+                          nvecx, 0.D0, psi(1,nb1), npwx2,.TRUE. )
         !
      END IF
      !$acc end host_data
@@ -444,7 +448,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      !$acc host_data use_device(psi, hpsi, vr)
      if (n_start .le. n_end) &
-        CALL MYDGEMM2( 'N','N', npw2, notcnv, my_n, 1.D0, hpsi(1,n_start), npwx2, vr(n_start,1), nvecx, 1.D0, psi(1,nb1), npwx2, .TRUE. )
+        CALL MYDGEMM2( 'N','N', npw2, notcnv, my_n, 1.D0, hpsi(1,n_start), npwx2, vr(n_start,1),&
+                       nvecx, 1.D0, psi(1,nb1), npwx2, .TRUE. )
 #if defined(__OPENMP_GPU)
      !$omp target update from(psi)
 #endif
@@ -514,7 +519,6 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
-     !$acc host_data use_device(psi, hpsi, spsi)
      CALL h_psi_ptr( npwx, npw, notcnv, psi(1,nb1), hpsi(1,nb1) ) ; nhpsi = nhpsi + notcnv
      !
      IF ( uspp ) THEN
@@ -522,7 +526,6 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
        CALL s_psi_ptr( npwx, npw, notcnv, psi(1,nb1), spsi(1,nb1) )
        !$omp target update to(spsi(:,nb1:nvecx))
      ENDIF
-     !$acc end host_data
      !
      ! ... update the reduced hamiltonian
      !
@@ -541,8 +544,10 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !$acc host_data use_device(psi, hpsi, hr)
      CALL divide(inter_bgrp_comm,nbase+notcnv,n_start,n_end)
      my_n = n_end - n_start + 1; !write (*,*) nbase+notcnv,n_start,n_end
-     CALL MYDGEMM2( 'T','N', my_n, notcnv, npw2, 2.D0, psi(1,n_start), npwx2, hpsi(1,nb1), npwx2, 0.D0, hr(n_start,nb1), nvecx,.TRUE. )
-     IF ( gstart == 2 ) CALL MYDGER2( my_n, notcnv, -1.D0, psi(1,n_start), npwx2, hpsi(1,nb1), npwx2, hr(n_start,nb1), nvecx, .TRUE. )
+     CALL MYDGEMM2( 'T','N', my_n, notcnv, npw2, 2.D0, psi(1,n_start), npwx2, hpsi(1,nb1), &
+                    npwx2, 0.D0, hr(n_start,nb1), nvecx,.TRUE. )
+     IF ( gstart == 2 ) CALL MYDGER2( my_n, notcnv, -1.D0, psi(1,n_start), npwx2, hpsi(1,nb1),&
+                                      npwx2, hr(n_start,nb1), nvecx, .TRUE. )
 #if defined(__OPENMP_GPU)
      !$omp target update from(hr)
 #endif
@@ -569,13 +574,17 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      my_n = n_end - n_start + 1; !write (*,*) nbase+notcnv,n_start,n_end
      IF ( uspp ) THEN
         !
-        CALL MYDGEMM2( 'T','N', my_n, notcnv, npw2, 2.D0, psi(1,n_start), npwx2, spsi(1,nb1), npwx2, 0.D0, sr(n_start,nb1), nvecx,.TRUE. )
-        IF ( gstart == 2 ) CALL MYDGER2( my_n, notcnv, -1.D0, psi(1,n_start), npwx2, spsi(1,nb1), npwx2, sr(n_start,nb1),nvecx,.TRUE. )
+        CALL MYDGEMM2( 'T','N', my_n, notcnv, npw2, 2.D0, psi(1,n_start), npwx2, spsi(1,nb1),&
+                       npwx2, 0.D0, sr(n_start,nb1), nvecx,.TRUE. )
+        IF ( gstart == 2 ) CALL MYDGER2( my_n, notcnv, -1.D0, psi(1,n_start), npwx2, spsi(1,nb1),&
+                                         npwx2, sr(n_start,nb1),nvecx,.TRUE. )
         !
      ELSE
         !
-        CALL MYDGEMM2( 'T','N', my_n, notcnv, npw2, 2.D0, psi(1,n_start), npwx2, psi(1,nb1), npwx2, 0.D0, sr(n_start,nb1) ,nvecx,.TRUE. )
-        IF ( gstart == 2 ) CALL MYDGER2( my_n, notcnv, -1.D0, psi(1,n_start), npwx2, psi(1,nb1), npwx2, sr(n_start,nb1), nvecx,.TRUE. )
+        CALL MYDGEMM2( 'T','N', my_n, notcnv, npw2, 2.D0, psi(1,n_start), npwx2, psi(1,nb1), npwx2,&
+                       0.D0, sr(n_start,nb1) ,nvecx,.TRUE. )
+        IF ( gstart == 2 ) CALL MYDGER2( my_n, notcnv, -1.D0, psi(1,n_start), npwx2, psi(1,nb1), &
+                                         npwx2, sr(n_start,nb1), nvecx,.TRUE. )
         !
      END IF
 #if defined(__OPENMP_GPU)
@@ -686,7 +695,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         CALL divide(inter_bgrp_comm,nbase,n_start,n_end)
         my_n = n_end - n_start + 1; !write (*,*) nbase,n_start,n_end
         !$acc host_data use_device(evc, psi, vr)
-        CALL MYDGEMM2( 'N','N', npw2, nvec, my_n, 1.D0, psi(1,n_start), npwx2, vr(n_start,1), nvecx, 0.D0, evc, npwx2,.TRUE. )
+        CALL MYDGEMM2( 'N','N', npw2, nvec, my_n, 1.D0, psi(1,n_start), npwx2, vr(n_start,1),&
+                       nvecx, 0.D0, evc, npwx2,.TRUE. )
 #if defined(__OPENMP_GPU)
         !$omp target update from(evc)
 #endif
@@ -744,7 +754,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
            END DO
            !
            !$acc host_data use_device(psi, spsi, vr)
-           CALL MYDGEMM2( 'N','N', npw2, nvec, my_n, 1.D0, spsi(1,n_start), npwx2, vr(n_start,1), nvecx, 0.D0, psi(1,nvec+1),npwx2,.TRUE. )
+           CALL MYDGEMM2( 'N','N', npw2, nvec, my_n, 1.D0, spsi(1,n_start), npwx2, vr(n_start,1),&
+                          nvecx, 0.D0, psi(1,nvec+1),npwx2,.TRUE. )
 #if defined(__OPENMP_GPU)
            !$omp target update from(psi)
 #endif
@@ -779,7 +790,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !$acc end kernels
 #endif
         !$acc host_data use_device(psi, hpsi, vr)
-        CALL MYDGEMM2( 'N','N', npw2, nvec, my_n, 1.D0, hpsi(1,n_start), npwx2, vr(n_start,1), nvecx, 0.D0, psi(1,nvec+1),npwx2,.TRUE. )
+        CALL MYDGEMM2( 'N','N', npw2, nvec, my_n, 1.D0, hpsi(1,n_start), npwx2,&
+                       vr(n_start,1), nvecx, 0.D0, psi(1,nvec+1),npwx2,.TRUE. )
 #if defined(__OPENMP_GPU)
         !$omp target update from(psi)
 #endif
