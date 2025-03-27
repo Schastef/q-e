@@ -104,8 +104,8 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! chunking parameters
   INTEGER :: i,j,k
   !
-  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU2
-  !$acc routine(MYDDOT_VECTOR_GPU2) vector
+  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU
+  !$acc routine(MYDDOT_VECTOR_GPU) vector
   !
   EXTERNAL  h_psi_ptr,    s_psi_ptr,    g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
@@ -507,7 +507,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         nbn = nbase + n
         !
-        ew(n) = MYDDOT_VECTOR_GPU2( 2*npw, psi(1,nbn), psi(1,nbn) )
+        ew(n) = MYDDOT_VECTOR_GPU( 2*npw, psi(1,nbn), psi(1,nbn) )
         !
      END DO
      !
@@ -518,7 +518,7 @@ SUBROUTINE cegterg( h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
 #endif
        DO n = 1, notcnv 
          nbn = nbase + n
-         ew(n) = ew(n)  + MYDDOT_VECTOR_GPU2( 2*npw, psi(npwx+1,nbn), psi(npwx+1,nbn) ) 
+         ew(n) = ew(n)  + MYDDOT_VECTOR_GPU( 2*npw, psi(npwx+1,nbn), psi(npwx+1,nbn) ) 
        END DO 
      END IF 
      !$acc end parallel

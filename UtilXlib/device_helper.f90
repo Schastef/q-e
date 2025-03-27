@@ -342,14 +342,14 @@ END FUNCTION MYDDOT
 ! this is analogus to MYDDOT, but the result is on device
 DOUBLE PRECISION FUNCTION MYDDOT_VECTOR_GPU(N,DX,DY)
 #if defined(__CUDA)
-!$acc routine( MYDDOT_VECTOR_GPU ) vector
+!$acc routine(MYDDOT_VECTOR_GPU) vector
 #endif
     INTEGER, INTENT(IN) :: N
     DOUBLE PRECISION, INTENT(IN) :: DX(*),DY(*)
     DOUBLE PRECISION :: RES
-#if defined (__CUDA) || defined(__AAOPENMP_GPU)
+#if defined(__CUDA) || defined(__OPENMP_GPU)
     INTEGER :: I, M, MP1
-#if defined(__AAOPENMP_GPU)
+#if defined(__OPENMP_GPU)
     !$omp declare target
 #endif
     RES = 0.0d0
@@ -359,14 +359,14 @@ DOUBLE PRECISION FUNCTION MYDDOT_VECTOR_GPU(N,DX,DY)
     M = mod(N,5)
     IF(M.NE.0) THEN
       !$acc loop vector reduction(+:RES)
-#if defined __AAOPENMP_GPU
-    !$omp parallel do simd reduction(+:RES)
+#if defined(__OPENMP_GPU)
+      !$omp parallel do simd reduction(+:RES)
 #endif
       DO I = 1, M
         RES = RES + DX(I) * DY(I)
       END DO
-#if defined __AAOPENMP_GPU
-    !$omp end parallel do simd
+#if defined(__OPENMP_GPU)
+      !$omp end parallel do simd
 #endif
       IF (N.LT.5) THEN
         MYDDOT_VECTOR_GPU = RES
@@ -375,13 +375,13 @@ DOUBLE PRECISION FUNCTION MYDDOT_VECTOR_GPU(N,DX,DY)
     END IF
     MP1 = M + 1
     !$acc loop vector reduction(+:RES)
-#if defined __AAOPENMP_GPU
+#if defined(__OPENMP_GPU)
     !$omp parallel do simd reduction(+:RES)
 #endif
     DO I = MP1, n, 5
       RES = RES + DX(I)*DY(I) + DX(I+1)*DY(I+1) + DX(I+2)*DY(I+2) + DX(I+3)*DY(I+3) + DX(I+4)*DY(I+4)
     END DO
-#if defined __AAOPENMP_GPU
+#if defined(__OPENMP_GPU)
     !$omp end parallel do simd
 #endif
     MYDDOT_VECTOR_GPU = RES
@@ -390,58 +390,6 @@ DOUBLE PRECISION FUNCTION MYDDOT_VECTOR_GPU(N,DX,DY)
     MYDDOT_VECTOR_GPU = DDOT(N,DX,1,DY,1)
 #endif
 END FUNCTION MYDDOT_VECTOR_GPU
-
-
-DOUBLE PRECISION FUNCTION MYDDOT_VECTOR_GPU2(N,DX,DY)
-#if defined(__CUDA)
-!$acc routine(MYDDOT_VECTOR_GPU2) vector
-#endif
-    INTEGER, INTENT(IN) :: N
-    DOUBLE PRECISION, INTENT(IN) :: DX(*),DY(*)
-    DOUBLE PRECISION :: RES
-#if defined (__CUDA) || defined(__OPENMP_GPU)
-    INTEGER :: I, M, MP1
-#if defined(__OPENMP_GPU)
-    !$omp declare target
-#endif
-    RES = 0.0d0
-    MYDDOT_VECTOR_GPU2 = 0.0d0
-    IF (N.LE.0) RETURN
-    ! code for unequal increments or equal increments not equal to 1 NOT implemented
-    M = mod(N,5)
-    IF(M.NE.0) THEN
-      !$acc loop vector reduction(+:RES)
-#if defined __OPENMP_GPU
-    !$omp parallel do simd reduction(+:RES)
-#endif
-      DO I = 1, M
-        RES = RES + DX(I) * DY(I)
-      END DO
-#if defined __OPENMP_GPU
-    !$omp end parallel do simd
-#endif
-      IF (N.LT.5) THEN
-        MYDDOT_VECTOR_GPU2 = RES
-        RETURN
-      END IF
-    END IF
-    MP1 = M + 1
-    !$acc loop vector reduction(+:RES)
-#if defined __OPENMP_GPU
-    !$omp parallel do simd reduction(+:RES)
-#endif
-    DO I = MP1, n, 5
-      RES = RES + DX(I)*DY(I) + DX(I+1)*DY(I+1) + DX(I+2)*DY(I+2) + DX(I+3)*DY(I+3) + DX(I+4)*DY(I+4)
-    END DO
-#if defined __OPENMP_GPU
-    !$omp end parallel do simd
-#endif
-    MYDDOT_VECTOR_GPU2 = RES
-#else
-    DOUBLE PRECISION DDOT
-    MYDDOT_VECTOR_GPU2 = DDOT(N,DX,1,DY,1)
-#endif
-END FUNCTION MYDDOT_VECTOR_GPU2
 
 
 function MYDDOTv2 (n, dx, incx, dy, incy)

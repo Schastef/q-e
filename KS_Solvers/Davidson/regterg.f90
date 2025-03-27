@@ -96,8 +96,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
     ! threshold for empty bands
   INTEGER :: i,j,k
   !
-  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU2
-  !$acc routine(MYDDOT_VECTOR_GPU2) vector
+  REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU
+  !$acc routine(MYDDOT_VECTOR_GPU) vector
   !
   EXTERNAL  h_psi_ptr, s_psi_ptr, g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
@@ -473,7 +473,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         nbn = nbase + n
         !
-        ew(n) = 2.D0 * MYDDOT_VECTOR_GPU2( npw2, psi(1,nbn), psi(1,nbn) )
+        ew(n) = 2.D0 * MYDDOT_VECTOR_GPU( npw2, psi(1,nbn), psi(1,nbn) )
         IF (gstart == 2) ew(n) = ew(n) - DBLE(psi(1,nbn) * psi(1,nbn)) ! psi(1,nbn) * psi(1,nbn)
         !
      END DO
