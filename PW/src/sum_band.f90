@@ -511,7 +511,13 @@ SUBROUTINE sum_band()
           ALLOCATE( grad_psic(npwx,incr) )
           !$acc enter data create(grad_psic)
        ELSE
+#if defined(__OPENMP_GPU)
+          !** WORKAROUND FOR cce15-omp offload: for some reasons if you use here the batched
+          !                                     FFTS, it gives wrong charge
+          incr = 1
+#else
           incr = many_fft
+#endif
        ENDIF
        !
        ALLOCATE( psicd(dffts%nnr*incr) )
