@@ -69,6 +69,10 @@ else()
     option(QE_ENABLE_OPENMP
         "enable distributed execution support via OpenMP" OFF)
 endif()
+option(QE_ENABLE_ROCM
+    "enable ROCm acceleration on AMD GPUs" OFF)
+option(QE_ENABLE_ONEAPI
+    "enable OneAPI acceleration on Intel GPUs" OFF)
 cmake_dependent_option(QE_ENABLE_OFFLOAD
     "enable OpenMP offload"
     OFF "QE_ENABLE_OPENMP" OFF)
@@ -164,9 +168,6 @@ endif()
 # least in C, not sure about Fortran), change all feature
 # macros to avoid weird behaviors
 
-if(QE_ENABLE_CUDA)
-    qe_add_global_compile_definitions(__CUDA)
-endif()
 if(QE_ENABLE_TRACE)
     qe_add_global_compile_definitions(__TRACE)
 endif()
@@ -368,6 +369,74 @@ if(QE_ENABLE_CUDA OR QE_ENABLE_PROFILE_NVTX)
         find_package(CUDAToolkit REQUIRED)
     endif()
 endif(QE_ENABLE_CUDA OR QE_ENABLE_PROFILE_NVTX)
+
+###########################################################
+# ROCM
+###########################################################
+if(QE_ENABLE_ROCM)
+  if(NOT QE_ENABLE_OFFLOAD)
+    message(FATAL_ERROR "QE_ENABLE_ROCM=ON requires QE_ENABLE_OFFLOAD=ON")
+  endif()
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES AND DEFINED QE_GPU_ARCHS)
+    set(CMAKE_CUDA_ARCHITECTURES ${QE_GPU_ARCHS})
+  endif()
+  if(NOT DEFINED CMAKE_CXX_COMPILER_ID)
+    # workaround for https://github.com/ROCm/clr/issues/48
+    set(CMAKE_CXX_COMPILER_ID "none")
+  endif()
+  if(CMAKE_VERSION VERSION_LESS 3.21.0)
+    message(FATAL_ERROR "QE_ENABLE_ROCM=ON require CMake 3.21.0 or later")
+  endif()
+  enable_language(HIP)
+  set(CMAKE_HIP_LINKER_PREFERENCE_PROPAGATES 0)
+  if(DEFINED ROCM_ROOT)
+    message(STATUS "Using ROCM_ROOT: ${ROCM_ROOT}")
+    # explicit ROCM_ROOT takes precedence
+    list(PREPEND CMAKE_PREFIX_PATH ${ROCM_ROOT})
+  elseif(CMAKE_HIP_COMPILER_ROCM_ROOT)
+    list(PREPEND CMAKE_PREFIX_PATH ${CMAKE_HIP_COMPILER_ROCM_ROOT})
+  endif()
+
+  # use hip package to supply the hip runtime for CXX source code.
+  find_package(hip CONFIG)
+  if(NOT hip_FOUND)
+    message(
+      FATAL_ERROR
+        "The HIP runtime library cmake configure file hip-config.cmake cannot be found! "
+        "This happens when the ROCm installation cannot be found by CMake. "
+        "Rerun cmake with -DROCM_ROOT=<your ROCm installation root directory> added.")
+  endif()
+  find_package(hipfft CONFIG REQUIRED)
+  find_package(rocblas CONFIG REQUIRED)
+  qe_add_global_compile_definitions(__HIP)
+  qe_add_global_compile_definitions(__ROCBLAS)
+endif()
+
+###########################################################
+# OneAPI
+###########################################################
+if(QE_ENABLE_ONEAPI)
+  if(NOT QE_ENABLE_OFFLOAD)
+    message(FATAL_ERROR "QE_ENABLE_ONEAPI=ON requires QE_ENABLE_OFFLOAD=ON")
+  endif()
+  add_library(MKL::sycl INTERFACE IMPORTED)
+  find_path(MKL_OMP_OFFLOAD_INCLUDE mkl_omp_offload.f90
+    HINTS ${MKL_ROOT} $ENV{MKLROOT} $ENV{MKL_ROOT} $ENV{MKL_HOME}
+    PATH_SUFFIXES include
+    REQUIRED
+  )
+  target_include_directories(MKL::sycl INTERFACE "${MKL_OMP_OFFLOAD_INCLUDE}")
+
+  find_library(MKL_SYCL mkl_sycl
+    HINTS ${MKL_ROOT} $ENV{MKLROOT} $ENV{MKL_ROOT} $ENV{MKL_HOME}
+    PATH_SUFFIXES lib/intel64 lib
+    REQUIRED
+  )
+  target_link_libraries(MKL::sycl INTERFACE ${MKL_SYCL})
+  #qe_add_global_compile_definitions(__SYCL) # for SYCL kernels
+  qe_add_global_compile_definitions(__ONEMKL) # for OneAPI MKL OpenMP offload fortran interfaces
+  qe_add_global_compile_definitions(__NO_HIPKERN)
+endif()
 
 ###########################################################
 # MPI
@@ -766,3 +835,4 @@ add_custom_target(pwall
         neb
     COMMENT
         "same as \"make pw ph pp pwcond neb\"")
+
