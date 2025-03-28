@@ -470,12 +470,21 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !
   !$acc data copyin( rho_core, rhog_core, rho ) copyout( v )
   !$acc data copyin( rho%of_r, rho%of_g )
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:rho%of_r) map(to:rho_core) map(from:v)
+#endif
   !
   ALLOCATE( ex(dfftp%nnr), vx(dfftp%nnr,nspin) )
   ALLOCATE( ec(dfftp%nnr), vc(dfftp%nnr,nspin) )
   !$acc data create( ex, ec, vx, vc )
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:ex,ec,vx,vc)
+#endif
   !
   !$acc parallel loop
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do
+#endif
   DO ir = 1, dfftp_nnr
     rho%of_r(ir,1) = rho%of_r(ir,1) + rho_core(ir)
   ENDDO
@@ -486,6 +495,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
      CALL xc( dfftp_nnr, 1, 1, rho%of_r, ex, ec, vx, vc, gpu_args_=.TRUE. )
      !
      !$acc parallel loop reduction(+:etxc,vtxc,rhoneg1) present(rho)
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do reduction(+:etxc,vtxc,rhoneg1)
+#endif
      DO ir = 1, dfftp_nnr
         v(ir,1) = e2*( vx(ir,1) + vc(ir,1) )
         etxc = etxc + e2*( ex(ir) + ec(ir) )*rho%of_r(ir,1)
@@ -502,6 +514,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
      !
      !$acc parallel loop reduction(+:etxc,vtxc,rhoneg1,rhoneg2) &
      !$acc&              present(rho)
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do reduction(+:etxc,vtxc,rhoneg1,rhoneg2)
+#endif
      DO ir = 1, dfftp_nnr
         v(ir,1) = e2*( vx(ir,1) + vc(ir,1) )
         v(ir,2) = e2*( vx(ir,2) + vc(ir,2) )
@@ -522,6 +537,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
       CALL xc( dfftp_nnr, 4, 2, rho%of_r, ex, ec, vx, vc, gpu_args_=.TRUE. )
       !
       !$acc parallel loop reduction(+:etxc,vtxc,rhoneg1,rhoneg2) present(rho)
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do reduction(+:etxc,vtxc,rhoneg1,rhoneg2)
+#endif
       DO ir = 1, dfftp_nnr
          arho = ABS( rho%of_r(ir,1) )
          IF ( arho < vanishing_charge ) THEN
@@ -554,6 +572,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   ENDIF
   !
   !$acc end data
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   DEALLOCATE( ex, vx )
   DEALLOCATE( ec, vc )
   !
@@ -573,6 +594,9 @@ SUBROUTINE v_xc( rho, rho_core, rhog_core, etxc, vtxc, v )
   !
   ! ... add gradient corrections (if any)
   !
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   CALL gradcorr( rho%of_r, rho%of_g, rho_core, rhog_core, etxc, vtxc, v )
   !
   !$acc end data
