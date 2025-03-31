@@ -541,9 +541,15 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           IF (.not. use_gpu) THEN
              IF ( use_para_diag ) THEN
 !                ! make sure that all processors have the same wfc
+#if defined(__OPENMP_GPU)
+                CALL pregterg( h_psi, s_psi_omp, okvan, g_psi, &
+                            npw, npwx, nbnd, nbndx, evc, ethr, &
+                            et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#else
                 CALL pregterg( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#endif
              ELSE
 #if defined(__OPENMP_GPU)
                 CALL regterg (  h_psi, s_psi_omp, okvan, g_psi, &
@@ -838,9 +844,15 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           IF (.not. use_gpu ) THEN
              IF ( use_para_diag ) then
                 !
+#if defined(__OPENMP_GPU)
+                CALL pcegterg( h_psi, s_psi_omp, okvan, g_psi, &
+                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#else
                 CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#endif
                 !
              ELSE
                 !

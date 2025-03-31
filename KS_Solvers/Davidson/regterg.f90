@@ -262,7 +262,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
                     0.D0, hr(1,n_start), nvecx, .TRUE. )
   endif
   IF ( gstart == 2 ) THEN
-     CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, hpsi(1,n_start), npwx2, hr(1,n_start), nvecx, .TRUE. )
+     CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, hpsi(1,n_start), npwx2, hr(1,n_start),&
+                   nvecx, .TRUE. )
   ENDIF
 #if defined(__OPENMP_GPU)
   !$omp target update from(hr)
@@ -281,7 +282,8 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
                        0.D0, sr(1,n_start), nvecx, .TRUE. )
      endif
      IF ( gstart == 2 ) THEN
-        CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, spsi(1,n_start), npwx2, sr(1,n_start), nvecx, .TRUE. )
+        CALL MYDGER2( nbase, my_n, -1.D0, psi, npwx2, spsi(1,n_start), npwx2, &
+                      sr(1,n_start), nvecx, .TRUE. )
      ENDIF
      !
   ELSE
@@ -930,7 +932,7 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER, PARAMETER :: maxter = 20
     ! maximum number of iterations
   !
-  INTEGER :: kter, nbase, np, n, m, nb1
+  INTEGER :: kter, nbase, np, n, m, nb1, i, j
     ! counter on iterations
     ! dimension of the reduced basis
     ! counter on the reduced basis vectors
@@ -970,7 +972,7 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   EXTERNAL  h_psi_ptr, s_psi_ptr, g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
-    !     calculates H|psi>
+    !     calculates H|psi> 
     ! s_psi_ptr(npwx,npw,nvec,psi,spsi)
     !     calculates S|psi> (if needed)
     !     Vectors psi,hpsi,spsi are dimensioned (npwx,nvec)
@@ -980,6 +982,9 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   !
   !
   CALL start_clock( 'regterg' ) !; write(6,*) 'enter pregterg' ; FLUSH(6)
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:evc)
+#endif
   !
   CALL laxlib_getval( np_ortho = np_ortho, ortho_parent_comm = ortho_parent_comm, &
     do_distr_diag_inside_bgrp = do_distr_diag_inside_bgrp )
@@ -1000,10 +1005,17 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   IF( ierr /= 0 ) &
      CALL errore( 'pregterg ',' cannot allocate hpsi ', ABS(ierr) )
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:psi,hpsi)
+#endif
+  !
   IF ( uspp ) THEN
      ALLOCATE( spsi( npwx, nvecx ), STAT=ierr )
      IF( ierr /= 0 ) &
         CALL errore( 'pregterg ',' cannot allocate spsi ', ABS(ierr) )
+#if defined(__OPENMP_GPU)
+     !$omp target enter data map(alloc:spsi)
+#endif
   END IF
   !
   ! ... Initialize the matrix descriptor
@@ -1065,13 +1077,49 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   nbase  = nvec
   conv   = .FALSE.
   !
-  IF ( uspp ) spsi = ZERO
-  !
-  hpsi = ZERO
-  psi  = ZERO
-  psi(:,1:nvec) = evc(:,1:nvec)
+  IF ( uspp ) THEN
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do collapse(2)
+     DO j = 1, nvecx
+        DO i = 1, npwx
+            spsi(i,j) = ZERO
+        END DO
+     END DO
+#else
+     spsi = ZERO
+#endif
+  ENDIF
+   !
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do collapse(2)
+  DO j = 1, nvecx
+     DO i = 1, npwx
+        hpsi(i,j) = ZERO
+        psi(i,j) = ZERO
+     END DO
+  END DO
+  !$omp target teams distribute parallel do collapse(2)
+  DO j = 1, nvec
+     DO i = 1, npwx
+        psi(i,j) = evc(i,j)
+     END DO
+  END DO
+#else
+   hpsi = ZERO
+   psi  = ZERO
+   psi(:,1:nvec) = evc(:,1:nvec)
+#endif
   ! ... set Im[ psi(G=0) ] -  needed for numerical stability
-  IF ( gstart == 2 ) psi(1,1:nvec) = CMPLX( DBLE( psi(1,1:nvec) ), 0.D0 ,kind=DP)
+  IF ( gstart == 2 ) THEN
+#if defined(__OPENMP_GPU)
+    !$omp target teams distribute parallel do
+    DO j = 1, nvec
+          psi(1,j) = CMPLX( DBLE( psi(1,j) ), 0.D0 ,kind=DP)
+    END DO
+#else
+    psi(1,1:nvec) = CMPLX( DBLE( psi(1,1:nvec) ), 0.D0 ,kind=DP)
+#endif
+  ENDIF
   !
   ! ... hpsi contains h times the basis vectors
   !
@@ -1148,7 +1196,13 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      ! ... approximate inverse iteration
      !
+#if defined(__OPENMP_GPU)
+     !$omp target update from(psi)
+#endif
      CALL g_psi_ptr( npwx, npw, notcnv, 1, psi(1,nb1), ew(nb1) )
+#if defined(__OPENMP_GPU)
+     !$omp target update to(psi)
+#endif
      !
      ! ... "normalize" correction vectors psi(:,nb1:nbase+notcnv) in
      ! ... order to improve numerical stability of subspace diagonalization
@@ -1158,7 +1212,7 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      DO n = 1, notcnv
         !
-        ew(n) = 2.D0 * ddot( npw2, psi(1,nbase+n), 1, psi(1,nbase+n), 1 )
+        ew(n) = 2.D0 * ddot( npw2, psi(1,nbase+n), 1, psi(1,nbase+n), 1)
         !
         IF ( gstart == 2 ) ew(n) = ew(n) - psi(1,nbase+n) * psi(1,nbase+n)
         !
@@ -1166,13 +1220,22 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
      !
      CALL mp_sum( ew( 1:notcnv ), intra_bgrp_comm )
      !
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do collapse(2) map(to:ew)
+#endif
      DO n = 1, notcnv
-        !
-        psi(:,nbase+n) = psi(:,nbase+n) / SQRT( ew(n) )
-        ! ... set Im[ psi(G=0) ] -  needed for numerical stability
-        IF ( gstart == 2 ) psi(1,nbase+n) = CMPLX( DBLE(psi(1,nbase+n)), 0.D0 ,kind=DP)
-        !
+        DO i = 1, npwx
+           psi(i,nbase+n) = psi(i,nbase+n) / SQRT( ew(n) )
+        END DO
      END DO
+     IF ( gstart == 2 ) THEN
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
+        DO n = 1, notcnv
+           psi(1,nbase+n) = CMPLX( DBLE(psi(1,nbase+n)), 0.D0 ,kind=DP)
+        END DO
+     END IF
      !
      ! ... here compute the hpsi and spsi of the new functions
      !
@@ -1281,6 +1344,9 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         CALL start_clock( 'regterg:last' )
         !
         CALL refresh_evc()
+#if defined(__OPENMP_GPU)
+        !$omp target update from(evc)
+#endif
         !
         IF ( notcnv == 0 ) THEN
            !
@@ -1305,7 +1371,14 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
         !
         ! ... refresh psi, H*psi and S*psi
         !
-        psi(:,1:nvec) = evc(:,1:nvec)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
+        DO j = 1, nvec
+          DO i = 1, npwx
+            psi(i,j) = evc(i,j)
+          END DO
+        END DO
         !
         IF ( uspp ) THEN
            !
@@ -1361,11 +1434,22 @@ SUBROUTINE pregterg(h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   DEALLOCATE( conv )
   DEALLOCATE( ew )
   !
-  IF ( uspp ) DEALLOCATE( spsi )
+  IF ( uspp ) THEN
+#if defined(__OPENMP_GPU)
+          !$omp target exit data map(delete:spsi)
+#endif
+          DEALLOCATE( spsi )
+  ENDIF
   !
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   DEALLOCATE( hpsi )
   DEALLOCATE( psi )
   !
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   CALL stop_clock( 'regterg' )
   !call print_clock( 'regterg' )
   !call print_clock( 'regterg:init' )
@@ -1457,7 +1541,7 @@ CONTAINS
   !
   SUBROUTINE hpsi_dot_v()
      !
-     INTEGER :: ipc, ipr
+     INTEGER :: ipc, ipr, i, j
      INTEGER :: nr, nc, ir, ic, notcl, root, np
      REAL(DP), ALLOCATABLE :: vtmp( :, : )
      COMPLEX(DP), ALLOCATABLE :: ptmp( :, : )
@@ -1466,6 +1550,9 @@ CONTAINS
      ALLOCATE( vtmp( nx, nx ) )
      ALLOCATE( ptmp( npwx, nx ) )
 
+#if defined(__OPENMP_GPU)
+     !$omp target data map(alloc:vtmp,ptmp) map(to:ew)
+#endif
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         IF( notcnv_ip( ipc ) > 0 ) THEN
@@ -1474,7 +1561,7 @@ CONTAINS
            ic    = ic_notcnv( ipc )
 
            beta = 0.0d0
-
+           !
            DO ipr = 1, idesc(LAX_DESC_NPR)
               !
               nr = nrc_ip( ipr )
@@ -1487,37 +1574,45 @@ CONTAINS
               END IF
 
               CALL mp_bcast( vtmp(:,1:notcl), root, ortho_parent_comm )
+#if defined(__OPENMP_GPU)
+              !$omp target update to(vtmp)
+#endif
               !
               IF ( uspp ) THEN
                  !
-                 CALL DGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
-                    spsi( 1, ir ), npwx2, vtmp, nx, beta, psi(1,nb1+ic-1), npwx2 )
+                 CALL MYDGEMM2( 'N', 'N', npw2, notcl, nr, 1.D0, &
+                    spsi( 1, ir ), npwx2, vtmp, nx, beta, psi(1,nb1+ic-1), npwx2, .TRUE. )
                  !
               ELSE
                  !
-                 CALL DGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
-                    psi( 1, ir ), npwx2, vtmp, nx, beta, psi(1,nb1+ic-1), npwx2 )
+                 CALL MYDGEMM2( 'N', 'N', npw2, notcl, nr, 1.D0, &
+                    psi( 1, ir ), npwx2, vtmp, nx, beta, psi(1,nb1+ic-1), npwx2, .TRUE. )
                  !
               END IF
               !
-              CALL DGEMM( 'N', 'N', npw2, notcl, nr, 1.D0, &
-                      hpsi( 1, ir ), npwx2, vtmp, nx, beta, ptmp, npwx2 )
+              CALL MYDGEMM2( 'N', 'N', npw2, notcl, nr, 1.D0, &
+                      hpsi( 1, ir ), npwx2, vtmp, nx, beta, ptmp, npwx2, .TRUE. )
 
               beta = 1.0d0
 
            END DO
-
+           !
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do collapse(2)
+#endif
            DO np = 1, notcl
-              !
-              psi(1:npw,nbase+np+ic-1) = ptmp(1:npw,np) - ew(nbase+np+ic-1) * psi(1:npw,nbase+np+ic-1)
-              !
+              DO i = 1, npw
+                 psi(i,nbase+np+ic-1) = ptmp(i,np) - ew(nbase+np+ic-1) * psi(i,nbase+np+ic-1)
+              END DO
            END DO
            !
         END IF
         !
-     END DO
+     END DO 
 
-
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      DEALLOCATE( vtmp )
      DEALLOCATE( ptmp )
 
@@ -1534,6 +1629,9 @@ CONTAINS
 
      ALLOCATE( vtmp( nx, nx ) )
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(alloc:vtmp) map(to:vl) 
+#endif
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -1557,15 +1655,21 @@ CONTAINS
                  !  this proc sends his block
                  !
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          psi(1,ir), npwx2, vl, nx, beta, evc(1,ic), npwx2 )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to(vl)
+#endif
+                 CALL MYDGEMM2( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          psi(1,ir), npwx2, vl, nx, beta, evc(1,ic), npwx2, .TRUE. )
               ELSE
                  !
                  !  all other procs receive
                  !
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          psi(1,ir), npwx2, vtmp, nx, beta, evc(1,ic), npwx2 )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to(vtmp)
+#endif
+                 CALL MYDGEMM2( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          psi(1,ir), npwx2, vtmp, nx, beta, evc(1,ic), npwx2, .TRUE. )
               END IF
               !
 
@@ -1576,6 +1680,9 @@ CONTAINS
         END IF
         !
      END DO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
      DEALLOCATE( vtmp )
 
@@ -1592,6 +1699,9 @@ CONTAINS
 
      ALLOCATE( vtmp( nx, nx ) )
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(alloc:vtmp) map(to:vl) 
+#endif
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -1615,15 +1725,21 @@ CONTAINS
                  !  this proc sends his block
                  !
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          spsi(1,ir), npwx2, vl, nx, beta, psi(1,nvec+ic), npwx2 )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to(vl)
+#endif
+                 CALL MYDGEMM2( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          spsi(1,ir), npwx2, vl, nx, beta, psi(1,nvec+ic), npwx2, .TRUE. )
               ELSE
                  !
                  !  all other procs receive
                  !
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          spsi(1,ir), npwx2, vtmp, nx, beta, psi(1,nvec+ic), npwx2 )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to(vtmp)
+#endif
+                 CALL MYDGEMM2( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          spsi(1,ir), npwx2, vtmp, nx, beta, psi(1,nvec+ic), npwx2, .TRUE. )
               END IF
               !
               beta = 1_DP
@@ -1633,8 +1749,16 @@ CONTAINS
         END IF
         !
      END DO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
      !
-     spsi(:,1:nvec) = psi(:,nvec+1:nvec+nvec)
+     !$omp target teams distribute parallel do collapse(2)
+#endif
+     DO j = 1, nvec
+        DO i = 1, npwx
+           spsi(i,j) = psi(i,nvec+j)
+       END DO
+     END DO
      !
      DEALLOCATE( vtmp )
 
@@ -1652,6 +1776,9 @@ CONTAINS
 
      ALLOCATE( vtmp( nx, nx ) )
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(alloc:vtmp) map(to:vl) 
+#endif
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -1675,15 +1802,21 @@ CONTAINS
                  !  this proc sends his block
                  !
                  CALL mp_bcast( vl(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          hpsi(1,ir), npwx2, vl, nx, beta, psi(1,nvec+ic), npwx2 )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to(vl)
+#endif
+                 CALL MYDGEMM2( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          hpsi(1,ir), npwx2, vl, nx, beta, psi(1,nvec+ic), npwx2, .TRUE. )
               ELSE
                  !
                  !  all other procs receive
                  !
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL DGEMM( 'N', 'N', npw2, nc, nr, 1.D0, &
-                          hpsi(1,ir), npwx2, vtmp, nx, beta, psi(1,nvec+ic), npwx2 )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to(vtmp)
+#endif
+                 CALL MYDGEMM2( 'N', 'N', npw2, nc, nr, 1.D0, &
+                          hpsi(1,ir), npwx2, vtmp, nx, beta, psi(1,nvec+ic), npwx2, .TRUE. )
               END IF
               !
               beta = 1.0d0
@@ -1693,10 +1826,20 @@ CONTAINS
         END IF
         !
      END DO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
      DEALLOCATE( vtmp )
-
-     hpsi(:,1:nvec) = psi(:,nvec+1:nvec+nvec)
+     !
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do collapse(2)
+#endif
+     DO j = 1, nvec
+        DO i = 1, npwx
+           hpsi(i,j) = psi(i,nvec+j)
+        END DO
+     END DO
 
      RETURN
   END SUBROUTINE refresh_hpsi
@@ -1718,6 +1861,9 @@ CONTAINS
      !
      work = 0.0d0
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:work) 
+#endif
      DO ipc = 1, idesc(LAX_DESC_NPC) !  loop on column procs
         !
         nc = nrc_ip( ipc )
@@ -1734,19 +1880,23 @@ CONTAINS
 
            ! use blas subs. on the matrix block
 
-           CALL DGEMM( 'T', 'N', nr, nc, npw2, 2.D0 , &
-                       v(1,ir), npwx2, w(1,ic), npwx2, 0.D0, work, nx )
+           CALL MYDGEMM2( 'T', 'N', nr, nc, npw2, 2.D0 , &
+                       v(1,ir), npwx2, w(1,ic), npwx2, 0.D0, work, nx, .TRUE. )
 
            IF ( gstart == 2 ) &
-              CALL DGER( nr, nc, -1.D0, v(1,ir), npwx2, w(1,ic), npwx2, work, nx )
-
+              CALL MYDGER2( nr, nc, -1.D0, v(1,ir), npwx2, w(1,ic), npwx2, work, nx, .TRUE. )
            ! accumulate result on dm of root proc.
-
+#if defined(__OPENMP_GPU)
+           !$omp target update from(work)
+#endif
            CALL mp_root_sum( work, dm, root, ortho_parent_comm )
-
+           !
         END DO
         !
      END DO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) dm = dm/nbgrp
      !
      CALL laxlib_dsqmsym( nbase, dm, nx, idesc )
@@ -1769,6 +1919,9 @@ CONTAINS
      !
      vtmp = 0.0d0
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:vtmp)
+#endif
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
         nc = nrc_ip( ipc )
@@ -1792,11 +1945,14 @@ CONTAINS
               !
               root = rank_ip( ipr, ipc )
 
-              CALL DGEMM( 'T', 'N', nr, nc, npw2, 2.D0, v( 1, ir ), &
-                          npwx2, w(1,ii), npwx2, 0.D0, vtmp, nx )
+              CALL MYDGEMM2( 'T', 'N', nr, nc, npw2, 2.D0, v( 1, ir ), &
+                          npwx2, w(1,ii), npwx2, 0.D0, vtmp, nx, .TRUE. )
               !
               IF ( gstart == 2 ) &
-                 CALL DGER( nr, nc, -1.D0, v( 1, ir ), npwx2, w(1,ii), npwx2, vtmp, nx )
+                 CALL MYDGER2( nr, nc, -1.D0, v( 1, ir ), npwx2, w(1,ii), npwx2, vtmp, nx, .TRUE. )
+#if defined(__OPENMP_GPU)
+              !$omp target update from(vtmp)
+#endif
               IF (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) vtmp = vtmp/nbgrp
 
               IF(  (idesc(LAX_DESC_ACTIVE_NODE) > 0) .AND. &
@@ -1806,12 +1962,14 @@ CONTAINS
                  CALL mp_root_sum( vtmp(:,1:nc), dm, root, ortho_parent_comm )
               END IF
 
-
            END DO
            !
         END IF
         !
      END DO
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
      CALL laxlib_dsqmsym( nbase+notcnv, dm, nx, idesc )
      !
@@ -1852,4 +2010,4 @@ CONTAINS
   !
 END SUBROUTINE pregterg
 
-
+!

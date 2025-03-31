@@ -68,8 +68,13 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
      ELSE
         !write (*,*) 'inside para k'; FLUSH(6)
         !
+#if defined(__OPENMP_GPU)
+        CALL protate_wfc_k( h_psi, s_psi_omp, overlap, &
+                            npwx, npw, nstart, nbnd, npol, psi, evc, e )
+#else
         CALL protate_wfc_k( h_psi, s_psi, overlap, &
                             npwx, npw, nstart, nbnd, npol, psi, evc, e )
+#endif
         !
      ENDIF
      !
