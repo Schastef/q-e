@@ -13,6 +13,7 @@ PROGRAM scan_ibrav
   USE constants, ONLY : pi, ANGSTROM_AU
   !USE powell, ONLY : POWELL_MIN
   USE lmdif_module, ONLY : lmdif0
+  USE random_numbers,       ONLY : randy
   !
   IMPLICIT NONE
   CHARACTER(len=1024) :: line
@@ -20,10 +21,12 @@ PROGRAM scan_ibrav
   INTEGER,PARAMETER :: nfnc = 9
   INTEGER,PARAMETER :: nibrav = 20
   INTEGER,PARAMETER :: ibrav_list(nibrav) =  (/1,2,3,-3,4,5,-5,6,7,8,9,-9,91,10,11,12,-12,13,-13,14/)
-  INTEGER :: ibrav, ios, ii, i, info
-  REAL(DP) :: celldm(6), angle(3), alat, chisq, chisq_aux
+  INTEGER :: ibrav, ios, ii, i, info, jperm, itry
+  INTEGER,PARAMETER :: nperm = 6, ntry = 100
+  INTEGER:: perm(3,nperm) ! constant, defined below to workaround some compiler pickyness
+  REAL(DP) :: celldm(6), angle(3), alat, chisq, chisq_aux, chisq_min
   !
-  REAL(DP) :: at(3,3), at_new(3,3), omega, R(3,3), par(npar), par_aux(npar), celldiff(nfnc)
+  REAL(DP) :: at0(3,3), at(3,3), at_new(3,3), omega, R(3,3), par(npar), par_aux(npar), celldiff(nfnc), dummy
   REAL(DP),PARAMETER :: grad_to_rad = pi/180
 !  REAL(DP) :: xi(npar,npar)
   INTEGER :: lwa, iwa(npar)
@@ -31,7 +34,15 @@ PROGRAM scan_ibrav
   !
   LOGICAL,EXTERNAL :: matches
 
-  WRITE(*,*) "Enter the unit of measur (angstrom, bohr) or alat in bohr units, or alat in Angstrom units, followed by ' A'"
+  perm(:,1) = (/1,2,3/)
+  perm(:,2) = (/2,1,3/)
+  perm(:,3) = (/3,2,1/)
+  perm(:,4) = (/1,3,2/)
+  perm(:,5) = (/2,3,1/)
+  perm(:,6) = (/3,1,2/) 
+
+  WRITE(*,*) "Enter the unit of measure (angstrom, bohr)"&
+             //" or alat in bohr units, or alat in Angstrom units, followed by ' A'"
   READ(*,"(a1024)") line
   IF(matches("angstrom",line)) THEN
     alat=ANGSTROM_AU
@@ -54,61 +65,86 @@ PROGRAM scan_ibrav
   WRITE(*, '("at3", 6f14.6)') at(:,3)
 
   ALLOCATE(wa(lwa))
-      
+  at0 = at
+  
+  ibrav_loop : &
   DO ii = 1, nibrav
     ibrav = ibrav_list(ii)
-    !xi = 0._dp
-    !FORALL(i=1:npar) xi(i,i) = 1._dp
-!    par(1) = SQRT(SUM(at(:,1)**2))
-    CALL  at2celldm (ibrav,alat,at(:,1), at(:,2), at(:,3),par)
-!    par(1) = SQRT(SUM(at**2))/3
-!    par(2) = 1._dp
-!    par(3) = 1._dp
-!    par(4) = 0.1_dp
-!    par(5) = 0.1_dp
-!    par(6) = 0.1_dp
-    par(7) = 0._dp
-    par(8) = 0._dp
-    par(9) = 0._dp
     WRITE(*,'(2/,"Scanning ibrav ",i3)') ibrav
-    CALL lmdif0(optimize_this_s, nfnc, npar, par, celldiff, 1.d-8, info)
-    
-    IF(info>0 .and. info<5) THEN
-       !PRINT*, "Minimization succeeded"
-    ELSEIF(info>=5) THEN
-      WRITE(*,'(a)')  "Minimization stopped before convergence"
-    ELSEIF(info<=0) THEN 
-      WRITE(*,'(a,i6)') "Minimization error", info
-      !STOP
-    ENDIF
-    chisq = SUM(celldiff**2)
-      
-    IF(chisq<1.d-3) THEN
-      WRITE(*,'("Minimization succeeded  (chisq=",g7.1,")")') chisq
-      WRITE(*, '("  ibrav = ",i3)') ibrav
-      DO i = 1,6
-        par_aux = par
-        par_aux(i) = par_aux(i) * .5_dp
-        !chisq_aux = optimize_this(par_aux)
-        CALL optimize_this_s(nfnc, npar, par_aux, celldiff, info)
-        chisq_aux = SUM(celldiff**2)
-        IF(chisq_aux/=chisq)THEN 
-          WRITE(*, '("    celldm(",i2,") = ", f14.9)') i,par(i)
+    chisq_min = 1.d+100
+    !
+    try_loop : &
+    DO itry = 0,ntry-1
+      DO jperm = 1,nperm
+
+        !IF(jperm>1) THEN
+          at(:,1) = at0(:,perm(1,jperm))
+          at(:,2) = at0(:,perm(2,jperm))
+          at(:,3) = at0(:,perm(3,jperm))
+        !ENDIF
+        !
+        CALL  at2celldm (ibrav,alat,at(:,1), at(:,2), at(:,3),par)
+        par(7) = 0._dp
+        par(8) = 0._dp
+        par(9) = 0._dp
+        ! try again with increasingly random initial conditions
+        IF(itry>0)THEN
+          DO i = 1,npar
+            par(i) = par(i) + (5*itry*randy())/DBLE(ntry)
+            IF(i>=7) par(i) = par(i)*90
+          ENDDO
+          CALL check_bounds(par, dummy)    
         ENDIF
+        CALL lmdif0(optimize_this_s, nfnc, npar, par, celldiff, 1.d-8, info)
+        
+        IF(info>0 .and. info<5) THEN
+          !PRINT*, "Minimization succeeded"
+        ELSEIF(info>=5) THEN
+          !WRITE(*,'(a)')  "Minimization stopped before convergence"
+          WRITE(*,'(a)',advance='no')  "."
+        ELSEIF(info<=0) THEN 
+          !WRITE(*,'(a,i6)') "Minimization error", info
+          WRITE(*,'(a,i6)',advance='no') ":"
+          !STOP
+        ENDIF
+        chisq = SUM(celldiff**2)
+        !
+        chisq_min = MIN(chisq_min, chisq)
+        IF(chisq<1.d-3) THEN
+          WRITE(*,'("Minimization succeeded  (chisq=",g7.1,")")') chisq
+          WRITE(*, '("  ibrav = ",i3)') ibrav
+          DO i = 1,6
+            par_aux = par
+            par_aux(i) = par_aux(i) * .5_dp
+            !chisq_aux = optimize_this(par_aux)
+            CALL optimize_this_s(nfnc, npar, par_aux, celldiff, info)
+            chisq_aux = SUM(celldiff**2)
+            IF(chisq_aux/=chisq)THEN 
+              WRITE(*, '("    celldm(",i1,") = ", f14.9)') i,par(i)
+            ENDIF
+          ENDDO
+          IF(jperm>1) THEN
+            WRITE(*,'(a,3i2)') "WARNING! Order of axis has been permutated:", perm(:,jperm)
+            WRITE(*, '("at1", 6f14.6)') at(:,1)
+            WRITE(*, '("at2", 6f14.6)') at(:,2)
+            WRITE(*, '("at3", 6f14.6)') at(:,3)
+          ENDIF
+          IF(ANY(ABS(par(7:9))>1.d-12))THEN
+            WRITE(*,'(a,/,a)') "WARNING! Cell is rotated. Atomic positions will also need",&
+                              " to be rotated if they are not in crystal coords!"
+            WRITE(*, '("angles (around x,y,z)", 6f14.3)') par(7:9)
+          ENDIF
+          WRITE(*, '("at1", 6f14.6)') at_new(:,1)
+          WRITE(*, '("at2", 6f14.6)') at_new(:,2)
+          WRITE(*, '("at3", 6f14.6)') at_new(:,3)
+          WRITE(*,*)
+          CYCLE ibrav_loop
+        ENDIF
+        !
       ENDDO
-      IF(ANY(ABS(par(7:9))>1.d-12))THEN
-        WRITE(*,'(a,/,a)') "WARNING! Cell is rotated. Atomic positions will also need",&
-                           " to be rotated if they are not in crystal coords!"
-        WRITE(*, '("angles (around x,y,z)", 6f14.3)') par(7:9)
-      ENDIF
-      WRITE(*, '("at1", 6f14.6)') at_new(:,1)
-      WRITE(*, '("at2", 6f14.6)') at_new(:,2)
-      WRITE(*, '("at3", 6f14.6)') at_new(:,3)
-      WRITE(*,*)
-    ELSE
-      WRITE(*,'("The best cell with this ibrav is not good enough (chisq=",g7.1,")")') chisq
-    ENDIF
-  ENDDO
+    ENDDO try_loop
+    WRITE(*,'("The best cell with this ibrav was not good enough (chisq=",g7.1,")")') chisq_min
+  ENDDO ibrav_loop
 
 
  !
@@ -158,7 +194,7 @@ PROGRAM scan_ibrav
  SUBROUTINE check_bounds(pars_, penalty)
    IMPLICIT NONE
    REAL(DP),INTENT(inout) :: pars_(npar), penalty
-   REAL(DP),PARAMETER :: infty = 1.d+100, eps=1.d-6
+   REAL(DP),PARAMETER :: infty = 1.d+100, eps=1.d-12
    REAL(DP),PARAMETER :: par_min(npar) = (/ eps, eps, eps, -.5_dp+eps, -.5_dp+eps, -1._dp, -180._dp, -180._dp, -180._dp /)
    REAL(DP),PARAMETER :: par_max(npar) = (/ infty, infty, infty,  1._dp-eps,  1._dp-eps,  1._dp-eps,  180._dp,  180._dp,  180._dp /)
    INTEGER :: i

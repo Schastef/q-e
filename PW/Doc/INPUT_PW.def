@@ -1138,7 +1138,17 @@
                 }
             }
         }
-        
+
+        var k_density -type REAL { 
+            default { 0.25 1/bohr }
+            info {
+                Distance between k-points, used to choose automatically the size of the k-point mesh. 
+                It is only used if the value of nk1, nk2 or nk3 is set to 0 in K_POINTS 
+                (the shift does not matter, and each direction is considered independently).
+                The default value corresponds to a 4x4x4 grid in Silicon: for metals you need a smaller value.
+            }
+        }
+         
         var nspin -type INTEGER {
             default { 1 }
             info {

@@ -258,6 +258,7 @@ SUBROUTINE control_iosys()
                             tot_charge_        => tot_charge, &
                             tot_magnetization_ => tot_magnetization, &
                             degauss_cond_      => degauss_cond, &
+                            k_density_         => k_density, &
                             nelec_cond_        => nelec_cond
   USE ktetra,        ONLY : tetra_type
   !
@@ -372,8 +373,9 @@ SUBROUTINE control_iosys()
   USE input_parameters, ONLY : ntyp, nbnd,tot_charge,tot_magnetization,     &
                                ecutwfc, ecutrho, noinv, nosym, nosym_evc,   &
                                no_t_rev, use_all_frac, force_symmorphic,    &
-                               starting_charge, occupations, degauss,       &
-                               smearing, nspin, ecfixed, qcutz, q2sigma,    &
+                               starting_charge, starting_magnetization,     &
+                               occupations, degauss, smearing, k_density, nspin,       &
+                               ecfixed, qcutz, q2sigma,                     &
                                la2F, dmft, dmft_prefix,                     &
                                pol_type, sic_gamma, sic_energy, sci_vb, sci_cb, &
                                edir, emaxpos, eopreg, eamp, noncolin, lambda, &
@@ -764,6 +766,7 @@ SUBROUTINE control_iosys()
   smearing_ = smearing
   degauss_cond_ = degauss_cond
   nelec_cond_ = nelec_cond
+  k_density_ = k_density
   !
   IF( ltetra ) THEN
      IF( lforce ) CALL infomsg( 'iosys', &
@@ -1696,7 +1699,7 @@ SUBROUTINE iosys_end ( )
   !
   USE input_parameters,      ONLY : trism, lfcp, lgcscf
   USE input_parameters,      ONLY : k_points, xk, wk, nk1, nk2, nk3,  &
-                                    k1, k2, k3, nkstot
+                                    k1, k2, k3, k_density, nkstot
   USE input_parameters,      ONLY : ibrav, ecutwfc, ecutrho
   !
   USE control_flags,         ONLY : lconstrain, lxdm, llondon, ldftd3, &
@@ -1704,7 +1707,7 @@ SUBROUTINE iosys_end ( )
   USE cell_base,             ONLY : alat, at
   USE ions_base,             ONLY : nat, ityp, tau
   USE constraints_module,    ONLY : init_constraint
-  USE start_k,               ONLY : init_start_k
+  USE start_k,               ONLY : init_start_k, compute_dens_k
   USE extfield,              ONLY : tefield, forcefield, gate, forcegate
   USE fcp_module,            ONLY : fcp_iosys
   USE gcscf_module,          ONLY : gcscf_iosys
@@ -1718,6 +1721,7 @@ SUBROUTINE iosys_end ( )
   !
   ! ... set up k-points (may require reciprocal lattice vectors bg)
   !
+  IF(ANY((/nk1,nk2,nk3/)==0)) CALL compute_dens_k(nk1, nk2, nk3, k_density)
   CALL init_start_k ( nk1, nk2, nk3, k1, k2, k3, k_points, nkstot, xk, wk )
   !
   ! ... set cell mass for variable-cell MD if not set in input (requires amass)

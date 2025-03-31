@@ -379,6 +379,9 @@ MODULE input_parameters
         REAL(DP) :: degauss = 0.0_DP
         !! parameter for the smearing functions - NOT used in CP
 
+        REAL(DP) :: k_density = 0.25_DP
+        !! Distance between k-points in 1/bohr. Used to automatically chose k1, k2 or k3 if set to zero in K_POINTS.
+
         INTEGER :: nspin = 1
         !! number of spinors:  
         !! \(\text{nspin}=1\) for LDA simulations;  
@@ -684,7 +687,7 @@ MODULE input_parameters
              Hubbard_alpha, Hubbard_alpha_back, Hubbard_beta, Hubbard_occ,    &
              hub_pot_fix, reserv, reserv_back, dmft, dmft_prefix,             &
              edir, emaxpos, eopreg, eamp, smearing, starting_ns_eigenvalue,   &
-             input_dft, la2F, assume_isolated,                                &
+             input_dft, la2F, assume_isolated, k_density,                     &
              nqx1, nqx2, nqx3, ecutfock, localization_thr, scdm, ace,         &
              scdmden, scdmgrd, nscdm, n_proj,                                 &
              exxdiv_treatment, x_gamma_extrapolation, yukawa, ecutvcut,       &

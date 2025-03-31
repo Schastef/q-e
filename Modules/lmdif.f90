@@ -94,7 +94,7 @@ MODULE lmdif_module
       factor = 1.d0     ! initial step factor
       epsdiff = 0d0     ! precision of fcn (used fo finite difference differentiation)
       nprint = 0
-      maxfev = huge(1)  ! take as many iterations as needed
+      maxfev = 5000*(n+1)  ! take as many iterations as needed
 
       CALL lmdif(fcn,m,n,x,fvec,tol,tol,0d0,maxfev,epsdiff, &
                  diag,mode,factor,0,info,nfev,fjac,  &

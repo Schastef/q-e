@@ -46,6 +46,8 @@ MODULE klist
   REAL(DP) :: tot_charge
   !! total charge
   REAL(DP) :: qnorm= 0.0_dp
+  !! Distance between k-points in 1/bohr to automatically choose k1, k2 or k3, if set to zero in K_POINTS
+  REAL(DP) :: k_density
   !! |q|, used in EXX+US and phonon+US calculations only
   INTEGER, ALLOCATABLE :: igk_k(:,:)
   !! index of G corresponding to a given index of k+G
