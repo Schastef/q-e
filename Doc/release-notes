@@ -1,3 +1,11 @@
+Fixed in development version:
+  * Symmetrization glitches on many processors (reported by Yunqi Shao)
+  * Crash for noncolinear PAW case on many processors (reported by I. Timrov)
+  * The HP code for the magnetic noncollinear case had a bug
+    when symmetry was used (some symmetry arrays were not re-initialized
+    when perturbing Hubbard atoms) and the magnetization direction flip was 
+    missing in the Hubbard term (for the second Sternheimer equation) (fixed by L. Binci)
+
 New in development version:
   * Interface between Wannier90 and DFT+U to use Wannier functions as
     Hubbard projectors (I. Timrov, A. Carta, C. Ederer et al., arXiv:2411.03937)
@@ -24,6 +32,9 @@ Incompatible changes in 7.4 version:
     modified and made uniform with all other constraints - courtesy Tae Yun Kim
 
 New in 7.4 version:
+  * Added to PW/tools MINpuT: an auxiliary DFT input generation script for
+    performing mismatched interface theory (MINT). See E. Gerber et al.,
+    Phys. Rev. Lett. 124, 106804 (2020)
   * Linear response phonon calculations with a two-chemical potential approach
     by G. Marini, M. Calandra [Phys. Rev. B 104, 144103(2021)].
   * Enabling detection of symmetries by comparison of species labels for example 
