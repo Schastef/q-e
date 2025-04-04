@@ -228,6 +228,7 @@ SUBROUTINE orthogonalize(dvpsi, evq, ikk, ikq, dpsi, npwq, dpsi_computed)
   IF (.NOT.dpsi_computed) THEN
      !
      IF (okvan) then
+        !$omp target data map(to:evq)
         if (use_bgrp_in_hpsi .AND. .NOT. exx_is_active() .AND. nbnd_eff > 1) then
            call divide(inter_bgrp_comm,nbnd_eff, n_start, n_end)
            if ( n_end >= n_start) then
@@ -236,9 +237,16 @@ SUBROUTINE orthogonalize(dvpsi, evq, ikk, ikq, dpsi, npwq, dpsi_computed)
         else
            CALL calbec ( offload_type, npwq, vkb, evq, becp, nbnd_eff )
         end if
+        !$omp end target data
      end if
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:evq) map(from:dpsi)
+     CALL s_psi_omp (npwx, npwq, nbnd_eff, evq, dpsi)
+     !$omp end target data 
+#else
      CALL s_psi_acc (npwx, npwq, nbnd_eff, evq, dpsi)
+#endif
      !
   ENDIF
   !

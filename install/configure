@@ -781,6 +781,7 @@ enable_omp_mpi_gpu
 with_rocm
 with_gpu_arch
 with_omp_many_fft
+enable_roctx
 with_libxc
 with_libxc_prefix
 with_libxc_include
@@ -1433,6 +1434,7 @@ Optional Features:
   --enable-nvtx           Enable compilation for NVTX [default=no]
  --enable-omp_gpu    Enables GPU offlaoding using OpenMP
  --enable-omp_mpi_gpu  Enables GPU aware MPI with OMP offloading, default in disabled
+  --enable-roctx          Enable compilation for ROCTX [default=no]
  --enable-legacy_plugins    Enables use of legacy plugins in PW and CP.
   --enable-signals        enable signal trapping (default: no)
   --enable-exit-status    enable Unix status on exit (default: no)
@@ -4304,6 +4306,14 @@ else
 fi
 
 
+# Check whether --enable-roctx was given.
+if test "${enable_roctx+set}" = set; then :
+  enableval=$enable_roctx; enable_roctx=$enableval
+else
+  enable_roctx="no"
+fi
+
+
 echo checking for OMPGPU with  "$arch"  "$f90"  "x$rocm" and "x$omp_many_fft" and "x$ompgpu"
 if test "x$arch"=="xcraype" && test "x$f90"=="xftn" && test "x$rocm" != "xno" && test "x$ompgpu" == "xyes"
 then
@@ -4331,8 +4341,11 @@ then
    fi
    rocm_ldflags="-lstdc++ -L$rocm/hip/lib -lamdhip64 -lhsa-runtime64"
    rocm_ldflags="$rocm_ldflags -L$rocm/lib -lhipfft -lrocblas"
+   if test "$enable_roctx" == "yes"; then
+      try_dflags="$try_dflags -D__PROFILE_ROCTX"
+      rocm_ldflags="$rocm_ldflags -lroctx64 -lroctracer64 -lrocprofiler64v2"
+   fi
    rocm_ldflags="$rocm_ldflags \$(MOD_FLAG) $rocm/include/rocblas"
-
    # -----------------------------------------
    # Fortran flags
    # -----------------------------------------
@@ -8911,6 +8924,7 @@ which seems to be undefined.  Please make sure it is defined" >&2;}
   esac \
   || as_fn_error $? "could not create $ac_file" "$LINENO" 5
  ;;
+
 
 
   esac

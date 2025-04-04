@@ -106,8 +106,11 @@ CONTAINS
    ENDDO
    !
 #if defined(__OPENMP_GPU)
-   !$omp target update to(dfft%nl, dfft%nlm)
-#endif 
+   !$omp target update to(dfft%nl)
+   IF ( dfft%lgamma ) THEN
+           !$omp target update to(dfft%nlm)
+   ENDIF
+#endif
    !
 #if defined(__CUDA)
    IF( ALLOCATED( dfft%nl_d ) ) DEALLOCATE( dfft%nl_d )
