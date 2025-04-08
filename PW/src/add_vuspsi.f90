@@ -107,10 +107,17 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
                 ! Next operation computes ps(l',i) = \sum_m deeq(l,m) becp(m',i)
                 ! (l'=l+ijkb0, m'=m+ijkb0, indices run from 1 to nh(nt))
                 !
+#if defined(__OPENMP_GPU)
                 CALL MYDGEMM2('N', 'N', nh(nt), m, nh(nt), 1.0_dp, &
                               deeq(1,1,na,current_spin), nhm, &
                               becp%r(ofsbeta(na)+1,1), nkb, 0.0_dp, &
                               ps(ofsbeta(na)+1,1), nkb, .TRUE. )
+#else
+                CALL DGEMM('N', 'N', nh(nt), m, nh(nt), 1.0_dp, &
+                            deeq(1,1,na,current_spin), nhm, &
+                            becp%r(ofsbeta(na)+1,1), nkb, 0.0_dp, &
+                            ps(ofsbeta(na)+1,1), nkb )
+#endif
                 !
              ENDIF
              !
@@ -121,11 +128,13 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
        ! Normal case: hpsi(n,i) = \sum_l beta(n,l) ps(l,i) 
        ! (l runs from 1 to nkb)
        !
+#if defined(__OPENMP_GPU)
        CALL MYDGEMM2( 'N', 'N', ( 2 * n ), m, nkb, 1.D0, vkb, &
                     ( 2 * lda ), ps, nkb, 1.D0, hpsi, ( 2 * lda ), .TRUE. )
-       !
-#if defined(__OPENMP_GPU)
        !$omp end target data
+#else
+       CALL DGEMM( 'N', 'N', ( 2 * n ), m, nkb, 1.D0, vkb, &
+                  ( 2 * lda ), ps, nkb, 1.D0, hpsi, ( 2 * lda ) )
 #endif
        DEALLOCATE( ps )
        !
@@ -177,9 +186,15 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
                    ENDDO
                 ENDDO
                 !
+#if defined(__OPENMP_GPU)
                 CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
                               deeaux, nh(nt), becp%k(ofsbeta(na)+1,1), nkb, &
                               (0.0_dp, 0.0_dp), ps(ofsbeta(na)+1,1), nkb, .TRUE. )
+#else
+                CALL ZGEMM('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
+                           deeaux, nh(nt), becp%k(ofsbeta(na)+1,1), nkb, &
+                           (0.0_dp, 0.0_dp), ps(ofsbeta(na)+1,1), nkb )
+#endif
                 !
              ENDIF
              !
@@ -191,11 +206,13 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
           !
        ENDDO
        !
+#if defined(__OPENMP_GPU)
        CALL MYZGEMM2( 'N', 'N', n, m, nkb, ( 1.D0, 0.D0 ) , vkb, &
                       lda, ps, nkb, ( 1.D0, 0.D0 ) , hpsi, lda, .TRUE. )
-       !
-#if defined(__OPENMP_GPU)
        !$omp end target data
+#else
+       CALL ZGEMM( 'N', 'N', n, m, nkb, ( 1.D0, 0.D0 ) , vkb, &
+                   lda, ps, nkb, ( 1.D0, 0.D0 ) , hpsi, lda )
 #endif
        DEALLOCATE( ps )
        !
@@ -222,6 +239,7 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
 #if defined(__OPENMP_GPU)
        !$omp target data map(alloc:ps) map(to:becp%nc,deeq_nc)
        !$omp target teams distribute parallel do collapse(3)
+#endif
        DO k = 1, m
          DO j = 1, npol
            DO i = 1, nkb
@@ -229,7 +247,6 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
            END DO
          END DO
        END DO
-#endif
        !
        DO nt = 1, ntyp
           !
@@ -238,6 +255,7 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
              !
              IF ( ityp(na) == nt ) THEN
                 !
+#if defined(__OPENMP_GPU)
                 CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
                            deeq_nc(1,1,na,1), nhm, becp%nc(ofsbeta(na)+1,1,1), 2*nkb, &
                           (0.0_dp, 0.0_dp), ps(ofsbeta(na)+1,1,1), 2*nkb, .true. )
@@ -255,17 +273,36 @@ SUBROUTINE add_vuspsi( lda, n, m, hpsi )
                 CALL MYZGEMM2('N','N', nh(nt), m, nh(nt), (1.0_dp,0.0_dp), &
                            deeq_nc(1,1,na,4), nhm, becp%nc(ofsbeta(na)+1,2,1), 2*nkb, &
                           (1.0_dp, 0.0_dp), ps(ofsbeta(na)+1,2,1), 2*nkb, .true. )
+#else
+                DO ibnd = 1, m
+                   DO jh = 1, nh(nt)
+                      jkb = ofsbeta(na) + jh
+                      DO ih = 1, nh(nt)
+                         ikb = ofsbeta(na) + ih
+                         !
+                         ps(ikb,1,ibnd) = ps(ikb,1,ibnd) +    & 
+                              deeq_nc(ih,jh,na,1)*becp%nc(jkb,1,ibnd)+ & 
+                              deeq_nc(ih,jh,na,2)*becp%nc(jkb,2,ibnd) 
+                         ps(ikb,2,ibnd) = ps(ikb,2,ibnd)  +   & 
+                              deeq_nc(ih,jh,na,3)*becp%nc(jkb,1,ibnd)+&
+                              deeq_nc(ih,jh,na,4)*becp%nc(jkb,2,ibnd) 
+                      ENDDO
+                   ENDDO
+                ENDDO
+#endif
              ENDIF
              !
           ENDDO
           !
        ENDDO
        !
+#if defined(__OPENMP_GPU)
        CALL MYZGEMM2('N', 'N', n, m*npol, nkb, ( 1.D0, 0.D0 ) , vkb, &
                      lda, ps, nkb, ( 1.D0, 0.D0 ) , hpsi, lda, .true. )
-       !
-#if defined(__OPENMP_GPU)
        !$omp end target data
+#else
+       CALL ZGEMM('N', 'N', n, m*npol, nkb, ( 1.D0, 0.D0 ) , vkb, &
+                  lda, ps, nkb, ( 1.D0, 0.D0 ) , hpsi, lda )
 #endif
        DEALLOCATE( ps )
        !
