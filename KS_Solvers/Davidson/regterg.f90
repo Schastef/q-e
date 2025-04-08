@@ -97,7 +97,7 @@ SUBROUTINE regterg(  h_psi_ptr, s_psi_ptr, uspp, g_psi_ptr, &
   INTEGER :: i,j,k
   !
   REAL(DP), EXTERNAL :: MYDDOT_VECTOR_GPU2
-  !$acc routine(MYDDOT_VECTOR_GPU) vector
+  !$acc routine(MYDDOT_VECTOR_GPU2) vector
   !
   EXTERNAL  h_psi_ptr, s_psi_ptr, g_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)

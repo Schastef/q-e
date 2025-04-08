@@ -275,12 +275,15 @@ MODULE control_flags
 #if defined(__CUDA)
   TYPE(offload_kind_acc), PUBLIC :: offload_type ! flag to point the actual currently used offload type 
   TYPE(offload_kind_acc), PUBLIC :: offload_type2
+  TYPE(offload_kind_cpu), PUBLIC :: offload_type3
 #elif defined(__OPENMP_GPU)
   TYPE(offload_kind_cpu), PUBLIC :: offload_type
   TYPE(offload_kind_omp), PUBLIC :: offload_type2
+  TYPE(offload_kind_omp), PUBLIC :: offload_type3
 #else
   TYPE(offload_kind_cpu), PUBLIC :: offload_type
   TYPE(offload_kind_cpu), PUBLIC :: offload_type2
+  TYPE(offload_kind_cpu), PUBLIC :: offload_type3
 #endif
   !
   INTEGER, PUBLIC :: &
