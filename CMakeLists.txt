@@ -168,6 +168,9 @@ endif()
 # least in C, not sure about Fortran), change all feature
 # macros to avoid weird behaviors
 
+if(QE_ENABLE_CUDA)
+    qe_add_global_compile_definitions(__CUDA)
+endif()
 if(QE_ENABLE_TRACE)
     qe_add_global_compile_definitions(__TRACE)
 endif()
