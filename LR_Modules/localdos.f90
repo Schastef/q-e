@@ -116,7 +116,9 @@ subroutine localdos (ldos, ldoss, becsum1, dos_ef)
      call init_us_2 (npw, igk_k(1,ikks(ik)), xk (1, ikks(ik)), vkb, .true.)
      !
      !$acc data present(vkb, becp)
+     !$omp target data map(to:evc)
      call calbec ( offload_type, npw, vkb, evc, becp)
+     !$omp end target data
      !$acc end data
      !
      do ibnd = 1, nbnd_occ (ikks(ik))

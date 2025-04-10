@@ -44,7 +44,7 @@ SUBROUTINE run_pwscf( exit_status )
   USE cell_base,            ONLY : fix_volume, fix_area
   USE control_flags,        ONLY : conv_elec, gamma_only, ethr, lscf, treinit_gvecs
   USE control_flags,        ONLY : conv_ions, istep, nstep, restart, lmd, lbfgs,&
-                                   lensemb, lforce=>tprnfor, tstress
+                                   many_fft, lensemb, lforce=>tprnfor, tstress
   USE cellmd,               ONLY : lmovecell
   USE command_line_options, ONLY : command_line
   USE force_mod,            ONLY : sigma, force
@@ -74,6 +74,9 @@ SUBROUTINE run_pwscf( exit_status )
   USE plugin_flags,      ONLY : use_oscdft
   USE oscdft_base,       ONLY : oscdft_ctx
   USE oscdft_functions,  ONLY : oscdft_run_pwscf
+#endif
+#if defined(__ROCBLAS)
+  USE rocblas,           ONLY : rocblas_init, rocblas_destroy, rocblas_a2a_init, rocblas_a2a_destroy
 #endif
   !
   IMPLICIT NONE
@@ -135,6 +138,12 @@ SUBROUTINE run_pwscf( exit_status )
   IF (use_environ) THEN
      IF (is_ms_gcs()) CALL init_ms_gcs()
   END IF
+#endif
+#if defined(__ROCBLAS)
+  CALL rocblas_init()
+#if defined(__OMP_MANY_FFT)
+  IF (many_fft>1) CALL rocblas_a2a_init()
+#endif
 #endif
   !
   CALL check_stop_init()
@@ -354,6 +363,13 @@ SUBROUTINE run_pwscf( exit_status )
   CALL punch( 'all' )
   !
   CALL qmmm_shutdown()
+  !
+#if defined(__ROCBLAS)
+  CALL rocblas_destroy()
+#if defined(__OMP_MANY_FFT)
+  IF(many_fft>1) CALL rocblas_a2a_destroy()
+#endif
+#endif
   !
   RETURN
   !

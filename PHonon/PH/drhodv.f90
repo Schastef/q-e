@@ -133,7 +133,9 @@ subroutine drhodv (nu_i0, nper, drhos)
            call calbec( offload_type, npwq, vkb, dpsi, bectmp )
            call becupdate( offload_type, dbecq, mu, nper, bectmp )
 #else
+           !$omp target data map(to:dpsi)
            call calbec( offload_type, npwq, vkb, dpsi, dbecq(mu) )
+           !$omp end target data
 #endif
            do ipol = 1, 3
 #if defined(__CUDA)
@@ -166,7 +168,9 @@ subroutine drhodv (nu_i0, nper, drhos)
               call calbec( offload_type, npwq, vkb, aux, bectmp )
               call becupdate( offload_type, dalpq, ipol, 3, mu, nper, bectmp )
 #else
+              !$omp target data map(to:aux)
               call calbec( offload_type, npwq, vkb, aux, dalpq(ipol,mu) )
+              !$omp end target data
 #endif
            enddo
 

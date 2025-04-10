@@ -380,6 +380,19 @@ SUBROUTINE print_cuda_info(check_use_gpu)
      WRITE(stdout,"(5X,'   Peak Memory Bandwidth (GB/s): ', f6.2)") &
        2.0*prop%memoryClockRate*(prop%memoryBusWidth/8)/10.0**6
   END IF
+#elif defined(__OPENMP_GPU)
+  !
+#if defined(__OMP_MANY_FFT)
+  WRITE( stdout, '(5x, "Batched FFTs enabled")')
+#else
+  WRITE( stdout, '(5x, "Batched FFTs disabled")')
+#endif
+  !
+#if defined(__GPU_MPI_OMP)
+  WRITE( stdout, '(5x, "GPU-aware MPI enabled")')
+#else
+  WRITE( stdout, '(5x, "GPU-aware MPI disabled")')
+#endif
   !
 #endif
   !

@@ -191,7 +191,7 @@ SUBROUTINE ccgdiagg( hs_1psi_ptr, s_1psi_ptr, precondition, &
      ! ... NB:  ddot(2*npw,a,1,b,1) = REAL( zdotc(npw,a,1,b,1) )
      !
      !$acc host_data use_device(psi, hpsi)
-     e(m) = MYDDOT( kdim2, psi(1,m), 1, hpsi, 1 )
+     e(m) = MYDDOT( kdim2, psi(1,m), 1, hpsi(:), 1 )
      !$acc end host_data
      !
      CALL mp_sum( e(m), intra_bgrp_comm )

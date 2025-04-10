@@ -49,6 +49,9 @@ SUBROUTINE do_phonon(auxdyn)
   USE control_flags,  ONLY : use_gpu
   USE environment,   ONLY : print_cuda_info
   USE control_lr,     ONLY : lmultipole
+#if defined(__OPENMP_GPU)
+  USE gvect,         ONLY : g
+#endif
   
   IMPLICIT NONE
   !
@@ -86,6 +89,10 @@ SUBROUTINE do_phonon(auxdyn)
      ELSE 
         CALL print_cuda_info(check_use_gpu=.true.) 
      ENDIF
+     !Should not be placed lower level
+#if defined(__OPENMP_GPU)
+     !$omp target update to(g)
+#endif
      !
      !  If only_wfc=.TRUE. the code computes only the wavefunctions
      !

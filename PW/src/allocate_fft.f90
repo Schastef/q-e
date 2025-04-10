@@ -67,6 +67,9 @@ SUBROUTINE allocate_fft
   ALLOCATE( psic(dfftp%nnr) )
   ALLOCATE( vrs(dfftp%nnr,nspin) )
   !$acc enter data create (vrs)
+#if defined(__OPENMP_GPU)
+  !$omp target enter data map(alloc:vrs)
+#endif
   !
   IF (noncolin) ALLOCATE( psic_nc(dfftp%nnr,npol) )
   !

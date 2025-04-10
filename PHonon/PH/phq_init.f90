@@ -182,7 +182,9 @@ SUBROUTINE phq_init()
            Call calbec ( offload_type, npw, vkb, tevc, bectmp )
            Call becupdate( offload_type, becpt, ik, nksq, bectmp )
 #else
+           !$omp target data map(to:tevc)
            Call calbec ( offload_type, npw, vkb, tevc, becpt(ik) )
+           !$omp end target data
 #endif
         ENDIF
      endif
@@ -195,7 +197,9 @@ SUBROUTINE phq_init()
      Call calbec( offload_type, npw, vkb, evc, bectmp )
      Call becupdate( offload_type, becp1, ik, nksq, bectmp ) 
 #else
+     !$omp target data map(to:evc)
      Call calbec( offload_type, npw, vkb, evc, becp1(ik) )
+     !$omp end target data
 #endif
      !
      ! ... e') we compute the derivative of the becp term with respect to an
@@ -234,7 +238,9 @@ SUBROUTINE phq_init()
         Call calbec ( offload_type, npw, vkb, aux1, bectmp )
         Call becupdate( offload_type, alphap, ipol, 3, ik, nksq, bectmp )
 #else
+        !$omp target data map(to:aux1)
         Call calbec ( offload_type, npw, vkb, aux1, alphap(ipol,ik) )
+        !$omp end target data
 #endif
      END DO
      !
@@ -272,7 +278,9 @@ SUBROUTINE phq_init()
            Call calbec( offload_type, npw, vkb, aux1, bectmp )
            Call becupdate( offload_type, alphapt, ipol, 3, ik, nksq, bectmp )
 #else
+           !$omp target data map(to:aux1)
            Call calbec( offload_type, npw, vkb, aux1, alphapt(ipol,ik) )
+           !$omp end target data
 #endif
          END DO
       ENDIF

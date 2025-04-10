@@ -40,12 +40,15 @@ PROGRAM phonon
   !! [9] External Electric field  
   !! [10] nonperiodic boundary conditions.
   !
-  USE control_flags,   ONLY : use_para_diag
+  USE control_flags,   ONLY : use_para_diag, many_fft
   USE control_ph,      ONLY : bands_computed, qplot
   USE check_stop,      ONLY : check_stop_init
   USE ph_restart,      ONLY : ph_writefile
   USE environment,     ONLY : environment_start
   USE mp_global,       ONLY : mp_startup
+#if defined(__ROCBLAS)
+  USE rocblas
+#endif
   ! YAMBO >
   USE YAMBO,           ONLY : elph_yambo,dvscf_yambo
   ! YAMBO <
@@ -66,6 +69,10 @@ PROGRAM phonon
   !
   CALL phq_readin()
   !
+#if defined(__ROCBLAS)
+  CALL rocblas_init()
+  IF (many_fft>1) CALL rocblas_a2a_init()
+#endif
   CALL check_stop_init()
   !
   ! ... Checking the status of the calculation and if necessary initialize
@@ -93,6 +100,10 @@ PROGRAM phonon
   ENDIF
   ! YAMBO <
   !
+#if defined(__ROCBLAS)
+  CALL rocblas_destroy()
+  IF (many_fft>1) CALL rocblas_a2a_destroy()
+#endif
   IF ( use_para_diag ) CALL laxlib_end()
   CALL stop_smoothly_ph( .TRUE. )
   !
