@@ -79,10 +79,19 @@ SUBROUTINE addusdens_g(rho)
   !
   ALLOCATE( aux(ngm,nspin_mag) )
   !$acc data create(aux)
+#if defined(__OPENMP_GPU)
+  !$omp target data map(from:aux)
+#endif
   !
-  !$acc kernels
-  aux = (0.d0,0.d0)
-  !$acc end kernels
+  !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do collapse(2)
+#endif
+  DO is= 1, nspin_mag
+    DO ig = 1, ngm
+      aux(ig,is) = (0.d0,0.d0)
+    ENDDO
+  ENDDO
   !
   ! ... With k-point/bgrp parallelization, distribute G-vectors across all processors
   ! ... ngm_s = index of first G-vector for this processor (in the k-point x bgrp pool)
@@ -103,9 +112,17 @@ SUBROUTINE addusdens_g(rho)
   ALLOCATE( ylmk0(ngm_l,lmaxq*lmaxq) )
   !$acc data create(qmod,qgm,ylmk0)
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:g,gg,eigts1,eigts2,eigts3,mill) map(alloc:ylmk0,qgm,qmod)
+  CALL ylmr2_omp( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
+#else
   CALL ylmr2( lmaxq*lmaxq, ngm_l, g(1,ngm_s), gg(ngm_s), ylmk0 )
+#endif
   !
   !$acc parallel loop
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do
+#endif
   DO ig = 1, ngm_l
      qmod(ig) = SQRT(gg(ngm_s+ig-1))*tpiba
   ENDDO
@@ -128,7 +145,9 @@ SUBROUTINE addusdens_g(rho)
         !
         ALLOCATE( skk(ngm_l,nab), tbecsum(nij,nab,nspin_mag), aux2(ngm_l,nij) )
         !$acc data create(skk,tbecsum,aux2)
-        !
+#if defined(__OPENMP_GPU)
+        !$omp target data map(alloc:skk,tbecsum,aux2)
+#endif
         CALL start_clock_gpu( 'addusd:skk' )
         nb = 0
         DO na = 1, nat
@@ -137,6 +156,9 @@ SUBROUTINE addusdens_g(rho)
               !tbecsum(:,nb,:) = becsum(1:nij,na,1:nspin_mag)
               !
               !$acc parallel loop collapse(2) present(becsum)
+#if defined(__OPENMP_GPU)
+              !$omp target teams distribute parallel do collapse(2)
+#endif
               DO im = 1, nspin_mag
                  DO ij = 1, nij
                    tbecsum(ij,nb,im) = becsum(ij,na,im)
@@ -144,6 +166,9 @@ SUBROUTINE addusdens_g(rho)
               ENDDO
               !
               !$acc parallel loop present(eigts1,eigts2,eigts3,mill)
+#if defined(__OPENMP_GPU)
+              !$omp target teams distribute parallel do
+#endif
               DO ig = 1, ngm_l
                  skk(ig,nb) = eigts1(mill(1,ngm_s+ig-1),na) * &
                               eigts2(mill(2,ngm_s+ig-1),na) * &
@@ -157,8 +182,8 @@ SUBROUTINE addusdens_g(rho)
            ! ... sum over atoms
            !
            !$acc host_data use_device(skk,tbecsum,aux2)
-           CALL MYDGEMM( 'N', 'T', 2*ngm_l, nij, nab, 1.0_dp, skk, 2*ngm_l, &
-                         tbecsum(1,1,is), nij, 0.0_dp, aux2, 2*ngm_l )
+           CALL MYDGEMM2( 'N', 'T', 2*ngm_l, nij, nab, 1.0_dp, skk, 2*ngm_l, &
+                          tbecsum(1,1,is), nij, 0.0_dp, aux2, 2*ngm_l, .TRUE. )
            !$acc end host_data
            !
            ! ... sum over lm indices of Q_{lm}
@@ -166,8 +191,15 @@ SUBROUTINE addusdens_g(rho)
            DO ih = 1, nh(nt)
               DO jh = ih, nh(nt)
                  ijh = ijh + 1
+#if defined(__OPENMP_GPU)
+                 CALL qvan2_omp( ngm_l, ih, jh, nt, qmod, qgm, ylmk0 )
+#else
                  CALL qvan2( ngm_l, ih, jh, nt, qmod, qgm, ylmk0 )
+#endif
                  !$acc parallel loop
+#if defined(__OPENMP_GPU)
+                 !$omp target teams distribute parallel do
+#endif
                  DO ig = 1, ngm_l
                     aux(ngm_s+ig-1,is) = aux(ngm_s+ig-1,is) + aux2(ig,ijh)*qgm(ig)
                  ENDDO
@@ -176,18 +208,27 @@ SUBROUTINE addusdens_g(rho)
            ENDDO
         ENDDO
         !
+#if defined(__OPENMP_GPU)
+        !$omp end target data
+#endif
         !$acc end data
         DEALLOCATE( tbecsum, skk, aux2 )
         !
      ENDIF
   ENDDO
   !
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !$acc end data
   DEALLOCATE( ylmk0 )
   DEALLOCATE( qgm, qmod )
   !
   10 CONTINUE
   !
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !$acc update self(aux)
   !$acc end data
   !

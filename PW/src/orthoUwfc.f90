@@ -30,7 +30,7 @@ SUBROUTINE orthoUwfc(save_wfcatom)
   USE uspp,       ONLY : nkb, vkb
   USE becmod,     ONLY : allocate_bec_type_acc, deallocate_bec_type_acc, &
                          bec_type, becp, calbec
-  USE control_flags,    ONLY : gamma_only, use_gpu, offload_type
+  USE control_flags,    ONLY : gamma_only, use_gpu, offload_type, offload_type2
   USE noncollin_module, ONLY : noncolin, npol
   USE mp_bands,         ONLY : use_bgrp_in_hpsi
   USE uspp_init,        ONLY : init_us_2
@@ -77,6 +77,9 @@ SUBROUTINE orthoUwfc(save_wfcatom)
   !
   ALLOCATE ( wfcatom(npwx*npol, natomwfc), swfcatom(npwx*npol, natomwfc) )
   !$acc enter data create(wfcatom, swfcatom)
+#if defined(__aOPENMP_GPU)
+  !$omp target data map(alloc:wfcatom, swfcatom)
+#endif
   !
   save_flag = use_bgrp_in_hpsi ; use_bgrp_in_hpsi=.false.
   !
@@ -90,12 +93,21 @@ SUBROUTINE orthoUwfc(save_wfcatom)
      ELSE
        CALL atomic_wfc (ik, wfcatom)
      ENDIF
+#if defined(__aOPENMP_GPU)
+     !$omp target update to(wfcatom)
+#endif
+     !
      npw = ngk (ik)
      CALL init_us_2 (npw, igk_k(1,ik), xk (1, ik), vkb, use_gpu)
-     CALL calbec (offload_type, npw, vkb, wfcatom, becp)
-     CALL s_psi_acc (npwx, npw, natomwfc, wfcatom, swfcatom)
+     CALL calbec(offload_type, npw, vkb, wfcatom, becp)
+#if defined(__aOPENMP_GPU)
+     CALL s_psi_omp(npwx, npw, natomwfc, wfcatom, swfcatom)
+     !$omp target update from(swfcatom)
+#else
+     CALL s_psi_acc(npwx, npw, natomwfc, wfcatom, swfcatom)
+#endif
      !
-     IF (orthogonalize_wfc) CALL ortho_swfc ( npw, normalize_only, natomwfc, wfcatom, swfcatom, .FALSE. )
+     IF (orthogonalize_wfc) CALL ortho_swfc( npw, normalize_only, natomwfc, wfcatom, swfcatom, .FALSE. )
      !
      ! copy S * atomic wavefunctions with Hubbard U term only in wfcU
      ! (this is used during the self-consistent solution of Kohn-Sham equations)
@@ -131,6 +143,9 @@ SUBROUTINE orthoUwfc(save_wfcatom)
      !
   ENDDO
   !$acc exit data delete(wfcatom, swfcatom)
+#if defined(__aOPENMP_GPU)  
+  !$omp end target data
+#endif
   DEALLOCATE (wfcatom, swfcatom)
   CALL deallocate_bec_type_acc ( becp )
   !
@@ -254,6 +269,7 @@ SUBROUTINE orthoUwfc_k (ik, lflag)
   !   
 END SUBROUTINE orthoUwfc_k
 !
+
 !-----------------------------------------------------------------------
 SUBROUTINE ortho_swfc ( npw, normalize_only, m, wfc, swfc, lflag )
   !-----------------------------------------------------------------------
@@ -608,3 +624,4 @@ SUBROUTINE read_wf_projectors (save_wfcatom)
   RETURN
   !
 END SUBROUTINE read_wf_projectors
+

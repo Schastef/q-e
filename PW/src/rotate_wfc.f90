@@ -43,6 +43,9 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
   REAL(DP), INTENT(OUT) :: e(nbnd)
   !! eigenvalues
   EXTERNAL  h_psi, s_psi
+#if defined(__OPENMP_GPU)
+  EXTERNAL s_psi_omp
+#endif
   ! h_psi(npwx,npw,nvec,psi,hpsi)
   !     calculates H|psi>
   ! s_psi(npwx,npw,nvec,spsi)
@@ -65,8 +68,13 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
      ELSE
         !write (*,*) 'inside para k'; FLUSH(6)
         !
+#if defined(__OPENMP_GPU)
+        CALL protate_wfc_k( h_psi, s_psi_omp, overlap, &
+                            npwx, npw, nstart, nbnd, npol, psi, evc, e )
+#else
         CALL protate_wfc_k( h_psi, s_psi, overlap, &
                             npwx, npw, nstart, nbnd, npol, psi, evc, e )
+#endif
         !
      ENDIF
      !
@@ -83,8 +91,13 @@ SUBROUTINE rotate_wfc( npwx, npw, nstart, gstart, nbnd, psi, npol, overlap, evc,
      ELSE
   !write (*,*) 'inside serial k'; FLUSH(6)
         !
+#if defined(__OPENMP_GPU)
+        CALL rotate_wfc_k( h_psi, s_psi_omp, overlap, &
+                           npwx, npw, nstart, nbnd, npol, psi, evc, e )
+#else
         CALL rotate_wfc_k( h_psi, s_psi, overlap, &
                            npwx, npw, nstart, nbnd, npol, psi, evc, e )
+#endif
         !
      ENDIF
      !

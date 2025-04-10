@@ -1,4 +1,3 @@
-
 ! Copyright (C) 2002-2025 Quantum ESPRESSO Foundation
 ! This file is distributed under the terms of the
 ! GNU General Public License. See the file `License'
@@ -27,7 +26,7 @@ SUBROUTINE force_hub( forceh )
    USE basis,                ONLY : natomwfc, wfcatom, swfcatom
    USE symme,                ONLY : symvector
    USE wvfct,                ONLY : nbnd, npwx
-   USE control_flags,        ONLY : gamma_only, offload_type
+   USE control_flags,        ONLY : gamma_only, offload_type, offload_type2
    USE lsda_mod,             ONLY : lsda, nspin, current_spin, isk
    USE scf,                  ONLY : v
    USE becmod,               ONLY : bec_type, becp, calbec, allocate_bec_type_acc, &
@@ -117,6 +116,9 @@ SUBROUTINE force_hub( forceh )
       !$acc enter data create(swfcatom,eigenval, eigenvect, overlap_inv)
    ENDIF
    !
+#if defined(__OPENMP_GPU)   
+   !$omp target data map(alloc:spsi) map(alloc:wfcU)
+#endif
    IF (noncolin) THEN
       ALLOCATE (proj%k (nwfcU, nbnd), STAT=ierr)
       IF( ierr /= 0 ) &
@@ -151,26 +153,47 @@ SUBROUTINE force_hub( forceh )
       CALL init_us_2( npw, igk_k(1,ik), xk(1,ik), vkb, .TRUE. )
       ! ... Compute spsi = S * psi
       CALL allocate_bec_type_acc( nkb, nbnd, becp )
-      Call calbec(offload_type, npw, vkb, evc, becp ) 
+#if defined(__OPENMP_GPU)
+      !$omp target data map(to:vkb,evc)
+#endif
+      CALL calbec(offload_type2, npw, vkb, evc, becp ) 
+#if defined (__aOPENMP_GPU)
+      CALL s_psi_omp( npwx, npw, nbnd, evc, spsi )
+      !$omp target update from(spsi)
+#else
+
       CALL s_psi_acc( npwx, npw, nbnd, evc, spsi )
+
+        !$omp target update to(spsi)
+#endif
       CALL deallocate_bec_type_acc( becp )
       !
       ! ... Set up various quantities, in particular wfcU which 
       ! ... contains Hubbard-U (ortho-)atomic wavefunctions (without ultrasoft S)
       CALL orthoUwfc_k( ik, .TRUE. )
       !
+#if defined(__OPENMP_GPU)
+      !$omp target update to(wfcU)
+#endif
       ! ... proj=<wfcU|S|evc>
       IF (noncolin) THEN
          !$acc host_data use_device(wfcU, spsi, proj%k)
-         CALL MYZGEMM ('C', 'N', nwfcU, nbnd, npwx*npol, (1.0_DP, 0.0_DP), wfcU, &
-                    npwx*npol, spsi, npwx*npol, (0.0_DP, 0.0_DP),  proj%k, nwfcU)
+#if defined(__OPENMP_GPU)
+         !$omp target data map(from:proj%k)
+#endif
+         CALL MYZGEMM2('C', 'N', nwfcU, nbnd, npwx*npol, (1.0_DP, 0.0_DP), wfcU, &
+                        npwx*npol, spsi, npwx*npol, (0.0_DP, 0.0_DP),  proj%k, nwfcU, .TRUE. )
+#if defined(__OPENMP_GPU)
+         !$omp end target data
+         !$omp target update from(spsi)
+#endif
          !$acc end host_data
-         !Workaround: mp_sum does not like proj%k on device for obscure reasons
+         ! ... Workaround: mp_sum does not like proj%k on device for obscure reasons
          !$acc update self(proj%k)
          CALL mp_sum( proj%k( :, 1:nbnd ), intra_bgrp_comm )
          !$acc update device(proj%k)
       ELSE
-         CALL calbec( offload_type, npw, wfcU, spsi, proj )
+         CALL calbec( offload_type2, npw, wfcU, spsi, proj )
       ENDIF
       !
       IF ( gamma_only ) THEN
@@ -178,6 +201,10 @@ SUBROUTINE force_hub( forceh )
       ELSE
          !$acc update self(proj%k)
       ENDIF
+      !
+#if defined(__OPENMP_GPU)   
+      !$omp target data map(to:wfcatom,overlap_inv)
+#endif
       !
       ! ... now we need the first derivative of proj with respect to tau(alpha,ipol)
       !
@@ -189,7 +216,7 @@ SUBROUTINE force_hub( forceh )
             !
             DO ipol = 1, 3  ! forces are calculated for coordinate ipol ...
                !
-               IF (noncolin) THEN  
+               IF (noncolin) THEN
                   CALL dndtau_k_nc ( ldim, proj%k, spsi, alpha, ijkb0, ipol, ik, &
                                       nb_s, nb_e, mykey, 1, dns_nc )                  
                   DO na = 1, nat
@@ -212,7 +239,7 @@ SUBROUTINE force_hub( forceh )
                   IF ( gamma_only ) THEN
                       CALL dndtau_gamma ( ldim, proj%r, spsi, alpha, ijkb0, ipol, ik, &
                                          nb_s, nb_e, mykey, 1, dns )
-                  ELSE            
+                  ELSE
                       CALL dndtau_k    ( ldim, proj%k, spsi, alpha, ijkb0, ipol, ik, &
                                          nb_s, nb_e, mykey, 1, dns )
                   ENDIF            
@@ -228,7 +255,7 @@ SUBROUTINE force_hub( forceh )
                             ENDDO
                         ENDDO
                      ENDIF
-                  ENDDO                              
+                  ENDDO
                ENDIF
                !
                IF (lhubb) THEN
@@ -330,6 +357,11 @@ SUBROUTINE force_hub( forceh )
          !
       ENDDO ! alpha
       !
+#if defined(__OPENMP_GPU)
+      !$omp end target data
+      !$omp end target data
+#endif
+      !
    ENDDO ! ik
    !
    CALL mp_sum( forceh, inter_pool_comm )
@@ -349,6 +381,10 @@ SUBROUTINE force_hub( forceh )
    !
    !$acc end data
    !$acc exit data delete(spsi,wfcatom) 
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif 
+   !
    DEALLOCATE( spsi )
    DEALLOCATE( wfcatom )
    IF (Hubbard_projectors.EQ."ortho-atomic") THEN
@@ -448,6 +484,9 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    IF (okvan) ALLOCATE( dproj_us(nwfcU,nb_s:nb_e) )
    !
    !$acc data present(wfcU) create(dproj,dproj_us)
+#if defined(__OPENMP_GPU)
+   !$omp target data map(alloc:dproj,dproj_us)
+#endif
    !
    ! ... Compute the derivative of occupation matrices (the quantities dns(m1,m2))
    ! ... of the atomic orbitals. They are real quantities as well as ns(m1,m2).
@@ -483,11 +522,22 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
          ! ... adds dproj_us to dproj_d with scaling 1.
          IF (okvan) THEN
            !$acc kernels
-           dproj = dproj + dproj_us
+#if defined(__OPENMP_GPU)
+           !$omp target update to(dproj_us)
+           !$omp target teams distribute parallel do collapse(2)
+#endif           
+           DO m1 = nb_s,nb_e
+              DO m2 = 1, nwfcU
+                 dproj(m2,m1) = dproj(m2,m1) + dproj_us(m2,m1)
+              ENDDO
+           ENDDO
            !$acc end kernels
          ENDIF
          !
          !$acc update self(dproj(:,nb_s:nb_e))
+#if defined(__OPENMP_GPU)
+         !$omp target update from(dproj(:,nb_s:nb_e))
+#endif 
          IF (mykey==0) THEN
           DO m1 = 1, 2*Hubbard_l(nt)+1
             DO m2 = m1, 2*Hubbard_l(nt)+1
@@ -512,11 +562,21 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
          ! ... adds dproj_us to dproj_d with scaling 1.
          IF (okvan) THEN
            !$acc kernels
-           dproj = dproj + dproj_us
+#if defined(__OPENMP_GPU) 
+           !$omp target teams distribute parallel do collapse(2)
+#endif
+           DO m1 = nb_s,nb_e
+              DO m2 = 1, nwfcU
+                 dproj(m2,m1) = dproj(m2,m1) + dproj_us(m2,m1)
+              ENDDO
+           ENDDO
            !$acc end kernels
          ENDIF
          !
          !$acc update self(dproj(:,nb_s:nb_e))
+#if defined(__OPENMP_GPU)
+         !$omp target update from(dproj(:,nb_s:nb_e))
+#endif 
          IF (mykey==0) THEN
           DO m1 = 1, ldim_back(nt) 
             off1 = offsetU_back(na)
@@ -547,6 +607,9 @@ SUBROUTINE dndtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    ENDDO
    !
    !$acc end data
+#if defined(__OPENMP_GPU) 
+   !$omp end target data
+#endif
    DEALLOCATE( dproj )
    IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
    IF (okvan) DEALLOCATE( dproj_us )
@@ -660,6 +723,10 @@ SUBROUTINE dndtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    IF (okvan) THEN
       CALL matrix_element_of_dSdtau (alpha, ipol, ik, jkb0, &
                        nwfcU, wfcU, nbnd, evc, dproj_us, nb_s, nb_e, mykey, .false.)
+
+
+               !print *, 'uuuuuu dproj_us ', sum(dproj_us)
+
    ENDIF
    !
    ! In the 'ortho-atomic' case calculate d[(O^{-1/2})^T]
@@ -745,7 +812,8 @@ SUBROUTINE dndtau_k_nc ( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    RETURN
    !
 END SUBROUTINE dndtau_k_nc
-!-------------------------------------------------------------------------------
+!
+!
 !-----------------------------------------------------------------------
 SUBROUTINE dndtau_gamma( ldim, rproj, spsi, alpha, jkb0, ipol, ik, &
                          nb_s, nb_e, mykey, lpuk, dns )
@@ -804,6 +872,9 @@ SUBROUTINE dndtau_gamma( ldim, rproj, spsi, alpha, jkb0, ipol, ik, &
    ALLOCATE( dproj(nwfcU,nb_s:nb_e) )
    !
    !$acc data create(dproj)
+#if defined(__OPENMP_GPU) 
+   !$omp target data map(to:rproj,spsi) map(alloc:dproj)
+#endif
    !
    ! ... Compute the derivative of occupation matrices (the quantities dns(m1,m2))
    ! ... of the atomic orbitals. They are real quantities as well as ns(m1,m2).
@@ -811,6 +882,9 @@ SUBROUTINE dndtau_gamma( ldim, rproj, spsi, alpha, jkb0, ipol, ik, &
    CALL dprojdtau_gamma( spsi, alpha, jkb0, ipol, ik, nb_s, nb_e, mykey, dproj )
    !
    !$acc update self(dproj(:,nb_s:nb_e))
+#if defined(__OPENMP_GPU)   
+   !$omp end target data
+#endif
    !
    dns(:,:,:,:) = 0.d0
    !
@@ -957,6 +1031,9 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    IF (okvan) ALLOCATE( dproj_us(nwfcU,nb_s:nb_e) )
    !
    !$acc data present_or_copyin(wfcU) create(dproj1,dproj2,dproj_us)
+#if defined(__OPENMP_GPU)   
+   !$omp target data map(alloc:dproj1,dproj2,dproj_us)
+#endif
    !
    ! ... Compute the derivative of the generalized occupation matrices 
    ! ... (the quantities dnsg(m1,m2)) of the atomic orbitals. 
@@ -971,9 +1048,12 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    ! ... Compute the USPP contribution to dproj1:
    ! ... <\phi^{at}_{I,m1}|dS/du(alpha,ipol)|\psi_{k,v,s}>
    !
-   IF (okvan) THEN
+   IF (okvan) THEN 
       CALL matrix_element_of_dSdtau( alpha, ipol, ik, jkb0, nwfcU, wfcU, nbnd, &
                                      evc, dproj_us, nb_s, nb_e, mykey, .false. )
+#if defined(__OPENMP_GPU)
+      !$omp target update to(dproj_us)
+#endif
    ENDIF
    !
    IF (Hubbard_projectors.EQ."atomic") THEN
@@ -982,17 +1062,36 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
       !
       CALL dprojdtau_k( spsi, alpha, alpha, jkb0, ipol, ik, nb_s, nb_e, &
                         mykey, dproj1 )
-      !
+#if defined(__OPENMP_GPU)
+      !$omp target update to(dproj1)
+#endif
       ! ... adds dproj_us to dproj.
       IF ( okvan ) THEN
          !$acc kernels
-         dproj1 = dproj1 + dproj_us
+#if defined(__OPENMP_GPU)         
+         !$omp target teams distribute parallel do collapse(2)
+#endif
+         do m1 = nb_s,nb_e
+            do m2 = 1, nwfcU
+               dproj1(m2,m1) = dproj1(m2,m1) + dproj_us(m2,m1)
+            enddo
+         enddo
          !$acc end kernels
+
       ENDIF
       !
-      !$acc kernels
-      dproj2 = dproj1
-      !$acc end kernels
+      !$acc parallel loop collapse(2) 
+#if defined(__OPENMP_GPU)      
+      !$omp target teams distribute parallel do collapse(2)
+#endif      
+      DO m1 = nb_s,nb_e
+         DO m2 = 1, nwfcU
+            dproj2(m2,m1) = dproj1(m2,m1)
+         ENDDO
+      ENDDO
+#if defined(__OPENMP_GPU)
+      !$omp target update from(dproj2)
+#endif
       !
    ELSEIF (Hubbard_projectors.EQ."ortho-atomic") THEN
       ! ... In the 'ortho-atomic' case calculate d[(O^{-1/2})^T]
@@ -1011,14 +1110,27 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
          IF (Hubbard_projectors.EQ."ortho-atomic") THEN
             CALL dprojdtau_k( spsi, alpha, na1, jkb0, ipol, ik, nb_s, nb_e,&
                               mykey, dproj1 )
+#if defined(__OPENMP_GPU)
+            !$omp target update to(dproj1)
+#endif
             IF ( okvan ) THEN
                !$acc kernels
-               dproj1 = dproj1 + dproj_us
+#if defined(__OPENMP_GPU)
+               !$omp target teams distribute parallel do collapse(2)
+#endif
+               DO m1 = nb_s,nb_e
+                  DO m2 = 1, nwfcU
+                     dproj1(m2,m1) = dproj1(m2,m1) + dproj_us(m2,m1)
+                  ENDDO
+               ENDDO
                !$acc end kernels
             ENDIF
          ENDIF
          !
          !$acc update self(dproj1)
+#if defined(__OPENMP_GPU)         
+         !$omp target update from(dproj1)
+#endif
          !
          ldim1 = ldim_u(nt1)
          DO viz = 1, neighood(na1)%num_neigh
@@ -1031,14 +1143,27 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
             IF (Hubbard_projectors.EQ."ortho-atomic") THEN
                CALL dprojdtau_k( spsi, alpha, eq_na2, jkb0, ipol, ik, nb_s, &
                                  nb_e, mykey, dproj2 )
+#if defined(__OPENMP_GPU)
+               !$omp target update to(dproj2)
+#endif
                IF ( okvan ) THEN
                   !$acc kernels
-                  dproj2 = dproj2 + dproj_us
+#if defined(__OPENMP_GPU)
+                  !$omp target teams distribute parallel do collapse(2)
+#endif
+                  DO m1 = nb_s,nb_e
+                     DO m2 = 1, nwfcU
+                        dproj2(m2,m1) = dproj2(m2,m1) + dproj_us(m2,m1)
+                     ENDDO
+                  ENDDO
                   !$acc end kernels
                ENDIF
             ENDIF
             !
             !$acc update self(dproj2)
+#if defined(__OPENMP_GPU)
+            !$omp target update from(dproj2)
+#endif
             !
             IF (mykey==0) THEN
              IF (na1>na2) THEN 
@@ -1080,6 +1205,9 @@ SUBROUTINE dngdtau_k( ldim, proj, spsi, alpha, jkb0, ipol, ik, nb_s, &
    ENDDO ! na1
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
    DEALLOCATE( dproj1 )
    DEALLOCATE( dproj2 )
    IF (ALLOCATED(doverlap_inv)) DEALLOCATE( doverlap_inv )
@@ -1517,7 +1645,7 @@ END SUBROUTINE dngdtau_gamma
 !
 !
 !------------------------------------------------------------------------------
-SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dproj )
+SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dproj)
    !-----------------------------------------------------------------------------
    !! This routine computes the first derivative of the projection
    !! \(\langle\phi^{at}_{I,m1}|S|\psi_{k,v,s}\rangle\) with respect to 
@@ -1575,7 +1703,7 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
    ! ... local variables
    !
    INTEGER :: npw, nt, ig, m1, m2, m3, ibnd, iwf, nt_, ih, jh, ldim, &
-              ldim_std, offpm, i, j, m_start, m_end
+              ldim_std, offpm, i, j, m_start, m_end, npwxp, ldimp
    REAL(DP) :: gvec, xki
    INTEGER :: nh_nt
    COMPLEX(DP), ALLOCATABLE :: dwfc(:,:), &
@@ -1584,6 +1712,9 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
    CALL start_clock( 'dprojdtau' )
    !
    !$acc data present_or_copyin(dproj)
+#if defined(__OPENMP_GPU)
+   !$omp target data map(alloc:dproj) map(to:spsi,g,igk_k)
+#endif
    !
    nt  = ityp(na)
    npw = ngk(ik)
@@ -1592,8 +1723,18 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
    xki = xk(ipol,ik)
    nh_nt = nh(nt)
    !
+   npwxp = npwx*npol
+   ldimp = ldim*npol
+   !
    !$acc kernels
-   dproj = (0.d0,0.d0)
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do collapse(2)
+#endif
+   DO m1 = nb_s,nb_e
+      DO m2 = 1, nwfcU
+         dproj(m2,m1) = (0.d0,0.d0)
+      ENDDO
+   ENDDO
    !$acc end kernels
    !
    IF ((Hubbard_projectors.EQ."atomic") .AND. (na==alpha) .AND. &
@@ -1611,7 +1752,15 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       !$acc data create(dwfc)
       !
       !$acc kernels
-      dwfc = (0.d0,0.d0)
+#if defined(__OPENMP_GPU)
+      !$omp target data map(alloc:dwfc)      
+      !$omp target teams distribute parallel do collapse(2)
+#endif
+      DO m1 = 1, ldimp
+         DO m2 = 1, npwxp
+            dwfc(m2,m1) = (0.d0,0.d0)
+         ENDDO
+      ENDDO
       !$acc end kernels
       !
       ! ... DFT+U: In the expression of dwfc we don't need (k+G) but just G; k always
@@ -1627,7 +1776,11 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
             IF (backall(nt) .AND. m1 > ldim_std+2*Hubbard_l2(nt)+1) &
                  offpm = offsetU_back1(alpha)+m1-ldim_std-2*Hubbard_l2(nt)-1
          ENDIF
+#if defined(__OPENMP_GPU)         
+         !$omp target teams distribute parallel do
+#else
          !$acc parallel loop
+#endif  
          DO ig = 1, npw
             IF (lda_plus_u_kind==0) THEN
                gvec = g(ipol,igk_k(ig,ik)) * tpiba
@@ -1640,13 +1793,22 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
          !
       ENDDO
       !
-      ALLOCATE ( dproj0(ldim*npol,nbnd) )      
+      ALLOCATE ( dproj0(ldim*npol,nbnd) )
+#if defined(__OPENMP_GPU)
+      !$omp target data map(alloc:dproj0)
+#endif 
       !$acc data create(dproj0)
       !$acc host_data use_device(dwfc,spsi,dproj0)
-      CALL MYZGEMM('C','N',ldim*npol, nbnd, npwx*npol, (1.d0,0.d0), &
+      CALL MYZGEMM2('C','N',ldim*npol, nbnd, npwx*npol, (1.d0,0.d0), &
                      dwfc, npwx*npol, spsi, npwx*npol, (0.d0,0.d0), &
-                     dproj0, ldim*npol)   
+                     dproj0, ldim*npol, .TRUE.)
+#if defined(__OPENMP_GPU)            
+      !$omp target update from(dproj0)
+#endif
       CALL mp_sum( dproj0, intra_bgrp_comm )
+#if defined(__OPENMP_GPU)      
+      !$omp target update to(dproj0)
+#endif
       !$acc end host_data
       !
       ! ... Copy to dproj results for the bands treated by this processor.
@@ -1660,7 +1822,11 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
               offpm = offsetU_back1(alpha) + m1 - ldim_std - 2*Hubbard_l2(nt) - 1
          ENDIF
          !
+#if defined(__OPENMP_GPU)
+         !$omp target teams distribute parallel do
+#else
          !$acc parallel loop
+#endif
          DO ibnd = nb_s, nb_e
             dproj(offpm,ibnd) = dproj0(m1,ibnd)
             IF (noncolin) dproj(offpm+ldim,ibnd) = dproj0(m1+ldim,ibnd)
@@ -1669,6 +1835,11 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       !
       !$acc end data
       !$acc end data
+#if defined(__OPENMP_GPU)
+      !$omp end target data
+      !$omp end target data
+      !$omp target update from(dproj(:,nb_s:nb_e))
+#endif
       DEALLOCATE( dwfc, dproj0 )
       !
    ELSEIF (Hubbard_projectors.EQ."ortho-atomic") THEN
@@ -1691,7 +1862,15 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       !$acc data create(dwfc) present(wfcatom,overlap_inv)
       !
       !$acc kernels
-      dwfc(:,:) = (0.d0,0.d0)
+#if defined(__OPENMP_GPU)
+      !$omp target data map(alloc:dwfc) map(to:wfcatom,overlap_inv)
+      !$omp target teams distribute parallel do collapse(2)
+#endif
+      DO m1 = 1, ldimp
+         DO m2 = 1, npwxp
+            dwfc(m2,m1) = (0.d0,0.d0)
+         ENDDO
+      ENDDO
       !$acc end kernels
       !
       ! ... Determine how many atomic wafefunctions there are for atom 'alpha'
@@ -1710,10 +1889,14 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
 #else
       offpm = oatwfc(na) ! offset
       !
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#else
       !$acc parallel loop
+#endif 
       DO ig = 1, npw
          gvec = (g(ipol,igk_k(ig,ik)) + xki) * tpiba
-         DO m1 = 1, ldim*npol
+         DO m1 = 1, ldimp
             DO m2 = m_start, m_end
                dwfc(ig,m1) = dwfc(ig,m1) + (0.d0,-1.d0) * gvec * &
                              overlap_inv(offpm+m1,m2) * wfcatom(ig,m2)
@@ -1736,22 +1919,34 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       ! ... dwfc(ig,m1) = dwfc(ig,m1) + wfcatom(ig,m2) * doverlap_inv(m2,offpm+m1)
       ! ... where m1=1,ldim; m2=1,natomwfc; ig=1,npw
       !
+#if defined(__OPENMP_GPU)
+      !$omp target data map(to:doverlap_inv)
+#endif
       !$acc host_data use_device(wfcatom,doverlap_inv,dwfc)
-      CALL MYZGEMM( 'N','N', npwx*npol, ldim*npol, natomwfc, (1.d0,0.d0), &
-                    wfcatom, npwx*npol, doverlap_inv(:,offpm+1:offpm+ldim*npol), &
-                    natomwfc, (1.d0,0.d0), dwfc, npwx*npol )
+      CALL MYZGEMM2( 'N','N', npwx*npol, ldim*npol, natomwfc, (1.d0,0.d0), &
+                     wfcatom, npwx*npol, doverlap_inv(:,offpm+1:offpm+ldim*npol), &
+                     natomwfc, (1.d0,0.d0), dwfc, npwx*npol, .TRUE. )
       !$acc end host_data
+#if defined(__OPENMP_GPU)
+      !$omp end target data
+#endif 
       !
       ! ... 3. Final step: compute dproj0 = <dwfc|spsi>
       !
       ALLOCATE( dproj0(ldim*npol,nbnd) )
-      dproj0(:,:) = (0.0d0, 0.0d0)
+      !
       !$acc data create(dproj0)
+#if defined(__OPENMP_GPU)
+      !$omp target data map(alloc:dproj0)
+#endif 
       !
       !$acc host_data use_device(dwfc,spsi,dproj0)
-      CALL MYZGEMM( 'C','N',ldim*npol, nbnd, npwx*npol, (1.d0,0.d0), &
-                    dwfc, npwx*npol, spsi, npwx*npol,  (0.d0,0.d0), &
-                    dproj0, ldim*npol )         
+      CALL MYZGEMM2( 'C','N',ldim*npol, nbnd, npwx*npol, (1.d0,0.d0), &
+                     dwfc, npwx*npol, spsi, npwx*npol,  (0.d0,0.d0), &
+                     dproj0, ldim*npol, .TRUE. )
+#if defined(__OPENMP_GPU)
+      !$omp target update from(dproj0)
+#endif
       CALL mp_sum( dproj0, intra_bgrp_comm )
       !$acc end host_data
       !
@@ -1759,6 +1954,10 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       !
       offpm = offsetU(na)
       IF (mykey==0) THEN
+#if defined(__OPENMP_GPU)
+         ! NOTE: this loop for some reasons gives wrong results with 'omp target' (cce15)
+         !!$omp target teams distribute parallel do collapse(2)
+#endif
          !$acc parallel loop collapse(2)
          DO ibnd = nb_s, nb_e
             DO m1 = 1, ldim
@@ -1770,18 +1969,27 @@ SUBROUTINE dprojdtau_k( spsi, alpha, na, ijkb0, ipol, ik, nb_s, nb_e, mykey, dpr
       !
       !$acc end data
       !$acc end data
+#if defined(__OPENMP_GPU)
+      !$omp target update to(dproj(:,nb_s:nb_e))
+      !$omp end target data
+      !$omp end target data
+#endif
       DEALLOCATE( dproj0 )
       DEALLOCATE( dwfc )
       !
    ENDIF
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
    !
    CALL stop_clock( 'dprojdtau' )
    !
    RETURN
    !
 END SUBROUTINE dprojdtau_k
+!
 !
 !------------------------------------------------------------------------
 SUBROUTINE natomwfc_per_atom( alpha, m_start, m_end )
@@ -1872,7 +2080,7 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    !
    ! ... local variables
    !
-   INTEGER :: ig, m1, m2, npw, m_start, m_end
+   INTEGER :: ig, m1, m2, npw, m_start, m_end     , npolnp
    REAL(DP) :: gvec, xki
    COMPLEX(DP), ALLOCATABLE :: dwfcatom(:,:)
    ! auxiliary array for fast calculation
@@ -1894,8 +2102,12 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    !$acc data create(doverlap,doverlap_us) present_or_copyin(wfcatom,swfcatom) 
    !
    !$acc kernels
-   doverlap_inv(:,:) = (0.0d0,0.0d0)
-   doverlap_us(:,:) = (0.0d0,0.0d0)
+   DO m1 = 1, natomwfc
+      DO m2 = 1, natomwfc
+         doverlap_inv(m2,m1) = (0.d0,0.d0)
+         doverlap_us(m2,m1)  = (0.d0,0.d0)
+      ENDDO
+   ENDDO
    !$acc end kernels
    !
    npw = ngk(ik)
@@ -1908,6 +2120,7 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    !
    ! ... Compute the derivative dO_IJ/d\tau(alpha,ipol)
    ! ... Calculate < dphi_I/d\tau(alpha,ipol) | S | phi_J >
+   !
    ALLOCATE ( dwfcatom(npwx*npol, m_start:m_end) )
    !$acc parallel loop collapse(2)
    DO m1 = m_start, m_end
@@ -1923,16 +2136,21 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
       END DO
    END DO
    !$acc host_data use_device(dwfcatom, swfcatom, doverlap_us)
-   CALL MYZGEMM &
+   CALL MYZGEMM2 &
         ( 'C', 'N', m_end-m_start+1, natomwfc, npwx*npol, (1.0_dp, 0.0_dp), &
         dwfcatom(1,m_start), npwx*npol, swfcatom, npwx*npol, (0.0_dp,0.0_dp),&
-        doverlap_us(m_start,1), natomwfc )
+        doverlap_us(m_start,1), natomwfc, .FALSE. )
    !$acc end host_data
    DEALLOCATE ( dwfcatom )
+   !
    ! ... Calculate < phi_I | S | dphi_J/d\tau(alpha,ipol) >
    ! ... (use hermitian conjugate of previously computed matrix)
    !$acc kernels
-   doverlap(:,:) = doverlap_us(:,:)
+   DO m1 = 1, natomwfc
+     DO m2 = 1, natomwfc
+        doverlap(m2,m1) = doverlap_us(m2,m1)
+     ENDDO
+   ENDDO
    !$acc end kernels
    !$acc parallel loop collapse(2)
    DO m1 = 1, natomwfc
@@ -1945,7 +2163,7 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
    !
    !$acc host_data use_device(doverlap)
    CALL mp_sum( doverlap, intra_bgrp_comm )
-   !$acc end host_data 
+   !$acc end host_data
    !
    ! ... Add the USPP term in dO_IJ/d\tau(alpha,ipol):
    ! ... < phi_I | dS/d\tau(alpha,ipol) | phi_J >
@@ -1956,7 +2174,11 @@ SUBROUTINE calc_doverlap_inv( alpha, ipol, ik, ijkb0 )
                                      wfcatom, natomwfc, wfcatom,       &
                                      doverlap_us, 1, natomwfc, 0, .true. )
       !$acc kernels
-      doverlap(:,:) = doverlap(:,:) + doverlap_us(:,:)
+      DO m1 = 1, natomwfc
+         DO m2 = 1, natomwfc
+            doverlap(m2,m1) = doverlap(m2,m1) + doverlap_us(m2,m1)
+         ENDDO
+      ENDDO
       !$acc end kernels
    ENDIF
    !
@@ -2026,7 +2248,7 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    !
    ! ... local variables
    !
-   INTEGER :: npw, nt, ih, jh, ig, iA, iB, mU, mD, nt1, ldim, na, nh_nt
+   INTEGER :: npw, nt, ih, jh, ig, iA, iB, mU, mD, nt1, ldim, na, nh_nt, m1, m2, nhb, npb
    REAL(DP) :: gvec
    COMPLEX(DP), ALLOCATABLE :: Adbeta(:,:), Abeta(:,:), dbetaB(:,:), &
                                betaB(:,:), aux(:,:), qq(:,:)
@@ -2047,13 +2269,17 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    ALLOCATE( dbetaB(npol*nh(nt),lB) )
    ALLOCATE( betaB(npol*nh(nt),lB)  )
    ALLOCATE( qq(npol*nh(nt),npol*nh(nt)) )
+#if defined(__OPENMP_GPU)
+   !$omp target data map(alloc:qq) map(to:qq_at,qq_so,g)
+   !$omp target teams distribute parallel do collapse(2)
+#else
    !$acc data create(Adbeta,Abeta,dbetaB,betaB,qq)
-   !
    !$acc parallel loop collapse(2) present(qq_at)
+#endif
    DO jh = 1, nh_nt
       DO ih = 1, nh_nt
          IF (noncolin) THEN
-            IF ( upf(nt)%has_so ) THEN     
+            IF ( upf(nt)%has_so ) THEN
                qq(ih,jh) =             qq_so(ih,jh,1,nt)
                qq(ih,jh+nh_nt) =       qq_so(ih,jh,2,nt)
                qq(ih+nh_nt,jh) =       qq_so(ih,jh,3,nt)
@@ -2063,7 +2289,7 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
                qq(ih,jh+nh_nt) =       (0.0,0.0)
                qq(ih+nh_nt,jh) =       (0.0,0.0)
                qq(ih+nh_nt,jh+nh_nt) = CMPLX(qq_at(ih,jh,alpha), 0.0d0, kind=DP)     
-            ENDIF   
+            ENDIF
          ELSE
             qq(ih,jh) = CMPLX(qq_at(ih,jh,alpha), 0.0d0, kind=DP)
          ENDIF
@@ -2073,16 +2299,30 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    ! ... aux is used as a workspace
    ALLOCATE( aux(npwx*npol,nh(nt)*npol) )
    !$acc data create(aux)
+#if defined(__OPENMP_GPU)
+   !$omp target data map(alloc:aux) map(to:vkb)
+#endif
    !
-   !$acc parallel loop collapse(2) 
-   DO ih = 1, nh_nt*npol
-      DO ig = 1, npwx*npol
+   nhb = nh_nt*npol
+   npb = npwx*npol
+   !
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do collapse(2)
+#else
+   !$acc parallel loop collapse(2)
+#endif
+   DO ih = 1, nhb
+      DO ig = 1, npb
          aux(ig,ih) = (0.0d0, 0.0d0)
       ENDDO
    ENDDO
    !
-   ! ... Beta function
-   !$acc parallel loop collapse(2) present(vkb(:,:))
+   ! ... Beta functions
+#if defined(__OPENMP_GPU)   
+   !$omp target teams distribute parallel do collapse(2)
+#else
+   !$acc parallel loop collapse(2) present(vkb)
+#endif
    DO ih = 1, nh_nt
       DO ig = 1, npw
          aux(ig,ih) = vkb(ig,ijkb0+ih)
@@ -2090,6 +2330,9 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       ENDDO
    ENDDO
    !
+#if defined(__OPENMP_GPU)
+   !$omp target update from(aux)
+#endif
    IF (noncolin) THEN
       ! Calculate Abeta = <A|beta>
       ! Abeta(:,1       : nh(nt))      = spin up
@@ -2097,8 +2340,8 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       !
       !$acc host_data use_device (A,B,aux,Abeta,betaB)
       ! Abeta=(0.0,0.0)
-      CALL MYZGEMM ('C', 'N', lA, nh_nt*npol, npwx*npol, (1.0_DP, 0.0_DP), A, &
-                 npwx*npol, aux, npwx*npol, (0.0_DP, 0.0_DP), Abeta, lA)
+      CALL MYZGEMM2( 'C', 'N', lA, nh_nt*npol, npwx*npol, (1.0_DP, 0.0_DP), A, &
+                     npwx*npol, aux, npwx*npol, (0.0_DP, 0.0_DP), Abeta, lA, .FALSE.)
       CALL mp_sum( Abeta(:, 1:nh_nt*npol) , intra_bgrp_comm )
       !
       ! Calculate betaB = <beta|B>
@@ -2106,8 +2349,8 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       ! betaB(:,1+nh(nt): nh(nt)*npol) = spin down
       !      
       ! betaB=(0.0,0.0)
-      CALL MYZGEMM ('C', 'N', nh_nt*npol, lB, npwx*npol, (1.0_DP,0.0_DP), aux, &
-                 npwx*npol, B, npwx*npol, (0.0_DP, 0.0_DP), betaB, nh_nt*npol)
+      CALL MYZGEMM2( 'C', 'N', nh_nt*npol, lB, npwx*npol, (1.0_DP,0.0_DP), aux, &
+                     npwx*npol, B, npwx*npol, (0.0_DP, 0.0_DP), betaB, nh_nt*npol, .FALSE.)
       CALL mp_sum( betaB(:, 1:lB) , intra_bgrp_comm )
       !$acc end host_data 
    ELSE 
@@ -2116,10 +2359,17 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       ! ... Calculate betaB = <beta|B>
       CALL calbec( offload_type, npw, aux, B, betaB )
    ENDIF
+#if defined(__OPENMP_GPU)
+   !$omp target update to(aux)
+#endif
    !
    ! ... Calculate the derivative of the beta function
    !
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do collapse(2)
+#else
    !$acc parallel loop collapse(2)
+#endif
    DO ih = 1, nh_nt
       DO ig = 1, npw
          gvec = g(ipol,igk_k(ig,ik)) * tpiba
@@ -2129,22 +2379,26 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       ENDDO
    ENDDO
    !
+#if defined(__OPENMP_GPU)
+   !$omp target update from(aux)
+#endif
+   !
    IF (noncolin) THEN
       ! Calculate Adbeta = <A|dbeta>      
       ! (same as Abeta)
       !
       !Adbeta=(0.0,0.0)
       !$acc host_data use_device (A,B,aux,Adbeta,dbetaB)
-      CALL MYZGEMM ('C', 'N', lA, nh(nt)*npol, npwx*npol, (1.0_DP, 0.0_DP), A, &
-               npwx*npol, aux, npwx*npol, (0.0_DP, 0.0_DP), Adbeta, lA)
+      CALL MYZGEMM2( 'C', 'N', lA, nh(nt)*npol, npwx*npol, (1.0_DP, 0.0_DP), A, &
+                     npwx*npol, aux, npwx*npol, (0.0_DP, 0.0_DP), Adbeta, lA, .FALSE.)
       CALL mp_sum( Adbeta(:, 1:nh(nt)*npol) , intra_bgrp_comm )
       !
       ! Calculate dbetaB = <dbeta|B>
       ! (same as betaB)
       !
       !dbetaB=(0.0,0.0)
-      CALL MYZGEMM ('C', 'N', nh(nt)*npol, lB, npwx*npol, (1.0_DP,0.0_DP), aux,&
-               npwx*npol, B, npwx*npol, (0.0_DP, 0.0_DP), dbetaB, nh(nt)*npol)
+      CALL MYZGEMM2( 'C', 'N', nh(nt)*npol, lB, npwx*npol, (1.0_DP,0.0_DP), aux,&
+                     npwx*npol, B, npwx*npol, (0.0_DP, 0.0_DP), dbetaB, nh(nt)*npol, .FALSE.)
       CALL mp_sum( dbetaB(:, 1:lB) , intra_bgrp_comm )
       !$acc end host_data 
    ELSE
@@ -2155,9 +2409,16 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       !
    ENDIF
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
    DEALLOCATE( aux )
    ALLOCATE( aux(nh(nt)*npol,lB) )
    !$acc data create(aux)
+#if defined(__OPENMP_GPU)
+   !$omp target data map(to:Abeta, betaB, Adbeta, dbetaB)
+   !$omp target data map(alloc:aux)
+#endif 
    !
    IF (noncolin) THEN    
       !aux(:,:) = (0.0,0.0)
@@ -2166,27 +2427,35 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       !
       !$acc host_data use_device(qq,dbetaB,aux)
       ! spin up
-      CALL MYZGEMM('N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
-                 qq(1, 1), nh(nt)*npol, &
-                 dbetaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
-                 aux(1, lB_s), nh(nt)*npol)
+      CALL MYZGEMM2( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
+                     qq(1, 1), nh(nt)*npol, &
+                     dbetaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
+                     aux(1, lB_s), nh(nt)*npol,.TRUE.)
       ! spin down   
-      CALL MYZGEMM('N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
-                 qq(1+nh(nt), 1), nh(nt)*npol, &
-                 dbetaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
-                 aux(1+nh(nt), lB_s), nh(nt)*npol)
+      CALL MYZGEMM2( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
+                     qq(1+nh(nt), 1), nh(nt)*npol, &
+                     dbetaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
+                     aux(1+nh(nt), lB_s), nh(nt)*npol,.TRUE.)
       !$acc end host_data
    ELSE
       ! ... Calculate \sum_jh qq_at(ih,jh) * dbetaB(jh)
       !$acc host_data use_device(qq,dbetaB,aux)
-      CALL MYZGEMM( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt), (1.0d0,0.0d0), &
-                  qq, nh(nt), dbetaB(1,lB_s),    nh(nt), (0.0d0,0.0d0), &
-                  aux(1,lB_s), nh(nt) )
+      CALL MYZGEMM2( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt), (1.0d0,0.0d0), &
+                     qq, nh(nt), dbetaB(1,lB_s),    nh(nt), (0.0d0,0.0d0), &
+                     aux(1,lB_s), nh(nt),.TRUE. )
       !$acc end host_data
    ENDIF
    !
    !$acc kernels
-   dbetaB(:,:) = aux(:,:)
+#if defined(__OPENMP_GPU)
+   !!$omp target update to(aux)
+   !$omp target teams distribute parallel do collapse(2)
+#endif   
+   DO m1 = 1, lB
+      DO m2 = 1, nhb
+         dbetaB(m2,m1) = aux(m2,m1)
+      ENDDO
+   ENDDO
    !$acc end kernels
    !
    IF (noncolin) THEN
@@ -2195,30 +2464,42 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
       !
       ! spin up 
       !$acc host_data use_device(qq,betaB,aux)
-      CALL MYZGEMM('N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
-                 qq(1, 1), nh(nt)*npol, &
-                 betaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
-                 aux(1, lB_s), nh(nt)*npol)
+      CALL MYZGEMM2( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
+                     qq(1, 1), nh(nt)*npol, &
+                     betaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
+                     aux(1, lB_s), nh(nt)*npol, .TRUE.)
       ! spin down   
-      CALL MYZGEMM('N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
-                 qq(1+nh(nt), 1), nh(nt)*npol, &
-                 betaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
-                 aux(1+nh(nt), lB_s), nh(nt)*npol)
+      CALL MYZGEMM2( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt)*npol, (1.0d0,0.0d0), &
+                     qq(1+nh(nt), 1), nh(nt)*npol, &
+                     betaB(1, lB_s), nh(nt)*npol, (0.0d0,0.0d0), &
+                     aux(1+nh(nt), lB_s), nh(nt)*npol, .TRUE.)
       !$acc end host_data
    ELSE 
       ! ... Calculate \sum_jh qq_at(ih,jh) * betaB(jh)
       !$acc host_data use_device(qq,betaB,aux)
-      CALL MYZGEMM( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt), (1.0d0,0.0d0), &
-                  qq, nh(nt), betaB(1,lB_s),     nh(nt), (0.0d0,0.0d0), &
-                  aux(1,lB_s), nh(nt) )
+      CALL MYZGEMM2( 'N', 'N', nh(nt), lB_e-lB_s+1, nh(nt), (1.0d0,0.0d0), &
+                     qq, nh(nt), betaB(1,lB_s),     nh(nt), (0.0d0,0.0d0), &
+                     aux(1,lB_s), nh(nt), .TRUE. )
       !$acc end host_data
    ENDIF
    !
    !$acc kernels
-   betaB(:,:) = aux(:,:)
+#if defined(__OPENMP_GPU)
+   !!$omp target update to(aux)
+   !$omp target teams distribute parallel do collapse(2)
+#endif
+   DO m1 = 1, lB
+      DO m2 = 1, nhb
+         betaB(m2,m1) = aux(m2,m1)
+      ENDDO
+   ENDDO
    !$acc end kernels
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp target update from(betaB,dbetaB)
+   !$omp end target data
+#endif 
    DEALLOCATE( aux )
    !
    ! ... A_dS_B(iA,iB) = \sum_ih [Adbeta(iA,ih) * betaB(ih,iB) +
@@ -2280,6 +2561,10 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    ENDIF
    !
    !$acc end data
+#if defined(__OPENMP_GPU)   
+   !$omp end target data
+   !$omp end target data
+#endif
    DEALLOCATE( Abeta  )
    DEALLOCATE( Adbeta )
    DEALLOCATE( dbetaB )
@@ -2292,7 +2577,6 @@ SUBROUTINE matrix_element_of_dSdtau( alpha, ipol, ik, ijkb0, lA, A, &
    RETURN
    !
 END SUBROUTINE matrix_element_of_dSdtau
-!
 !
 !-----------------------------------------------------------------------
 SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
@@ -2322,7 +2606,7 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    USE mp_bands,             ONLY : intra_bgrp_comm
    USE mp_pools,             ONLY : intra_pool_comm, me_pool, nproc_pool
    USE mp,                   ONLY : mp_sum
-   USE control_flags,        ONLY : offload_type
+   USE control_flags,        ONLY : offload_type2
    !
    IMPLICIT NONE
    !
@@ -2348,7 +2632,7 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    !
    ! ... local variables
    !
-   INTEGER :: npw, nt, ig, na_, m1, ibnd, iwf, nt_, ih, jh, ldim, &
+   INTEGER :: npw, nt, ig, na_, m1, m2, ibnd, iwf, nt_, ih, jh, ldim, &
               ldim_std, offpm, nh_nt
    REAL(DP) :: gvec
    COMPLEX(DP) :: bpsi_ii
@@ -2373,6 +2657,9 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    CALL start_clock( 'dprojdtau' )
    !
    !$acc data present_or_copyin(dproj,wfcU)
+#if defined(__OPENMP_GPU)
+   !$omp target data map(to:wfcU,g,spsi) map(alloc:dproj)
+#endif
    !
    nt = ityp(alpha)
    npw = ngk(ik)
@@ -2381,7 +2668,14 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    nh_nt = nh(nt)
    !
    !$acc kernels
-   dproj(:,:) = 0.0_DP
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do collapse(2)
+#endif
+   DO m1 = nb_s,nb_e
+      DO m2 = 1, nwfcU
+         dproj(m2,m1) = 0.0_DP
+      ENDDO
+   ENDDO
    !$acc end kernels
    !
    ! ... First the derivatives of the atomic wfc and the beta are computed
@@ -2392,6 +2686,9 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
       ALLOCATE( dproj0(ldim,nbnd) )
       ALLOCATE( dwfc(npwx,ldim) )
       !$acc data create(dwfc,dproj0)
+#if defined(__OPENMP_GPU)
+      !$omp target data map(alloc:dwfc,dproj0)
+#endif
       !
       ! ... In the expression of dwfc we don't need (k+G) but just G; k always
       ! ... multiplies the underived quantity and gives an opposite contribution
@@ -2406,7 +2703,11 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
            IF (backall(nt) .AND. m1 > ldim_std+2*Hubbard_l2(nt)+1) &
               offpm = offsetU_back1(alpha) + m1 - ldim_std - 2*Hubbard_l2(nt) - 1
         ENDIF
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#else
         !$acc parallel loop
+#endif
         DO ig = 1, npwx
             gvec = g(ipol,igk_k(ig,ik)) * tpiba
             IF (ig<=npw) dwfc(ig,m1) = (0.d0,-1.d0) * gvec * wfcU(ig,offpm)
@@ -2417,9 +2718,15 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
       !
       ! ... there is no G=0 term
       !$acc host_data use_device(spsi,dwfc,dproj0)
-      CALL MYDGEMM( 'T','N',ldim, nbnd, 2*npw, 2.0_DP, dwfc, 2*npwx, spsi, &
-                    2*npwx, 0.0_DP, dproj0, ldim )
+      CALL MYDGEMM2( 'T','N',ldim, nbnd, 2*npw, 2.0_DP, dwfc, 2*npwx, spsi, &
+                     2*npwx, 0.0_DP, dproj0, ldim, .TRUE. )
+#if defined(__OPENMP_GPU)
+      !$omp target update from(dproj0)
+#endif
       CALL mp_sum( dproj0, intra_bgrp_comm )
+#if defined(__OPENMP_GPU)
+      !$omp target update to(dproj0)
+#endif
       !$acc end host_data
       !
       ! ... copy to dproj results for the bands treated by this processor
@@ -2432,14 +2739,22 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
             IF (backall(nt) .AND. m1 > ldim_std+2*Hubbard_l2(nt)+1) &
                offpm = offsetU_back1(alpha)+m1-ldim_std-2*Hubbard_l2(nt)-1
          ENDIF
+#if defined(__OPENMP_GPU)
+         !$omp target teams distribute parallel do
+#else
          !$acc parallel loop
+#endif
          DO ibnd = nb_s, nb_e
             dproj(offpm,ibnd) = dproj0(m1,ibnd)
          ENDDO
       ENDDO
       !
       offpm = offsetU(alpha)
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do collapse(2)
+#else
       !$acc parallel loop collapse(2)
+#endif
       DO ibnd = nb_s, nb_e
          DO m1 = 1, ldim
             dproj(m1+offpm,ibnd) = dproj0(m1,ibnd)
@@ -2447,6 +2762,9 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
       ENDDO
       !
       !$acc end data
+#if defined(__OPENMP_GPU)
+      !$omp end target data
+#endif
       DEALLOCATE( dwfc, dproj0 ) 
       !
    ENDIF
@@ -2458,18 +2776,35 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    ALLOCATE( dbeta(npwx,nh(nt))      )
    !$acc data create(betapsi0,dbetapsi,wfatdbeta,wfatbeta)
    !$acc data create(dbeta)
+#if defined(__OPENMP_GPU)
+   !$omp target data map(alloc:dbeta) map(to:vkb)
+#endif
    !
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do collapse(2)
+#else
    !$acc parallel loop collapse(2) present(vkb)
+#endif
    DO ih = 1, nh_nt
       DO ig = 1, npw
          dbeta(ig,ih) = vkb(ig,ijkb0+ih)
       ENDDO
    ENDDO
    !
-   CALL calbec( offload_type, npw, wfcU, dbeta, wfatbeta ) 
-   CALL calbec( offload_type, npw, dbeta, evc, betapsi0 )
+#if defined(__OPENMP_GPU)
+   !$omp target data map(to:evc)
+#endif
+   CALL calbec( offload_type2, npw, wfcU, dbeta, wfatbeta )
+   CALL calbec( offload_type2, npw, dbeta, evc, betapsi0 )
+#if defined(__OPENMP_GPU)   
+   !$omp end target data
+#endif
    !
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do 
+#else
    !$acc parallel loop collapse(2)
+#endif
    DO ih = 1, nh(nt)
       DO ig = 1, npw
          gvec = g(ipol,igk_k(ig,ik)) * tpiba
@@ -2478,19 +2813,36 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    ENDDO
    !
    !
-   CALL calbec( offload_type, npw, dbeta, evc, dbetapsi ) 
-   CALL calbec( offload_type, npw, wfcU, dbeta, wfatdbeta )
+#if defined(__OPENMP_GPU)
+   !$omp target data map(to:evc)
+#endif
+   CALL calbec( offload_type2, npw, dbeta, evc, dbetapsi )
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
+   CALL calbec( offload_type2, npw, wfcU, dbeta, wfatdbeta )
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
    DEALLOCATE( dbeta )
    ALLOCATE( betapsi(nh(nt),nb_s:nb_e) )
    !$acc data create( betapsi )
+#if defined(__OPENMP_GPU)
+   !$omp target data map(to:betapsi0,dbetapsi,wfatdbeta,wfatbeta)
+   !$omp target data map(alloc:betapsi) map(to:qq_at)
+#endif
    !
    ! ... calculate \sum_j qq(i,j)*dbetapsi(j)
    ! ... betapsi is used here as work space 
    !
    ! ... here starts band parallelization
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do 
+#else
    !$acc parallel loop collapse(2) present(qq_at)
+#endif  
    DO ih = 1, nh_nt
       DO ibnd = nb_s, nb_e
          bpsi_ii = (0.0_dp,0.0_dp)
@@ -2502,12 +2854,23 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    ENDDO
    !
    !$acc kernels
-   dbetapsi(:,nb_s:nb_e) = betapsi(:,nb_s:nb_e)
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do collapse(2)
+#endif
+   do m1 = nb_s,nb_e
+      do m2 = 1, nh_nt
+         dbetapsi(m2,m1) = betapsi(m2,m1)
+      enddo
+   enddo
    !$acc end kernels
    !
    ! ... calculate \sum_j qq(i,j)*betapsi(j)
    !
+#if defined(__OPENMP_GPU)
+   !$omp target teams distribute parallel do
+#else
    !$acc parallel loop collapse(2) present(qq_at)
+#endif
    DO ih = 1, nh_nt
       DO ibnd = nb_s, nb_e
          bpsi_ii = (0.0_dp,0.0_dp)
@@ -2523,30 +2886,41 @@ SUBROUTINE dprojdtau_gamma( spsi, alpha, ijkb0, ipol, ik, nb_s, nb_e, &
    !
    IF ( mykey==0 .AND. nh(nt)>0 ) THEN
       !$acc host_data use_device(wfatdbeta,wfatbeta,betapsi,dbetapsi,dproj)
-      CALL MYDGEMM( 'N', 'N', nwfcU, nb_e-nb_s+1, nh(nt), 1.0_dp,      &
-                    wfatdbeta, nwfcU, betapsi(1,nb_s), nh(nt), 1.0_dp, &
-                    dproj(1,nb_s), nwfcU )
-      CALL MYDGEMM( 'N', 'N', nwfcU, nb_e-nb_s+1, nh(nt), 1.0_dp,      &
-                    wfatbeta, nwfcU, dbetapsi(1,nb_s), nh(nt), 1.0_dp, &
-                    dproj(1,nb_s), nwfcU )
+      CALL MYDGEMM2( 'N', 'N', nwfcU, nb_e-nb_s+1, nh(nt), 1.0_dp,      &
+                     wfatdbeta, nwfcU, betapsi(1,nb_s), nh(nt), 1.0_dp, &
+                     dproj(1,nb_s), nwfcU, .TRUE. )
+      CALL MYDGEMM2( 'N', 'N', nwfcU, nb_e-nb_s+1, nh(nt), 1.0_dp,      &
+                     wfatbeta, nwfcU, dbetapsi(1,nb_s), nh(nt), 1.0_dp, &
+                     dproj(1,nb_s), nwfcU, .TRUE. )
       !$acc end host_data
    ENDIF
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
    DEALLOCATE( betapsi )
    !
    ! ... end band parallelization - only dproj(1,nb_s:nb_e) are calculated
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp end target data
+#endif
    DEALLOCATE( betapsi0  )
    DEALLOCATE( wfatbeta  ) 
    DEALLOCATE( wfatdbeta )
    DEALLOCATE( dbetapsi  )
    !
    !$acc end data
+#if defined(__OPENMP_GPU)
+   !$omp target update from(dproj(:,nb_s:nb_e))
+   !$omp end target data
+#endif
    !
    CALL stop_clock( 'dprojdtau' )
    !
    RETURN
    !
 END SUBROUTINE dprojdtau_gamma
+

@@ -87,7 +87,13 @@ SUBROUTINE rotate_xpsi_k( h_psi_ptr, s_psi_ptr, overlap, &
   !
   CALL start_clock('rotxpsik:hpsi')
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:psi) map(from:hpsi)
+#endif
   CALL h_psi_ptr( npwx, npw, nstart, psi, hpsi )
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !
   CALL stop_clock('rotxpsik:hpsi')
   !
@@ -321,7 +327,13 @@ SUBROUTINE protate_xpsi_k( h_psi_ptr, s_psi_ptr, overlap, &
   !
   CALL start_clock('protxpsik:hpsi')
   !
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:psi) map(from:hpsi)
+#endif
   CALL h_psi_ptr( npwx, npw, nstart, psi, hpsi )
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   !
   CALL stop_clock('protxpsik:hpsi')
   !

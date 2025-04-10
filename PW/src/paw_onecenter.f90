@@ -472,6 +472,7 @@ MODULE paw_onecenter
     !$acc data copyin( rad(i%t)%sin_th,rad(i%t)%cos_th,rad(i%t)%sin_phi,rad(i%t)%cos_phi ) if(with_small_so)
     !$acc data copyin( g(i%t:i%t), g(i%t)%r2, g(i%t)%rm2, g(i%t)%rab )
     !
+    !
     im_sum = i%m*nx_loc
     energy_present = PRESENT(energy)
     lsd = 0
@@ -530,6 +531,9 @@ MODULE paw_onecenter
       ENDDO
     ENDDO
     !
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:arho) map(from:ex,ec,vx,vc)
+#endif
     IF (nspin_mag <= 2 ) THEN
       IF ( lsd == 0 ) CALL xc( im_sum, 1, 1, arho(:,1:1), ex, ec, vx(:,1:1), vc(:,1:1), &
                                gpu_args_=.TRUE. )
@@ -538,6 +542,9 @@ MODULE paw_onecenter
     ELSEIF (nspin_mag==4) THEN
       CALL xc( im_sum, 4, 2, arho, ex, ec, vx, vc, gpu_args_=.TRUE. )
     ENDIF
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
 #if defined(_OPENACC)
     !$acc parallel loop collapse(2) present(g(i%t:i%t))
@@ -691,6 +698,7 @@ MODULE paw_onecenter
     !
     IF (TIMING) CALL start_clock( 'PAW_gcxc_v' )
     !
+    !
     !$acc data copyin( rho_lm, rho_core ) present_or_copy( v_lm )
     !$acc data copyin( g(i%t:i%t), g(i%t)%r, g(i%t)%r2, g(i%t)%rm2, g(i%t)%rm3, g(i%t)%rab )
     !
@@ -784,11 +792,23 @@ MODULE paw_onecenter
       ENDDO
     ENDDO
     !
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:rho_full,gradx) map(from:sx,sc,v1x,v2x,v1c,v2c)
+#endif
     IF ( nspin_mag==1 ) THEN
       CALL xc_gcx( im_sum, 1, rho_full, gradx, sx, sc, v1x, v2x, v1c, v2c, gpu_args_=.TRUE. )
     ELSEIF ( nspin_mag == 2 .OR. nspin_mag == 4 ) THEN
+#if defined(__OPENMP_GPU)
+    !$omp target data map(from:v2cud)
+#endif
       CALL xc_gcx( im_sum, 2, rho_full, gradx, sx, sc, v1x, v2x, v1c, v2c, v2cud, gpu_args_=.TRUE. )
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     ENDIF
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
 #if defined(_OPENACC)
     !$acc parallel loop collapse(2) present(g(i%t:i%t))
@@ -1912,8 +1932,15 @@ MODULE paw_onecenter
     REAL(DP) :: a(2,2,2), b(2,2,2,2), c(2,2,2)
     REAL(DP) :: s1
     REAL(DP) :: ps(2,2), ps1(3,2,2), ps2(3,2,2,2)
+    LOGICAL :: gpu_args2
     !
     IF (TIMING) CALL start_clock( 'PAW_dgcxc_v' )
+    !
+#if defined(__OPENMP_GPU)
+    gpu_args2 = .FALSE.
+#else
+    gpu_args2 = .TRUE.
+#endif
     !
     !$acc data copyin( rho_lm, drho_lm, rho_core ) copy( v_lm )
     !$acc data copyin( rad(i%t:i%t), rad(i%t)%dylmt, rad(i%t)%dylmp, rad(i%t)%ylm, rad(i%t)%wwylm )
@@ -1993,7 +2020,7 @@ MODULE paw_onecenter
        dsvxc_ss = dsvxc_ss / e2
        !$acc end kernels
        !
-       CALL xc_gcx( im_sum, nspin_mag, r, gradsw, sx, sc, v1x, v2x, v1c, v2c, gpu_args_=.TRUE. )
+       CALL xc_gcx( im_sum, nspin_mag, r, gradsw, sx, sc, v1x, v2x, v1c, v2c, gpu_args_=gpu_args2 )
        !
        CALL xclib_set_threshold( 'gga', 1.D-6 )
        !
@@ -2067,7 +2094,7 @@ MODULE paw_onecenter
        dsvxc_ss = dsvxc_ss / e2
        !$acc end kernels
        !
-       CALL xc_gcx( im_sum, nspin_gga, r, gradsw, sx, sc, v1x, v2x, v1c, v2c, v2c_ud, gpu_args_=.TRUE. )
+       CALL xc_gcx( im_sum, nspin_gga, r, gradsw, sx, sc, v1x, v2x, v1c, v2c, v2c_ud, gpu_args_=gpu_args2 )
        !
        !$acc parallel loop collapse(2) present(g(i%t:i%t)) private(dsvxc_s,ps,ps1,ps2,a,b,c)
        DO ix = ix_s, ix_e

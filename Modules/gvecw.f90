@@ -108,8 +108,14 @@
      END SUBROUTINE g2kin_init
      !
      SUBROUTINE deallocate_gvecw
-       !$acc exit data delete(g2kin)
-       IF( ALLOCATED( g2kin ) ) DEALLOCATE( g2kin )
+       !
+       IF ( ALLOCATED( g2kin ) ) THEN
+          !$acc exit data delete(g2kin)
+#if defined(__OPENMP_GPU)
+          !$omp target exit data map(delete:g2kin)
+#endif
+          DEALLOCATE( g2kin )
+       ENDIF
      END SUBROUTINE deallocate_gvecw
      !=----------------------------------------------------------------------------=!
    END MODULE gvecw

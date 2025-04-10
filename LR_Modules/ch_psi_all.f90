@@ -102,10 +102,17 @@ SUBROUTINE ch_psi_all (n, h, ah, e, ik, m)
   CALL h_psi_gpu (npwx, n, m, h, hpsi)
   CALL s_psi_acc (npwx, n, m, h, spsi)
 #else
+#if defined(__OPENMP_GPU)
+  !$omp target data map(to:h) map(from:hpsi) map(from:spsi)
+#endif
   CALL h_psi (npwx, n, m, h, hpsi)
+#if defined(__OPENMP_GPU)
+  CALL s_psi_omp(npwx, n, m, h, spsi)
+  !$omp end target data
+#else
   CALL s_psi (npwx, n, m, h, spsi)
 #endif
-
+#endif
   CALL start_clock ('last')
   !
   !   then we compute ( H - \epsilon S ) * h
@@ -145,7 +152,6 @@ SUBROUTINE ch_psi_all (n, h, ah, e, ik, m)
   !$acc end data
   DEALLOCATE (spsi)
   DEALLOCATE (hpsi)
-
   CALL stop_clock ('last')
   CALL stop_clock ('ch_psi')
   RETURN
@@ -214,6 +220,8 @@ CONTAINS
     !
     IF (okvan) THEN
        CALL start_clock_gpu ('ch_psi_calbec')
+       !$omp target update to(vkb)
+       !$omp target data map(to:hpsi)
        if (use_bgrp_in_hpsi .AND. .NOT. exx_is_active() .AND. m > 1) then
           call divide (inter_bgrp_comm, m, m_start, m_end)
           if (m_end >= m_start) then
@@ -222,9 +230,16 @@ CONTAINS
        else
           CALL calbec (offload_type, n, vkb, hpsi, becp, m)
        endif
+       !$omp end target data
        CALL stop_clock_gpu ('ch_psi_calbec')
     ENDIF ! okvan
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:hpsi) map(from:spsi)
+    CALL s_psi_omp (npwx, n, m, hpsi, spsi)
+    !$omp end target data
+#else
     CALL s_psi_acc (npwx, n, m, hpsi, spsi)
+#endif
     !$acc parallel loop collapse(2)
     DO ibnd = 1, m
        DO ig = 1, n
@@ -308,15 +323,24 @@ CONTAINS
     ELSE
        IF (okvan) THEN
           CALL start_clock_gpu ('ch_psi_calbec')
+          !$omp target update to(vkb)
+          !$omp target data map(to:hpsi)
           if (use_bgrp_in_hpsi .AND. .NOT. exx_is_active() .AND. m > 1) then
              call divide( inter_bgrp_comm, m, m_start, m_end)
              if (m_end >= m_start) CALL calbec (offload_type, n, vkb, hpsi(:,m_start:m_end), becp, m_end- m_start + 1)
           else
              CALL calbec (offload_type, n, vkb, hpsi, becp, m)
           end if
+          !$omp end target data
           CALL stop_clock_gpu ('ch_psi_calbec')
        ENDIF ! okvan
+#if defined(__OPENMP_GPU)
+       !$omp target data map(to:hpsi) map(from:spsi)
+       CALL s_psi_omp (npwx, n, m, hpsi, spsi)
+       !$omp end target data
+#else
        CALL s_psi_acc (npwx, n, m, hpsi, spsi)
+#endif
     ENDIF
     !$acc parallel loop collapse(2)
     DO ibnd = 1, m

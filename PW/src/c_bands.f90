@@ -250,6 +250,9 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
   !
   ! Davidson and RMM-DIIS diagonalization uses these external routines on groups of nvec bands
   EXTERNAL h_psi, s_psi, g_psi
+#if defined(__OPENMP_GPU)
+  EXTERNAL s_psi_omp
+#endif
   EXTERNAL h_psi_gpu, s_psi_acc
   ! subroutine h_psi(npwx,npw,nvec,psi,hpsi)  computes H*psi
   ! subroutine s_psi(npwx,npw,nvec,psi,spsi)  computes S*psi (if needed)
@@ -538,13 +541,25 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           IF (.not. use_gpu) THEN
              IF ( use_para_diag ) THEN
 !                ! make sure that all processors have the same wfc
+#if defined(__OPENMP_GPU)
+                CALL pregterg( h_psi, s_psi_omp, okvan, g_psi, &
+                            npw, npwx, nbnd, nbndx, evc, ethr, &
+                            et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#else
                 CALL pregterg( h_psi, s_psi, okvan, g_psi, &
                             npw, npwx, nbnd, nbndx, evc, ethr, &
                             et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#endif
              ELSE
-                CALL regterg (  h_psi, s_psi, okvan, g_psi, &
+#if defined(__OPENMP_GPU)
+                CALL regterg (  h_psi, s_psi_omp, okvan, g_psi, &
                          npw, npwx, nbnd, nbndx, evc, ethr, &
                          et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#else
+                CALL regterg (  h_psi, s_psi, okvan, g_psi, &
+                         npw, npwx, nbnd, nbndx, evc, ethr, &
+                         et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi ) !    BEWARE gstart has been removed from call
+#endif
              END IF
              ! 
           ELSE
@@ -829,15 +844,27 @@ SUBROUTINE diag_bands( iter, ik, avg_iter )
           IF (.not. use_gpu ) THEN
              IF ( use_para_diag ) then
                 !
+#if defined(__OPENMP_GPU)
+                CALL pcegterg( h_psi, s_psi_omp, okvan, g_psi, &
+                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#else
                 CALL pcegterg( h_psi, s_psi, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#endif
                 !
              ELSE
                 !
-                CALL cegterg ( h_psi, s_psi, okvan, g_psi, &
+#if defined(__OPENMP_GPU)
+                CALL cegterg ( h_psi, s_psi_omp, okvan, g_psi, &
                                npw, npwx, nbnd, nbndx, npol, evc, ethr, &
                                et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#else
+                CALL cegterg( h_psi, s_psi, okvan, g_psi, &
+                               npw, npwx, nbnd, nbndx, npol, evc, ethr, &
+                               et(1,ik), btype(1,ik), notconv, lrot, dav_iter, nhpsi )
+#endif
              END IF
           ELSE
              IF ( use_para_diag ) then

@@ -68,19 +68,43 @@ SUBROUTINE xc_gcx( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud, &
     !
   ELSE
     !
+#if defined(_OPENACC)
     !$acc data copyin( rho, grho ), copyout( ex, ec, v1x, v2x, v1c, v2c )
+#elif defined(__OPENMP_GPU)
+    !$omp target data map(to:rho,grho) map(from:ex,ec,v1x,v2x,v1c,v2c)
+#endif
     IF (PRESENT(v2c_ud)) THEN
+#if defined(_OPENACC)
       !$acc data copyout( v2c_ud )
+#elif defined(__OPENMP_GPU)
+      !$omp target data map(from:v2c_ud)
+#endif
       CALL xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
+#if defined(_OPENACC)
       !$acc end data
+#elif defined(__OPENMP_GPU)
+      !$omp end target data
+#endif
     ELSE
       ALLOCATE( v2c_dummy(length) )
+#if defined(_OPENACC)
       !$acc data create( v2c_dummy )
+#elif defined(__OPENMP_GPU)
+      !$omp target data map(alloc:v2c_dummy)
+#endif
       CALL xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_dummy )
+#if defined(_OPENACC)
       !$acc end data
+#elif defined(__OPENMP_GPU)
+      !$omp end target data
+#endif
       DEALLOCATE( v2c_dummy )
     ENDIF
+#if defined(_OPENACC)
     !$acc end data
+#elif defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     !
   ENDIF  
   !
@@ -175,6 +199,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     !
     ALLOCATE( rho_lxc(length*ns), sigma(length*np) )
     !$acc enter data create( rho_lxc, sigma )
+#if defined(__OPENMP_GPU)
+    !$omp target enter data map(alloc:rho_lxc,sigma)
+#endif
     !
     IF ( is_libxc(3) ) THEN
       ALLOCATE( ex_lxc(length) )
@@ -187,6 +214,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     !
     IF ( ns == 1 ) THEN
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
         arho_k = ABS(rho(k,1))
         rho_lxc(k) = arho_k
@@ -194,6 +224,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
       ENDDO
     ELSE
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
         rho_lxc(2*k-1) = rho(k,1)
         rho_lxc(2*k)   = rho(k,2)
@@ -205,6 +238,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
       ENDDO
     ENDIF
     !$acc update self( rho_lxc, sigma )
+#if defined(__OPENMP_GPU)
+    !$omp target update from(rho_lxc.sigma)
+#endif
     !
   ENDIF
   !
@@ -215,6 +251,10 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     ALLOCATE( rh(length), grho2(length,ns) )
     !$acc enter data create( rh, grho2 )
     !$acc parallel loop
+#if defined(__OPENMP_GPU)
+    !$omp target enter data map(alloc:rh,grho2)
+    !$omp target teams distribute parallel do
+#endif
     DO k = 1, length
        rh(k) = ABS(rho(k,1))
        grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
@@ -225,6 +265,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
                  v2c(:,1), ierr )
       !
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
          sgn1 = SIGN(1._DP, rho(k,1))
          ex(k) = ex(k) * sgn1
@@ -253,8 +296,14 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     ENDIF
     !
     !$acc data copyin( ec_lxc, vc_rho, vc_sigma )
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:ec_lxc,vc_rho,vc_sigma)
+#endif
     IF (.NOT. POLARIZED) THEN
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
         IF ( rho_lxc(k) <= rho_threshold_lda ) THEN
           ec(k)=0.d0 ;  v1c(k,1)=0.d0 ;  v2c(k,1)=0.d0
@@ -271,6 +320,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
       ENDDO
     ELSE
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
         rho_up = rho_lxc(2*k-1)
         rho_dw = rho_lxc(2*k)
@@ -296,6 +348,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     ENDIF
     !
     !$acc end data
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     DEALLOCATE( ec_lxc, vc_rho, vc_sigma )
     !
     fkind_is_XC = (fkind_x==XC_EXCHANGE_CORRELATION)
@@ -310,8 +365,14 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
           !
           ALLOCATE( grho_ud(length) )
           !$acc data create(grho_ud)
+#if defined(__OPENMP_GPU)
+          !$omp target data map(alloc:grho_ud)
+#endif
           !
           !$acc parallel loop
+#if defined(__OPENMP_GPU)
+          !$omp target teams distribute parallel do
+#endif
           DO k = 1, length
             grho2(k,1) = grho(1,k,1)**2 + grho(2,k,1)**2 + grho(3,k,1)**2
             grho_ud(k) = grho(1,k,1) * grho(1,k,2) + grho(2,k,1) * grho(2,k,2) + &
@@ -322,14 +383,20 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
           CALL gcc_spin_more( length, rho, grho2, grho_ud, ec, v1c, v2c, v2c_ud )
           !
           !$acc end data
+#if defined(__OPENMP_GPU)
+          !$omp end target data
+#endif
           DEALLOCATE( grho_ud )
           !
        ELSE
           !
           ALLOCATE( zeta(length) )
           !$acc data create( zeta )
-          !
           !$acc parallel loop
+#if defined(__OPENMP_GPU)
+          !$omp target data map(alloc:zeta)
+          !$omp target teams distribute parallel do
+#endif
           DO k = 1, length
             rh(k) = rho(k,1) + rho(k,2)
             IF ( rh(k) > rho_threshold_gga ) THEN
@@ -346,12 +413,18 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
           CALL gcc_spin( length, rh, zeta, grho2(:,1), ec, v1c, v2c(:,1) )
           !
           !$acc parallel loop
+#if defined(__OPENMP_GPU)
+          !$omp target teams distribute parallel do
+#endif
           DO k = 1, length
             v2c(k,2) = v2c(k,1)
             IF ( ns==2 ) v2c_ud(k) = v2c(k,1)
           ENDDO
           !
           !$acc end data
+#if defined(__OPENMP_GPU)
+          !$omp end target data
+#endif
           DEALLOCATE( zeta )
           !
        ENDIF
@@ -378,8 +451,14 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     IF ( ishybrid .AND. exx_started .AND. exx_fraction>0.d0) xcoef = 1.d0-exx_fraction
     !
     !$acc data copyin( ex_lxc, vx_rho, vx_sigma )
+#if defined(__OPENMP_GPU)
+    !$omp target data map(to:ex_lxc,vx_rho,vx_sigma)
+#endif
     IF (.NOT. POLARIZED) THEN
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
         IF ( rho_lxc(k) <= rho_threshold_lda ) THEN
           ex(k) = 0.d0 ;  v1x(k,1) = 0.d0 ;  v2x(k,1) = 0.d0
@@ -396,6 +475,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
       ENDDO
     ELSE
       !$acc parallel loop
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do
+#endif
       DO k = 1, length
         rho_up = rho_lxc(2*k-1)
         rho_dw = rho_lxc(2*k)
@@ -421,6 +503,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     ENDIF
     !
     !$acc end data
+#if defined(__OPENMP_GPU)
+    !$omp end target data
+#endif
     DEALLOCATE( ex_lxc, vx_rho, vx_sigma )
     !
 #endif
@@ -429,6 +514,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
     !
     IF ( ns > 1 ) THEN
       !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+      !$omp target teams distribute parallel do collapse(2)
+#endif
       DO is = 1, ns
         DO k = 1, length
           grho2(k,is) = grho(1,k,is)**2 + grho(2,k,is)**2 + grho(3,k,is)**2
@@ -436,17 +524,24 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
       ENDDO
       !
       CALL gcx_spin( length, rho, grho2, ex, v1x, v2x, ierr )
+      !
     ENDIF
     !
   ENDIF
   !
   IF (ANY(.NOT.is_libxc(3:4))) THEN
     !$acc exit data delete( rh, grho2 )
+#if defined(__OPENMP_GPU)
+    !$omp target exit data map(delete:rh,grho2)
+#endif
     DEALLOCATE( rh, grho2 )
   ENDIF
 #if defined(__LIBXC)
   IF (ANY(is_libxc(3:4))) THEN
     !$acc exit data delete(rho_lxc,sigma)
+#if defined(__OPENMP_GPU)
+    !$omp target exit data map(delete:rho_lxc,sigma)
+#endif
     DEALLOCATE( rho_lxc, sigma )
   ENDIF
 #endif
@@ -454,6 +549,9 @@ SUBROUTINE xc_gcx_( length, ns, rho, grho, ex, ec, v1x, v2x, v1c, v2c, v2c_ud )
   !$acc end data
   !
   IF (ierr/=0 .AND. .NOT.nowarning) CALL xclib_error( 'xc_gcx_', error_msg(ierr), 1 )
+#if defined(__OPENMP_GPU)
+  IF (igcx==43 .OR. igcc==14) CALL xclib_error( 'xc_gcx_', 'BEEF not enabled yet with openMP offload ', 1 )
+#endif
   !
   RETURN
   !

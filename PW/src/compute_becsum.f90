@@ -68,7 +68,13 @@ SUBROUTINE compute_becsum( iflag )
      !
      ! ... actual calculation is performed (on GPU) inside routine "sum_bec"
      !
+#if defined(__OPENMP_GPU)
+     !$omp target data map(to:vkb,evc)
+#endif
      CALL sum_bec( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
+#if defined(__OPENMP_GPU)
+     !$omp end target data
+#endif
      !
   ENDDO k_loop
   ! ... Use host copy to do the communications
@@ -111,7 +117,7 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
   !
   USE kinds,              ONLY : DP
   USE becmod,             ONLY : becp, calbec
-  USE control_flags,      ONLY : gamma_only, tqr, offload_type 
+  USE control_flags,      ONLY : gamma_only, tqr, offload_type, offload_type2
   USE ions_base,          ONLY : nat, ntyp => nsp, ityp
   USE uspp,               ONLY : nkb, becsum, ebecsum, ofsbeta, vkb
   USE uspp_param,         ONLY : upf, nh, nhm
@@ -143,8 +149,8 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
   CALL start_clock( 'sum_band:calbec' )
   npw = ngk(ik)
   IF ( .NOT. real_space ) THEN
-     !$acc data present(evc) 
-     CAll calbec(offload_type, npw, vkb, evc(:,ibnd_start:ibnd_end), becp )
+     !$acc data present(evc)
+     CAll calbec(offload_type2, npw, vkb, evc(:,ibnd_start:ibnd_end), becp )
      !$acc end data
   ELSE
      if (gamma_only) then
@@ -235,11 +241,17 @@ SUBROUTINE sum_bec ( ik, current_spin, ibnd_start, ibnd_end, this_bgrp_nbnd )
                     END DO
                  END DO
                  !
+#if defined (__OPENMP_GPU)
+                 CALL ZGEMM ( 'C', 'N', npol*nhnt, npol*nhnt, this_bgrp_nbnd, &
+                      (1.0_dp,0.0_dp), auxk1, this_bgrp_nbnd, auxk2, this_bgrp_nbnd, &
+                      (0.0_dp,0.0_dp), aux_nc, npol*nhnt )
+#else
                  !$acc host_data use_device(auxk1, auxk2, aux_nc)
                  CALL MYZGEMM ( 'C', 'N', npol*nhnt, npol*nhnt, this_bgrp_nbnd, &
                       (1.0_dp,0.0_dp), auxk1, this_bgrp_nbnd, auxk2, this_bgrp_nbnd, &
                       (0.0_dp,0.0_dp), aux_nc, npol*nhnt )
                  !$acc end host_data
+#endif
                  !
               ELSE IF ( gamma_only ) THEN
                  !

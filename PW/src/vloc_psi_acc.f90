@@ -51,7 +51,11 @@ SUBROUTINE vloc_psi_gamma_acc( lda, n, m, psi, v, hpsi )
   !
   ALLOCATE( psi1(n,incr) )
   ALLOCATE( psic(dffts_nnr*incr) )
-  !$acc data present_or_copyout(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+  !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+#if defined(__OPENMP_GPU)
+  !!$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !$omp target data map(to:v) map(alloc:psi1,psic)
+#endif
   !
   IF (many_fft > 1) THEN
      !
@@ -63,35 +67,59 @@ SUBROUTINE vloc_psi_gamma_acc( lda, n, m, psi, v, hpsi )
         howmany = pack_size + remainder
         hm_vec(1)=group_size ; hm_vec(2)=n ; hm_vec(3)=howmany
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO idx = 1, group_size
            DO j = 1, n
               psi1(j,idx) = psi(j,ibnd+idx-1)
            END DO
         END DO
         !
-        CALL wave_g2r( psi1(:,1:group_size), psic, dffts, howmany_set=hm_vec )
+        CALL wave_g2r( psi1(:,1:group_size), psic, dffts, howmany_set=hm_vec, omp_mod=0 )
         !
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO idx = 0, howmany-1
           DO j = 1, dffts_nnr
             psic(idx*dffts_nnr+j) = psic(idx*dffts_nnr+j) * v(j)
           ENDDO
         ENDDO
         !
-        CALL wave_r2g( psic, psi1, dffts, howmany_set=hm_vec )
+        CALL wave_r2g( psic, psi1, dffts, howmany_set=hm_vec, omp_mod=0 )
         !
         IF ( pack_size > 0 ) THEN
+           !*** PROVISIONAL DUPLICATION OF LOOPS DUE TO COMPILER BUG ***
            !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do collapse(2)
+#endif
            DO idx = 0, pack_size-1
               DO j = 1, n
-                 hpsi(j,ibnd+idx*2)   = hpsi(j,ibnd+idx*2)   + psi1(j,idx*2+1)
+                 hpsi(j,ibnd+idx*2) = hpsi(j,ibnd+idx*2) + psi1(j,idx*2+1)
+                 !hpsi(j,ibnd+idx*2+1) = hpsi(j,ibnd+idx*2+1) + psi1(j,idx*2+2)
+              ENDDO
+           ENDDO
+           !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do collapse(2)
+#endif
+           DO idx = 0, pack_size-1
+              DO j = 1, n
+                 !hpsi(j,ibnd+idx*2) = hpsi(j,ibnd+idx*2) + psi1(j,idx*2+1)
                  hpsi(j,ibnd+idx*2+1) = hpsi(j,ibnd+idx*2+1) + psi1(j,idx*2+2)
               ENDDO
            ENDDO
+           !
         ENDIF
         !
         IF (remainder > 0) THEN
            !$acc parallel loop
+#if defined(__OPENMP_GPU)
+           !$omp target teams distribute parallel do
+#endif
            DO j = 1, n
               hpsi(j,ibnd+group_size-1) = hpsi(j,ibnd+group_size-1) + &
                                             psi1(j,group_size)
@@ -107,25 +135,34 @@ SUBROUTINE vloc_psi_gamma_acc( lda, n, m, psi, v, hpsi )
         brange = 1
         IF ( ibnd<m ) brange = 2
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO idx = 1, brange
            DO j = 1, n
               psi1(j,idx) = psi(j,ibnd+idx-1)
            END DO
         END DO
         !
-        CALL wave_g2r( psi1(:,1:brange), psic, dffts )
+        CALL wave_g2r( psi1(:,1:brange), psic, dffts, omp_mod=0 )
         !        
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, dffts_nnr
            psic(j) = psic(j) * v(j)
         ENDDO
         !
-        CALL wave_r2g( psic, psi1(:,1:brange), dffts )
+        CALL wave_r2g( psic, psi1(:,1:brange), dffts, omp_mod=0 )
         !
         fac=1.d0
         IF ( ibnd<m ) fac=0.5d0
         !
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, n
           hpsi(j,ibnd) = hpsi(j,ibnd) + fac*psi1(j,1)
           IF ( ibnd<m ) hpsi(j,ibnd+1) = hpsi(j,ibnd+1) + fac*psi1(j,2)
@@ -136,6 +173,9 @@ SUBROUTINE vloc_psi_gamma_acc( lda, n, m, psi, v, hpsi )
   ENDIF
   !
   !$acc end data
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   DEALLOCATE( psi1 )
   DEALLOCATE( psic )
   !
@@ -190,7 +230,11 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
   !
   ALLOCATE( psi1(n,incr) )
   ALLOCATE( psic(dffts_nnr*incr) )
-  !$acc data present_or_copyout(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+  !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+#if defined(__OPENMP_GPU)
+  !!$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !$omp target data map(to:v) map(alloc:psi1,psic)
+#endif
   !
   IF (many_fft > 1) THEN
      !
@@ -200,6 +244,9 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
         hm_vec(1)=group_size ; hm_vec(2)=n ; hm_vec(3)=group_size
         ebnd = ibnd+group_size-1
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO idx = 1, group_size
            DO j = 1, n
               psi1(j,idx) = psi(j,ibnd+idx-1)
@@ -207,9 +254,12 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
         END DO
         !
         CALL wave_g2r( psi1(:,1:group_size), psic, dffts, igk=igk_k(:,current_k),&
-                       howmany_set=hm_vec )
+                       howmany_set=hm_vec, omp_mod=0 )
         !
-        !$acc parallel loop collapse(2) 
+        !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO idx = 0, group_size-1
            DO j = 1, dffts_nnr
               psic(idx*dffts_nnr+j) = psic(idx*dffts_nnr+j) * v(j)
@@ -217,9 +267,12 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
         ENDDO
         !
         CALL wave_r2g( psic, psi1, dffts, igk=igk_k(:,current_k), &
-                       howmany_set=hm_vec )
+                       howmany_set=hm_vec, omp_mod=0 )
         !
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO idx = 0, group_size-1
            DO j = 1, n
               hpsi(j,ibnd+idx) = hpsi(j,ibnd+idx) + psi1(j,idx+1)
@@ -234,19 +287,28 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
         !
         idx = 1
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, n
            psi1(j,idx) = psi(j,ibnd+idx-1)
         END DO
-        CALL wave_g2r( psi1(:,idx:idx), psic, dffts, igk=igk_k(:,current_k) )
+        CALL wave_g2r( psi1(:,idx:idx), psic, dffts, igk=igk_k(:,current_k), omp_mod=0 )
         !
-        !$acc parallel loop 
+        !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, dffts_nnr
            psic(j) = psic(j) * v(j)
         ENDDO
         !
-        CALL wave_r2g( psic, psi1(:,:), dffts, igk=igk_k(:,current_k) )
+        CALL wave_r2g( psic, psi1(:,:), dffts, igk=igk_k(:,current_k), omp_mod=0 )
         !
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO i = 1, n
            hpsi(i,ibnd) = hpsi(i,ibnd) + psi1(i,idx)
         ENDDO
@@ -256,6 +318,9 @@ SUBROUTINE vloc_psi_k_acc( lda, n, m, psi, v, hpsi )
   ENDIF
   !
   !$acc end data
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   DEALLOCATE( psic )
   DEALLOCATE( psi1 )
   !
@@ -311,13 +376,20 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
   ALLOCATE( psi1(n,npol) )
   ALLOCATE( psic(dffts_nnr,npol) )
   !
-  !$acc data present_or_copyout(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+  !$acc data present_or_copy(hpsi) present_or_copyin(psi,v) create(psi1,psic)
+#if defined(__OPENMP_GPU)
+  !!$omp target data map(tofrom:hpsi) map(to:psi,v) map(alloc:psi1,psic)
+  !$omp target data map(to:v) map(alloc:psi1,psic)
+#endif
   !
   ! ... the local potential V_Loc psi. First the psi in real space
   !
   DO ibnd = 1, m, incr
      !
      !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+     !$omp target teams distribute parallel do collapse(2)
+#endif
      DO ipol = 1, npol
         DO j = 1, n
            psi1(j,ipol) = psi(j+lda*(ipol-1),ibnd)
@@ -325,11 +397,14 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
      END DO
      DO ipol = 1, npol
         CALL wave_g2r( psi1(:,ipol:ipol), psic(:,ipol), dffts, &
-             igk=igk_k(:,current_k) )
+             igk=igk_k(:,current_k), omp_mod=0 )
      ENDDO
      !
      IF (domag) THEN
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, dffts_nnr
            sup  = psic(j,1) * (v(j,1)+v(j,4)) + &
                 psic(j,2) * (v(j,2)-(0.d0,1.d0)*v(j,3))
@@ -340,6 +415,9 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
         ENDDO
      ELSE
         !$acc parallel loop collapse(2)
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do collapse(2)
+#endif
         DO ipol = 1, npol
            DO j = 1, dffts_nnr
               psic(j,ipol) = psic(j,ipol) * v(j,1)
@@ -349,9 +427,12 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
      !
      DO ipol = 1, npol
         CALL wave_r2g( psic(:,ipol), psi1(:,1:1), dffts, &
-             igk=igk_k(:,current_k) )
+             igk=igk_k(:,current_k), omp_mod=0 )
         !
         !$acc parallel loop
+#if defined(__OPENMP_GPU)
+        !$omp target teams distribute parallel do
+#endif
         DO j = 1, n
            hpsi(j,ipol,ibnd) = hpsi(j,ipol,ibnd) + psi1(j,1)
         ENDDO
@@ -359,6 +440,9 @@ SUBROUTINE vloc_psi_nc_acc( lda, n, m, psi, v, hpsi )
      !
   ENDDO
   !$acc end data
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
   DEALLOCATE( psic )
   DEALLOCATE( psi1 )
   !

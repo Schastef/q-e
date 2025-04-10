@@ -274,14 +274,20 @@ MODULE control_flags
   TYPE(offload_kind_cpu), PUBLIC :: offload_cpu  ! flag to select no offload type (CPU execution)
 #if defined(__CUDA)
   TYPE(offload_kind_acc), PUBLIC :: offload_type ! flag to point the actual currently used offload type 
+  TYPE(offload_kind_acc), PUBLIC :: offload_type2
+  TYPE(offload_kind_cpu), PUBLIC :: offload_type3
 #elif defined(__OPENMP_GPU)
-  TYPE(offload_kind_omp), PUBLIC :: offload_type
+  TYPE(offload_kind_cpu), PUBLIC :: offload_type
+  TYPE(offload_kind_omp), PUBLIC :: offload_type2
+  TYPE(offload_kind_omp), PUBLIC :: offload_type3
 #else
   TYPE(offload_kind_cpu), PUBLIC :: offload_type
+  TYPE(offload_kind_cpu), PUBLIC :: offload_type2
+  TYPE(offload_kind_cpu), PUBLIC :: offload_type3
 #endif
   !
   INTEGER, PUBLIC :: &
-#if defined(__CUDA)
+#if defined(__OPENMP_GPU) && defined(__OMP_MANY_FFT) || defined(__CUDA)
     many_fft = 16              ! the size of FFT batches in vloc_psi and
                                ! sumband. Only use in accelerated subroutines.
 #else

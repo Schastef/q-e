@@ -43,7 +43,7 @@ SUBROUTINE rotate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   COMPLEX(DP), ALLOCATABLE :: aux(:,:)
   COMPLEX(DP), ALLOCATABLE :: hc(:,:), sc(:,:), vc(:,:)
   REAL(DP),    ALLOCATABLE :: en(:)
-  INTEGER :: n_start, n_end, my_n
+  INTEGER :: n_start, n_end, my_n, i, j
   !
   EXTERNAL  h_psi_ptr,    s_psi_ptr
     ! h_psi_ptr(npwx,npw,nvec,psi,hpsi)
@@ -77,7 +77,14 @@ SUBROUTINE rotate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   ! ...      H_ij = <psi_i| H |psi_j>     S_ij = <psi_i| S |psi_j>
   !
   call start_clock('rotwfck:hpsi'); !write(*,*) 'start rotwfck:hpsi';FLUSH(6)
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:psi,aux,hc,sc,vc) map(tofrom:evc)
+  !$omp target update to(psi,aux)
   CALL h_psi_ptr( npwx, npw, nstart, psi, aux )
+  !$omp target update from(aux)
+#else
+  CALL h_psi_ptr( npwx, npw, nstart, psi, aux )
+#endif
   call stop_clock('rotwfck:hpsi') ; !write(*,*) 'stop rotwfck:hpsi';FLUSH(6)
   !
   call start_clock('rotwfck:hc'); !write(*,*) 'start rotwfck:hc';FLUSH(6)
@@ -86,11 +93,18 @@ SUBROUTINE rotate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   !$acc end kernels
   CALL divide(inter_bgrp_comm,nstart,n_start,n_end)
   my_n = n_end - n_start + 1; !write (*,*) nstart,n_start,n_end
+  !
   !$acc host_data use_device(psi, aux, hc)
-  if (n_start .le. n_end) &
-  call MYZGEMM( 'C','N', nstart, my_n, kdim, (1.D0,0.D0), psi, kdmx, aux(1,n_start), kdmx, (0.D0,0.D0), hc(1,n_start), nstart )
+  IF (n_start .le. n_end) THEN
+     CALL MYZGEMM2( 'C','N', nstart, my_n, kdim, (1.D0,0.D0), psi, kdmx, aux(1,n_start), kdmx, (0.D0,0.D0), &
+                                                                              hc(1,n_start), nstart, .TRUE. )
+#if defined(__OPENMP_GPU)
+     !$omp target update from(hc)
+#endif
+  ENDIF
+  !
   CALL mp_sum( hc, inter_bgrp_comm )
-  !            
+  !
   CALL mp_sum( hc, intra_bgrp_comm )
   !$acc end host_data
   !
@@ -100,19 +114,28 @@ SUBROUTINE rotate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   IF ( overlap ) THEN
      !
      CALL s_psi_ptr( npwx, npw, nstart, psi, aux )
-     if (n_start .le. n_end) then
+     !
+     IF (n_start .le. n_end) THEN
        !$acc host_data use_device(psi, aux, sc)
-       CALL MYZGEMM( 'C','N', nstart, my_n, kdim, (1.D0,0.D0), psi, kdmx, aux(1,n_start), kdmx, (0.D0,0.D0), sc(1,n_start), nstart )
+       CALL MYZGEMM2( 'C','N', nstart, my_n, kdim, (1.D0,0.D0), psi, kdmx, aux(1,n_start), kdmx, &
+                                                      (0.D0,0.D0), sc(1,n_start), nstart, .TRUE. )
        !$acc end host_data
-     end if
+#if defined(__OPENMP_GPU)
+       !$omp target update from(sc)
+#endif
+     ENDIF
      !
   ELSE
      !
-     if (n_start .le. n_end) then
+     IF (n_start .le. n_end) THEN
        !$acc host_data use_device(psi, sc)
-       CALL MYZGEMM( 'C','N', nstart, my_n, kdim, (1.D0,0.D0), psi, kdmx, psi(1,n_start), kdmx, (0.D0,0.D0), sc(1,n_start), nstart )
+       CALL MYZGEMM2( 'C','N', nstart, my_n, kdim, (1.D0,0.D0), psi, kdmx, psi(1,n_start), kdmx, &
+                                                      (0.D0,0.D0), sc(1,n_start), nstart, .TRUE. )
        !$acc end host_data
-     end if
+#if defined(__OPENMP_GPU)
+       !$omp target update from(sc)
+#endif
+     ENDIF
      !  
   END IF
   !$acc host_data use_device(sc)
@@ -128,6 +151,9 @@ SUBROUTINE rotate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   !$acc host_data use_device(hc, sc, en, vc)
   CALL diaghg( nstart, nbnd, hc, sc, nstart, en, vc, me_bgrp, root_bgrp, intra_bgrp_comm )
   !$acc end host_data
+#if defined(__OPENMP_GPU)
+  !$omp target update to(vc)
+#endif
   call stop_clock('rotwfck:diag');  !write(*,*) 'stop rotwfck:diag';FLUSH(6)
   call start_clock('rotwfck:evc'); !write(*,*) 'start rotwfck:evc';FLUSH(6)
   !
@@ -136,19 +162,45 @@ SUBROUTINE rotate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   !$acc end kernels
   !
   ! ...  update the basis set
-  !  
+  !
   !$acc kernels
-  aux=(0.D0,0.D0)
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do collapse(2)
+#endif
+  DO j = 1 , nstart
+    DO i = 1 , kdmx
+      aux(i,j)=(0.D0,0.D0)
+    END DO
+  END DO
   !$acc end kernels
   !$acc host_data use_device(psi, aux, vc)
-  if (n_start .le. n_end) &
-  CALL MYZGEMM( 'N','N', kdim, nbnd, my_n, (1.D0,0.D0), psi(1,n_start), kdmx, vc(n_start,1), nstart, (0.D0,0.D0), aux, kdmx )
+  if (n_start .le. n_end) THEN
+    CALL MYZGEMM2( 'N','N', kdim, nbnd, my_n, (1.D0,0.D0), psi(1,n_start), kdmx, vc(n_start,1), &
+                                                            nstart, (0.D0,0.D0), aux, kdmx, .TRUE. )
+  ENDIF
+#if defined(__OPENMP_GPU)
+  !$omp target update from(aux)
+#endif
   CALL mp_sum( aux, inter_bgrp_comm )
   !$acc end host_data
-  !     
+#if defined(__OPENMP_GPU)
+  !$omp target update to(aux)
+#endif
+  !
   !$acc kernels
-  evc(:,:) = aux(:,1:nbnd)
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do collapse(2)
+#endif
+  DO j = 1, nbnd
+    DO i = 1, kdmx
+      evc(i,j) = aux(i,j)
+    END DO
+  END DO
   !$acc end kernels
+#if defined(__OPENMP_GPU)
+  !$omp end target data
+#endif
+  !
   call stop_clock('rotwfck:evc') ; !write(*,*) 'start rotwfck;evc';FLUSH(6)
   !
   !$acc exit data delete(en, vc, sc, hc, aux)
@@ -215,6 +267,7 @@ SUBROUTINE protate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
     ! flag to distinguish procs involved in linear algebra
   LOGICAL :: do_distr_diag_inside_bgrp
   INTEGER :: ortho_parent_comm
+  INTEGER :: i, j
   INTEGER, ALLOCATABLE :: idesc_ip( :, :, : )
   INTEGER, ALLOCATABLE :: rank_ip( :, : )
   !
@@ -248,19 +301,30 @@ SUBROUTINE protate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   ALLOCATE( sc( nx, nx) )    
   ALLOCATE( vc( nx, nx) )    
   ALLOCATE( en( nstart ) )
-
-  aux=(0.0_DP,0.0_DP)
   !
   ! ... Set up the Hamiltonian and Overlap matrix on the subspace :
   !
   ! ...      H_ij = <psi_i| H |psi_j>     S_ij = <psi_i| S |psi_j>
   !
   call start_clock('protwfck:hpsi')
+#if defined(__OPENMP_GPU)
+  !$omp target data map(alloc:psi,aux)
+  !$omp target update to(psi)
+  !$omp target teams distribute parallel do collapse(2)
+#endif
+  DO i = 1, kdmx
+    DO j = 1, nstart
+      aux(i,j)=(0.0_DP,0.0_DP)
+    ENDDO
+  ENDDO
+  !
   CALL h_psi_ptr( npwx, npw, nstart, psi, aux )
+  !
   call stop_clock('protwfck:hpsi')
   !
   call start_clock('protwfck:hc')
-  CALL compute_distmat( hc, psi, aux ) 
+
+  CALL compute_distmat( hc, psi, aux )
   !            
   IF ( overlap ) THEN
      !
@@ -272,6 +336,11 @@ SUBROUTINE protate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
      CALL compute_distmat( sc, psi, psi )
      !  
   END IF
+  !
+!#if defined(__OPENMP_GPU)
+!  !$omp end target data
+!#endif
+  !
   call stop_clock('protwfck:hc')
   !
   ! ... Diagonalize
@@ -294,9 +363,23 @@ SUBROUTINE protate_wfc_k( h_psi_ptr, s_psi_ptr, overlap, &
   ! ...  update the basis set
   !  
   call start_clock('protwfck:evc')
+  !
   CALL refresh_evc()
-  !     
-  evc(:,:) = aux(:,1:nbnd)
+  !
+#if defined(__OPENMP_GPU)
+  !$omp target teams distribute parallel do collapse(2)
+#endif
+  DO i = 1, kdmx
+    DO j = 1, nbnd
+      evc(i,j) = aux(i,j)
+    ENDDO
+  ENDDO
+  !
+#if defined(__OPENMP_GPU)
+  !$omp target update from(evc)
+  !$omp end target data
+#endif
+  !
   call stop_clock('protwfck:evc')
   !
   DEALLOCATE( en )
@@ -331,8 +414,15 @@ CONTAINS
      COMPLEX(DP), ALLOCATABLE :: work( :, : )
      !
      ALLOCATE( work( nx, nx ) )
-     !
-     work = ( 0.0_DP, 0.0_DP )
+#if defined(__OPENMP_GPU)
+     !$omp target enter data map(alloc:work)
+     !$omp target teams distribute parallel do collapse(2)
+#endif
+     DO ipr = 1, nx         
+       DO ipc = 1, nx
+         work(ipc,ipr) = (0.d0,0.d0)
+       ENDDO
+     ENDDO
      !
      DO ipc = 1, idesc(LAX_DESC_NPC) !  loop on column procs 
         !
@@ -347,24 +437,33 @@ CONTAINS
            !  rank of the processor for which this block (ipr,ipc) is destinated
            !
            root = rank_ip( ipr, ipc )
-
+           !
            ! use blas subs. on the matrix block
-
-           CALL ZGEMM( 'C', 'N', nr, nc, kdim, ( 1.D0, 0.D0 ),  v(1,ir), kdmx, w(1,ic), kdmx, ( 0.D0, 0.D0 ), work, nx )
-
+           !
+           CALL MYZGEMM2( 'C', 'N', nr, nc, kdim, (1.D0,0.D0),  v(1,ir), kdmx, w(1,ic), kdmx, &
+                          (0.D0,0.D0), work, nx, .TRUE. )
+           !
            ! accumulate result on dm of root proc.
+#if defined(__OPENMP_GPU)
+           !$omp target update from(work)
+#endif
            CALL mp_root_sum( work, dm, root, ortho_parent_comm )
-
+           !
         END DO
         !
      END DO
-     if (ortho_parent_comm.ne.intra_bgrp_comm .and. nbgrp > 1) dm = dm/nbgrp
+     !
+     IF (ortho_parent_comm/=intra_bgrp_comm .AND. nbgrp>1) dm = dm/nbgrp
      !
      CALL laxlib_zsqmher( nstart, dm, nx, idesc )
      !
+#if defined(__OPENMP_GPU)
+     !$omp target exit data map(delete:work)
+#endif
      DEALLOCATE( work )
      !
      RETURN
+     !
   END SUBROUTINE compute_distmat
 
 
@@ -374,8 +473,12 @@ CONTAINS
      INTEGER :: nr, nc, ir, ic, root
      COMPLEX(DP), ALLOCATABLE :: vtmp( :, : )
      COMPLEX(DP) :: beta
-
-     ALLOCATE( vtmp( nx, nx ) )
+     !
+     ALLOCATE( vtmp(nx,nx) )
+     vtmp(:,:) = (0.d0,0.d0)
+#if defined(__OPENMP_GPU)
+     !$omp target enter data map(to:vtmp,vc)
+#endif
      !
      DO ipc = 1, idesc(LAX_DESC_NPC)
         !
@@ -387,7 +490,7 @@ CONTAINS
            nc = min( nc, nbnd - ic + 1 )
            !
            beta = ( 0.D0, 0.D0 )
-
+           !
            DO ipr = 1, idesc(LAX_DESC_NPR)
               !
               nr = idesc_ip( LAX_DESC_NR, ipr, ipc )
@@ -398,29 +501,41 @@ CONTAINS
               IF( ipr-1 == idesc(LAX_DESC_MYR) .AND. ipc-1 == idesc(LAX_DESC_MYC) .AND. la_proc ) THEN
                  !
                  !  this proc sends his block
-                 ! 
+                 !
                  CALL mp_bcast( vc(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ( 1.D0, 0.D0 ), psi(1,ir), kdmx, vc, nx, beta, aux(1,ic), kdmx )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to( vc(:,1:nc) )
+#endif
+                 CALL MYZGEMM2( 'N', 'N', kdim, nc, nr, ( 1.D0, 0.D0 ), psi(1,ir), &
+                                kdmx, vc, nx, beta, aux(1,ic), kdmx, .TRUE. )
               ELSE
                  !
                  !  all other procs receive
                  ! 
                  CALL mp_bcast( vtmp(:,1:nc), root, ortho_parent_comm )
-                 CALL ZGEMM( 'N', 'N', kdim, nc, nr, ( 1.D0, 0.D0 ), psi(1,ir), kdmx, vtmp, nx, beta, aux(1,ic), kdmx )
+#if defined(__OPENMP_GPU)
+                 !$omp target update to( vtmp(:,1:nc) )
+#endif
+                 CALL MYZGEMM2( 'N', 'N', kdim, nc, nr, ( 1.D0, 0.D0 ), psi(1,ir),&
+                               kdmx, vtmp, nx, beta, aux(1,ic), kdmx, .TRUE. )
               END IF
-              ! 
-
+              !
               beta = ( 1.D0, 0.D0 )
-
+              !
            END DO
            !
         END IF
         !
      END DO
      !
+#if defined(__OPENMP_GPU)
+     !$omp target exit data map(delete:vtmp,vc)
+#endif
      DEALLOCATE( vtmp )
-
+     !
      RETURN
   END SUBROUTINE refresh_evc
 
 END SUBROUTINE protate_wfc_k
+
+
