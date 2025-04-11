@@ -425,51 +425,77 @@ loopisym:     DO isym = 1, nsym
                         IF (Hubbard_l(nt) == 0) THEN
                           IF (t_rev(isym) == 1) THEN
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*                &
+                                     d_spin_ldau(is3,is1,isym)  *                &
                                      nr(m4,m3,is4,is3,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  
+                              CONJG( d_spin_ldau(is4,is2,isym) )  
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*                &
+                              !        nr(m4,m3,is4,is3,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  
                           ELSE
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*                &
+                              CONJG( d_spin_ldau(is3,is1,isym) )*                &
                                      nr(m3,m4,is3,is4,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  
+                                     d_spin_ldau(is4,is2,isym)  
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*                &
+                              !        nr(m3,m4,is3,is4,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  
                           ENDIF
                         ELSEIF (Hubbard_l(nt) == 1) THEN
                           IF (t_rev(isym) == 1) THEN
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*d1(m1,m3,isym)* &
+                                     d_spin_ldau(is3,is1,isym)  *d1(m3,m1,isym)* &
                                      nr(m4,m3,is4,is3,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  *d1(m2,m4,isym)
+                              CONJG( d_spin_ldau(is4,is2,isym) )*d1(m4,m2,isym)
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*d1(m1,m3,isym)* &
+                              !        nr(m4,m3,is4,is3,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  *d1(m2,m4,isym)
                           ELSE
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*d1(m1,m3,isym)* &
+                              CONJG( d_spin_ldau(is3,is1,isym) )*d1(m3,m1,isym)* &
                                      nr(m3,m4,is3,is4,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  *d1(m2,m4,isym)
+                                     d_spin_ldau(is4,is2,isym)  *d1(m4,m2,isym)
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*d1(m1,m3,isym)* &
+                              !        nr(m3,m4,is3,is4,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  *d1(m2,m4,isym)
                           ENDIF
                         ELSEIF (Hubbard_l(nt) == 2) THEN
                           IF (t_rev(isym) == 1) THEN
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*d2(m1,m3,isym)* &
+                                     d_spin_ldau(is3,is1,isym)  *d2(m3,m1,isym)* &
                                      nr(m4,m3,is4,is3,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  *d2(m2,m4,isym)
+                              CONJG( d_spin_ldau(is4,is2,isym) )*d2(m4,m2,isym)
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*d2(m1,m3,isym)* &
+                              !        nr(m4,m3,is4,is3,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  *d2(m2,m4,isym)
+
                           ELSE
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*d2(m1,m3,isym)* &
+                              CONJG( d_spin_ldau(is3,is1,isym) )*d2(m3,m1,isym)* &
                                      nr(m3,m4,is3,is4,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  *d2(m2,m4,isym)
+                                     d_spin_ldau(is4,is2,isym)  *d2(m4,m2,isym)
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*d2(m1,m3,isym)* &
+                              !        nr(m3,m4,is3,is4,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  *d2(m2,m4,isym)
+
                           ENDIF
                         ELSEIF (Hubbard_l(nt) == 3) THEN
                           !
                           IF (t_rev(isym) == 1) THEN
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*d3(m1,m3,isym)* &
+                                     d_spin_ldau(is3,is1,isym)  *d3(m3,m1,isym)* &
                                      nr(m4,m3,is4,is3,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  *d3(m2,m4,isym)
+                              CONJG( d_spin_ldau(is4,is2,isym) )*d3(m4,m2,isym)
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*d3(m1,m3,isym)* &
+                              !        nr(m4,m3,is4,is3,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  *d3(m2,m4,isym)
                           ELSE
                             nr1(m1,m2,is1,is2,na) = nr1(m1,m2,is1,is2,na) +      &
-                              CONJG( d_spin_ldau(is1,is3,isym) )*d3(m1,m3,isym)* &
+                              CONJG( d_spin_ldau(is3,is1,isym) )*d3(m3,m1,isym)* &
                                      nr(m3,m4,is3,is4,nb)/nsym  *                &
-                                     d_spin_ldau(is2,is4,isym)  *d3(m2,m4,isym)
+                                     d_spin_ldau(is4,is2,isym)  *d3(m4,m2,isym)
+                              ! CONJG( d_spin_ldau(is1,is3,isym) )*d3(m1,m3,isym)* &
+                              !        nr(m3,m4,is3,is4,nb)/nsym  *                &
+                              !        d_spin_ldau(is2,is4,isym)  *d3(m2,m4,isym)
                           ENDIF
                           !
                         ELSE
