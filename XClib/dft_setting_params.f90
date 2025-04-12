@@ -113,6 +113,8 @@ MODULE dft_setting_params
     !! TRUE if the cell volume has been set for finite size correction.
     LOGICAL :: ismeta      = .FALSE.
     !! TRUE if the functional is MGGA
+    LOGICAL :: islaplacian = .FALSE.
+    !! TRUE if the functional depends on the Laplacian
     LOGICAL :: ishybrid    = .FALSE.
     !! TRUE if the functional is hybrid
     INTEGER :: exx_term    = 0

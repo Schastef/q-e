@@ -648,6 +648,67 @@ SUBROUTINE fft_laplacian( dfft, a, gg, lapla )
   RETURN
   !
 END SUBROUTINE fft_laplacian
+
+!--------------------------------------------------------------------
+SUBROUTINE fft_laplacian_g2r( dfft, a, gg, lapla )
+  !--------------------------------------------------------------------
+  !! Calculates \(\text{lapla} = \nabla^2(a)\) like
+  !! \(\textrm{fft_laplacian}\), but with \({\bf a(G)}\) instead of \({\bf a(r)}\).
+  !
+  USE kinds,          ONLY : DP
+  USE cell_base,      ONLY : tpiba2
+  USE fft_types,      ONLY : fft_type_descriptor
+  USE fft_interfaces, ONLY : fwfft, invfft
+  !
+  IMPLICIT NONE
+  !
+  TYPE(fft_type_descriptor),INTENT(IN) :: dfft
+  !! FFT descriptor
+  COMPLEX(DP), INTENT(IN) :: a(dfft%ngm)
+  !! a(G), a complex function in G-space
+  REAL(DP), INTENT(IN) :: gg(dfft%ngm)
+  !! Square modules of G-vectors, in \( (2\pi/a)^2 \) units
+  REAL(DP), INTENT(OUT) :: lapla(dfft%nnr)
+  !! \(\text{lapla}(:)=\nabla^2(a)\), real, on the real-space FFT grid
+  !
+  ! ... local variables
+  !
+  INTEGER :: ig
+  COMPLEX(DP), ALLOCATABLE :: laux(:)
+  !
+  !
+  ALLOCATE( laux( dfft%nnr ) )
+  !
+  ! ... Compute the laplacian
+  !
+  laux(:) = (0.0_dp, 0.0_dp)
+  !
+  DO ig = 1, dfft%ngm
+     !
+     laux(dfft%nl(ig)) = -gg(ig)*a(ig)
+     !
+  END DO
+  !
+  IF ( dfft%lgamma ) THEN
+     !
+     laux(dfft%nlm(:)) = CMPLX( REAL(laux(dfft%nl(:)) ), &
+                              -AIMAG(laux(dfft%nl(:)) ), kind=DP)
+     !
+  ENDIF
+  !
+  ! ... bring back to R-space, (\lapl a)(r) ...
+  !
+  CALL invfft ('Rho', laux, dfft)
+  !
+  ! ... add the missing factor (2\pi/a)^2 in G
+  !
+  lapla = tpiba2 * REAL( laux )
+  !
+  DEALLOCATE( laux )
+  !
+  RETURN
+  !
+END SUBROUTINE fft_laplacian_g2r
 !
 !--------------------------------------------------------------------
 ! Routines computing hessian via FFT

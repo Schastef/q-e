@@ -44,6 +44,7 @@ SUBROUTINE h_psi_meta( ldap, np, mp, psip, hpsi )
   REAL(DP) :: kplusgi, fac
   COMPLEX(DP), PARAMETER :: ci=(0.d0,1.d0)
   !
+  !
   CALL start_clock( 'h_psi_meta' )
   !
   nrxxs = dffts%nnr

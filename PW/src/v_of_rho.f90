@@ -164,12 +164,12 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   USE constants,        ONLY : e2, eps8
   USE io_global,        ONLY : stdout
   USE fft_base,         ONLY : dfftp
-  USE gvect,            ONLY : g, ngm
+  USE gvect,            ONLY : g, gg, ngm
   USE lsda_mod,         ONLY : nspin
   USE cell_base,        ONLY : omega
   USE funct,            ONLY : dft_is_nonlocc, nlc
   USE scf,              ONLY : scf_type
-  USE xc_lib,           ONLY : xc_metagcx, xclib_get_ID
+  USE xc_lib,           ONLY : xc_metagcx, xclib_get_ID, xclib_dft_is
   USE mp,               ONLY : mp_sum
   USE mp_bands,         ONLY : intra_bgrp_comm
   !
@@ -198,19 +198,22 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   LOGICAL  :: lda_gga_terms
   !
   REAL(DP), ALLOCATABLE :: ex(:), ec(:), v0(:,:)
-  REAL(DP), ALLOCATABLE :: v1x(:,:), v2x(:,:), v3x(:,:)
-  REAL(DP), ALLOCATABLE :: v1c(:,:), v2c(:,:,:), v3c(:,:)
+  REAL(DP), ALLOCATABLE :: v1x(:,:), v2x(:,:), v3x(:,:), v4x(:,:)
+  REAL(DP), ALLOCATABLE :: v1c(:,:), v2c(:,:,:), v3c(:,:), v4c(:,:)
   !
   REAL(DP) :: fac, rhoneg1, rhoneg2
   REAL(DP), DIMENSION(2) :: grho2
   REAL(DP), DIMENSION(3) :: grhoup, grhodw
   !
-  REAL(DP), ALLOCATABLE :: h(:,:,:), dh(:)
-  REAL(DP), ALLOCATABLE :: rho_updw(:,:), grho(:,:,:), tau(:,:)
+  REAL(DP), ALLOCATABLE :: h(:,:,:), h2(:,:), dh(:), dh2(:)
+  REAL(DP), ALLOCATABLE :: rho_updw(:,:), grho(:,:,:), tau(:,:), lrho(:,:)
   COMPLEX(DP), ALLOCATABLE :: rhogsum(:)
   REAL(DP), PARAMETER :: eps12 = 1.0d-12, zero=0._dp
+  LOGICAL :: need_lapl
   !
   CALL start_clock( 'v_xc_meta' )
+  !
+  need_lapl = xclib_dft_is('metal')
   !
   etxc = zero
   vtxc = zero
@@ -225,11 +228,16 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   ALLOCATE( grho(3,dfftp%nnr,nspin) )
   ALLOCATE( h(3,dfftp%nnr,nspin) )
   ALLOCATE( rhogsum(ngm), tau(dfftp%nnr,nspin) )
-  !$acc data create( tau, grho, h )
+  !
+  IF ( need_lapl ) ALLOCATE( h2(dfftp%nnr,nspin), lrho(dfftp%nnr,nspin) )
+  !
+  !$acc data create( tau, grho, h, h2 )
   !
   ALLOCATE( ex(dfftp%nnr), ec(dfftp%nnr) )
   ALLOCATE( v1x(dfftp%nnr,nspin), v2x(dfftp%nnr,nspin)   , v3x(dfftp%nnr,nspin) )
   ALLOCATE( v1c(dfftp%nnr,nspin), v2c(np,dfftp%nnr,nspin), v3c(dfftp%nnr,nspin) )
+  !
+  IF ( need_lapl ) ALLOCATE( v4x(dfftp%nnr,nspin), v4c(dfftp%nnr,nspin) )
   !
   ! ... calculate the gradient of rho + rho_core in real space
   ! ... in LSDA case rhogsum is in (up,down) format
@@ -244,7 +252,37 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
        rhogsum(k) = fac*rhog_core(k) + ( rho%of_g(k,1) + sgn_is*rho%of_g(k,nspin) )*0.5D0
      ENDDO
      !
-     CALL fft_gradient_g2r( dfftp, rhogsum, g, grho(:,:,is) ) 
+     CALL fft_gradient_g2r( dfftp, rhogsum, g, grho(:,:,is) )
+     IF ( need_lapl ) CALL fft_laplacian_g2r( dfftp, rhogsum, gg, lrho(:,is) )
+
+     !IF ( need_lapl ) CALL fft_graddot( dfftp, grho(:,:,is), g, lrho(:,is) )
+
+     !allocate(rhotmp(dfftp%nnr,1))
+     ! DO ir = 1, dfftp_nnr
+     !   rhotmp(ir,1) = MAX(rho%of_r(ir,1) + rho_core(ir), 1d-10)
+     ! ENDDO
+     !CALL fft_laplacian( dfftp, rhotmp , gg, lrho(:,is) )
+     !
+     ! Options 2 - this is just a double check - should be removed
+     !!!IF ( need_lapl ) THEN
+     !!!
+     !!!  allocate(h3(3,3, dfftp%nnr))
+     !!!
+     !!!   DO ir = 1, dfftp_nnr
+     !!!     rho%of_r(ir,1) = rho%of_r(ir,1) + rho_core(ir)
+     !!!   ENDDO
+     !!!   !Option 2a
+     !!!       CALL fft_hessian ( dfftp, rho%of_r(:,1), g, grho(:,:,is), h3 )
+     !!!       DO k = 1, dfftp_nnr
+     !!!          lrho(k,is) =  (h3(1,1,k) + h3(2,2,k) + h3(3,3,k))
+     !!!       ENDDO
+     !!!   !Option 2b
+     !!!   !    CALL fft_laplacian( dfftp, rho%of_r(:,1) , gg, lrho(:,is) )
+     !!!   DO ir = 1, dfftp_nnr
+     !!!     rho%of_r(ir,1) = rho%of_r(ir,1) - rho_core(ir)
+     !!!   ENDDO
+     !!!   deallocate(h3)
+     !!!ENDIF
      !
   ENDDO
   !
@@ -255,15 +293,28 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
     ENDDO
   ENDDO
   !
+  ! Very crude smoothing of the laplacian?
+  !max_lapl = maxval(abs(lrho))
+  !DO is = 1, nspin
+  !  DO k = 1, dfftp_nnr
+  !    if (abs(lrho(k,is)) < 0.0001 * max_lapl) lrho(k,is) = 0.d0
+  !  ENDDO
+  !ENDDO
+  !
   !$acc end data
   DEALLOCATE( rhogsum )
   !
   !$acc data copyin( rho%of_r )
-  !$acc data create( ex, ec, v1x, v2x, v3x, v1c, v2c, v3c )
+  !$acc data create( ex, ec, v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c )
   IF (nspin == 1) THEN
     !
-    CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, ex, ec, &
+    IF ( need_lapl ) THEN
+       CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, lrho, ex, ec, &
+                     v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c, gpu_args_=.TRUE. )
+    ELSE
+       CALL xc_metagcx( dfftp_nnr, 1, np, rho%of_r, grho, tau, ex, ec, &
                      v1x, v2x, v3x, v1c, v2c, v3c, gpu_args_=.TRUE. )
+    ENDIF
     !
     !$acc parallel loop reduction(+:etxc,vtxc,rhoneg1,rhoneg2) present(rho)
     DO k = 1, dfftp_nnr
@@ -274,6 +325,9 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
        DO ipol = 1, 3
          h(ipol,k,1) = (v2x(k,1)+v2c(1,k,1)) * grho(ipol,k,1) * e2
        ENDDO
+       !
+       ! ... h2 contains D(rho*Exc)/D(nabla^2 rho)
+       IF ( need_lapl ) h2(k, 1) = (v4x(k,1)+v4c(k,1)) * e2
        !
        kedtaur(k,1) = (v3x(k,1)+v3c(k,1)) * 0.5d0 * e2
        !
@@ -295,8 +349,13 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
         rho_updw(k,2) = ( rho%of_r(k,1) - rho%of_r(k,2) ) * 0.5d0
     ENDDO
     !
-    CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, ex, ec, &
-                     v1x, v2x, v3x, v1c, v2c, v3c, gpu_args_=.TRUE. )
+    IF ( need_lapl ) THEN
+       CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, lrho, ex, ec, &
+                        v1x, v2x, v3x, v4x, v1c, v2c, v3c, v4c, gpu_args_=.TRUE. )
+    ELSE
+       CALL xc_metagcx( dfftp_nnr, 2, np, rho_updw, grho, tau, ex, ec, &
+                        v1x, v2x, v3x, v1c, v2c, v3c, gpu_args_=.TRUE. )
+    ENDIF
     !
     ! ... first term of the gradient correction : D(rho*Exc)/D(rho)
     !
@@ -312,6 +371,10 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
          h(ipol,k,1) = (v2x(k,1) * grho(ipol,k,1) + v2c(ipol,k,1)) * e2
          h(ipol,k,2) = (v2x(k,2) * grho(ipol,k,2) + v2c(ipol,k,2)) * e2
        ENDDO
+       !
+       ! ... h2 contains D(rho*Exc)/D(nabla^2 rho)
+       IF ( need_lapl ) h2(k, 1) = (v4x(k,1)+v4c(k,1)) * e2
+       IF ( need_lapl ) h2(k, 2) = (v4x(k,2)+v4c(k,2)) * e2
        !
        kedtaur(k,1) = (v3x(k,1) + v3c(k,1)) * 0.5d0 * e2
        kedtaur(k,2) = (v3x(k,2) + v3c(k,2)) * 0.5d0 * e2
@@ -334,6 +397,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   DEALLOCATE( ex, ec )
   DEALLOCATE( v1x, v2x, v3x )
   DEALLOCATE( v1c, v2c, v3c )
+  IF ( need_lapl ) DEALLOCATE ( v4x, v4c )
   !
   ALLOCATE( dh( dfftp%nnr ) )
   !$acc data create( dh )
@@ -349,12 +413,32 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
      !$acc parallel loop reduction(+:vtxc) present(rho)
      DO k = 1, dfftp_nnr
        v(k,is) = v(k,is) - dh(k)
-       vtxc = vtxc - dh(k) * ( rho%of_r(k,1) + sgn_is*rho%of_r(k,nspin) )*0.5D0
+       vtxc = vtxc - dh(k) * ABS( rho%of_r(k,1) + sgn_is*rho%of_r(k,nspin) )*0.5D0
      ENDDO
   ENDDO
-  !
   !$acc end data
   DEALLOCATE( dh )
+  !
+  IF ( need_lapl ) THEN
+     ALLOCATE( dh2( dfftp%nnr ) )
+     !$acc data create( dh2 )
+     ! ... third term of Laplacian metaGGA, the Laplacian :
+     ! ... nabla^2 ( D(rho*Exc)/D(nabla^2 rho) )
+     !
+     DO is = 1, nspin
+        CALL fft_laplacian( dfftp, h2(1,is), gg, dh2 )
+        !
+        sgn_is = (-1.d0)**(is+1)
+        !
+        !$acc parallel loop reduction(+:vtxc) present(rho)
+        DO k = 1, dfftp_nnr
+          v(k,is) = v(k,is) + dh2(k)
+          vtxc = vtxc + dh2(k) * ABS( rho%of_r(k,1) + sgn_is*rho%of_r(k,nspin) )*0.5D0
+        ENDDO
+     ENDDO
+     !$acc end data
+     DEALLOCATE( dh2 )
+  ENDIF
   !
   !$acc end data
   !$acc end data
@@ -398,6 +482,7 @@ SUBROUTINE v_xc_meta( rho, rho_core, rhog_core, etxc, vtxc, v, kedtaur )
   !
   DEALLOCATE( tau, grho )
   DEALLOCATE( h )
+  IF ( need_lapl ) DEALLOCATE ( lrho, h2 )
   !
   CALL stop_clock( 'v_xc_meta' )
   !
