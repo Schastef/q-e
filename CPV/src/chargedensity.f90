@@ -44,7 +44,8 @@
 !     e_v = sum_i,ij rho_i,ij d^ion_is,ji
 !
       USE kinds,              ONLY: DP
-      USE control_flags,      ONLY: iprint, iverbosity, thdyn, tpre, trhor, ndr
+      USE control_flags,      ONLY: iprint, iverbosity, thdyn, tpre, trhor, &
+                                    ndr, gamma_only
       USE ions_base,          ONLY: nat
       USE gvect,              ONLY: gstart, ig_l2g
       USE smallbox_gvec,      ONLY: ngb
@@ -191,7 +192,7 @@
             CALL errore('rhoofr','option trhor unverified, please report',1)
             filename = TRIM( restart_dir(ndr) ) // "charge-density"
             CALL read_rhog ( filename, root_bgrp, intra_bgrp_comm, &
-                 ig_l2g, nspin, rhog )
+                 ig_l2g, nspin, rhog, gamma_only )
             !
             !^^ ... TEMPORARY FIX  (newlsda) ...
             IF ( nspin==2 ) THEN
