@@ -553,13 +553,19 @@ CONTAINS
     !
     nsubbatches = ceiling(real(desc%batchsize)/desc%subbatchsize)
     DO i = 1, nsubbatches
+       IF ( desc%bstreams(i) /= C_NULL_PTR ) THEN
           CALL myStreamSynchronize( desc%bstreams(i) )
           CALL myStreamDestroy( desc%bstreams(i) )
+          desc%bstreams(i) = C_NULL_PTR
+       ENDIF
     ENDDO
     !
     DO i = 1, nsubbatches
+       IF ( desc%bevents(i) /= C_NULL_PTR ) THEN
           CALL myEventSynchronize( desc%bevents(i) )
           CALL myEventDestroy( desc%bevents(i) )
+          desc%bevents(i) = C_NULL_PTR
+       ENDIF
     ENDDO
     !
 #endif
