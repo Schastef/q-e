@@ -634,7 +634,7 @@ SUBROUTINE sum_band()
        !
        IF (xclib_dft_is('meta') .OR. lxdm) THEN
           !$acc exit data delete(grad_psic)
-          DEALLOCATE( grad_psic )
+          IF (ALLOCATED( grad_psic )) DEALLOCATE( grad_psic )
           !$acc update host(rho%kin_r)
        END IF
        IF ( noncolin) THEN
