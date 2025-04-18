@@ -512,15 +512,13 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      CALL descinit( descsca, n, n, desc%nrcx, desc%nrcx, 0, 0, ortho_cntx, SIZE( ss, 1 ) , info )
      !
      IF( info /= 0 ) CALL lax_error__( ' cdiaghg ', ' desckinit ', ABS( info ) )
-#endif
-     !
-#if defined __SCALAPACK
 
      CALL pzpotrf( 'L', n, ss, 1, 1, descsca, info )
 
      IF( info /= 0 ) CALL lax_error__( ' cdiaghg ', ' problems computing cholesky ', ABS( info ) )
 #else
-     CALL laxlib_pzpotrf( ss, nx, n, idesc )
+     CALL lax_error__ (' cdiaghg', ' needs ScaLAPACK', 1)
+     !CALL laxlib_pzpotrf( ss, nx, n, idesc )
 #endif
      !
   END IF
@@ -543,7 +541,8 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
      IF( info /= 0 ) CALL lax_error__( ' cdiaghg ', ' problems computing inverse ', ABS( info ) )
 #else
-     CALL laxlib_pztrtri( ss, nx, n, idesc )
+     CALL lax_error__ (' cdiaghg', ' needs ScaLAPACK', 2)
+     !CALL laxlib_pztrtri( ss, nx, n, idesc )
 #endif
      !
   END IF
@@ -588,7 +587,8 @@ SUBROUTINE laxlib_pcdiaghg( n, h, s, ldh, e, v, idesc )
      !
 #else
      !
-     CALL laxlib_pzheevd( .true., n, idesc, hh, SIZE( hh, 1 ), e )
+     CALL lax_error__ (' cdiaghg', ' needs ScaLAPACK', 3)
+     ! CALL laxlib_pzheevd( .true., n, idesc, hh, SIZE( hh, 1 ), e )
      !
 #endif
      !

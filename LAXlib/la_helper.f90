@@ -523,6 +523,7 @@ END SUBROUTINE laxlib_multi_init_desc_x
          CALL pdsyevd_drv( .true. , n, idesc(LAX_DESC_NRCX), s, SIZE(s,1), rhod, idesc(LAX_DESC_CNTX), idesc(LAX_DESC_COMM) )
 #else
          CALL laxlib_pdsyevd( .true., n, idesc, s, SIZE(s,1), rhod )
+         !CALL lax_error__(' diagonalize_parallel', ' needs ScaLAPACK', 1)
 #endif
          !
       END IF

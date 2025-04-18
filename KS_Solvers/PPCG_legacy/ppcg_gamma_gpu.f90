@@ -1182,9 +1182,9 @@ CONTAINS
 !           !
        END IF
 #else
-       CALL laxlib_pdpotrf( XTXl, nx, k, idesc )
-       !
-       CALL laxlib_pdtrtri ( XTXl, nx, k, idesc )
+       CALL errore('ppcg_gamma_gpu','needs ScaLAPACK',1)
+       !CALL laxlib_pdpotrf( XTXl, nx, k, idesc )
+       !CALL laxlib_pdtrtri ( XTXl, nx, k, idesc )
 #endif
     !
     !

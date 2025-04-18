@@ -36,6 +36,9 @@ SUBROUTINE set_para_diag( nbnd, use_para_diag )
   IF( .NOT. first ) RETURN
   first = .FALSE.
   !
+#if !defined(__SCALAPACK)
+  ndiag_ = 1
+#endif
   IF( negrp > 1 .OR. do_diag_in_band_group ) THEN
      ! one diag group per bgrp with strict hierarchy: POOL > BAND > DIAG
      ! if using exx groups from mp_exx,  always use this diag method
@@ -77,9 +80,7 @@ SUBROUTINE set_para_diag( nbnd, use_para_diag )
               & "(size of sub-group: ", I2, "*", I3, " procs)",/)') &
                np_ortho(1), np_ortho(2)
 #else
-        WRITE( stdout, '(5X,"custom distributed-memory algorithm ", &
-              & "(size of sub-group: ", I2, "*", I3, " procs)",/)') &
-               np_ortho(1), np_ortho(2)
+        WRITE( stdout, '(5X,"a serial algorithm will be used",/)' )
 #endif
      ELSE
         WRITE( stdout, '(5X,"a serial algorithm will be used",/)' )

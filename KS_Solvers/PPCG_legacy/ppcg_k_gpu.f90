@@ -1293,9 +1293,9 @@ CONTAINS
 !           !
        END IF
 #else
-       CALL laxlib_pzpotrf( XTXl, nx, k, idesc )
-       !
-       CALL laxlib_pztrtri ( XTXl, nx, k, idesc )
+       CALL errore('ppcg_k_gpu','needs ScaLAPACK',1)
+       ! CALL laxlib_pzpotrf( XTXl, nx, k, idesc )
+       ! CALL laxlib_pztrtri ( XTXl, nx, k, idesc )
 #endif
     !
     !

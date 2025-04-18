@@ -953,8 +953,6 @@ CONTAINS
       USE electrons_base,    ONLY: nbspx_bgrp, ibgrp_g2l, nbsp, nspin,  nupdwn, iupdwn, nbspx
       USE device_memcpy_m,     ONLY: dev_memcpy
 !
-      USE device_memcpy_m,     ONLY : dev_memcpy
-!
       IMPLICIT NONE
 
       include 'laxlib.fh'
